@@ -137,6 +137,57 @@ limitations under the License.
         return body;
       }
 
+      function parseNativeResponse(rawValue) {
+        try {
+          return JSON.parse(rawValue || "{}");
+        } catch (error) {
+          return {
+            ok: false,
+            status: 0,
+            body: JSON.stringify({ error: `Invalid native Exa response: ${error.message}` }),
+          };
+        }
+      }
+
+      function parseResponseBody(body) {
+        if (typeof body !== "string" || !body.trim()) {
+          return {};
+        }
+        try {
+          return JSON.parse(body);
+        } catch (error) {
+          return { error: `Invalid Exa payload: ${error.message}` };
+        }
+      }
+
+      async function requestExa(requestBody, secret) {
+        if (window.AiEdgeGallery && typeof window.AiEdgeGallery.exaSearch === "function") {
+          return parseNativeResponse(window.AiEdgeGallery.exaSearch(JSON.stringify(requestBody), String(secret).trim()));
+        }
+
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": String(secret).trim(),
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        let payloadText = "";
+        try {
+          payloadText = await response.text();
+        } catch (error) {
+          payloadText = "";
+        }
+
+        return {
+          ok: response.ok,
+          status: response.status,
+          body: payloadText,
+        };
+      }
+
       function formatResultBlock(result, index, params) {
         const parts = [];
         parts.push(`[${index + 1}] ${capText(result.title || "Untitled", 160)}`);
@@ -212,28 +263,15 @@ limitations under the License.
           return { error: "No search query was provided." };
         }
 
-        const response = await fetch(API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": String(secret).trim(),
-          },
-          body: JSON.stringify(buildRequestBody(params)),
-        });
+        const nativeResponse = await requestExa(buildRequestBody(params), secret);
+        const payload = parseResponseBody(nativeResponse.body);
 
-        let payload = null;
-        try {
-          payload = await response.json();
-        } catch (error) {
-          payload = null;
-        }
-
-        if (!response.ok) {
+        if (!nativeResponse.ok) {
           const errorMessage =
             payload?.error ||
             payload?.detail ||
             payload?.message ||
-            `Exa request failed with HTTP ${response.status}.`;
+            `Exa request failed with HTTP ${nativeResponse.status}.`;
           return { error: errorMessage };
         }
 

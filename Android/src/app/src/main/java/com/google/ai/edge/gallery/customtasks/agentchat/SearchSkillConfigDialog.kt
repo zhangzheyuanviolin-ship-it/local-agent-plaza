@@ -35,7 +35,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.DataStoreRepository
 import com.google.ai.edge.gallery.proto.Skill
 
@@ -58,8 +60,8 @@ fun SearchSkillConfigDialog(
       }
       var timeMode by remember { mutableStateOf(readTavilySearchConfig(dataStoreRepository).timeMode) }
       SearchConfigDialogFrame(
-        title = "Tavily search settings",
-        subtitle = "These defaults control how much live web content Tavily sends back to the model.",
+        title = stringResource(R.string.search_config_tavily_title),
+        subtitle = stringResource(R.string.search_config_tavily_subtitle),
         onDismiss = onDismiss,
         onSave = {
           saveTavilySearchConfig(
@@ -76,40 +78,40 @@ fun SearchSkillConfigDialog(
         },
       ) {
         ChoiceSection(
-          title = "Topic",
-          description = "Auto lets the model decide when to use general, news, or finance.",
+          title = stringResource(R.string.search_config_topic_title),
+          description = stringResource(R.string.search_config_topic_description),
           selectedValue = topicMode.value,
-          options = SearchTopicMode.entries.map { it.value to it.label },
+          options = searchTopicOptions(),
           onSelected = { selected -> topicMode = SearchTopicMode.entries.first { it.value == selected } },
         )
         ChoiceSection(
-          title = "Search depth",
-          description = "Advanced gives broader retrieval but costs more context and latency.",
+          title = stringResource(R.string.search_config_search_depth_title),
+          description = stringResource(R.string.search_config_search_depth_description),
           selectedValue = depthMode.value,
-          options = TavilyDepthMode.entries.map { it.value to it.label },
+          options = tavilyDepthOptions(),
           onSelected = { selected -> depthMode = TavilyDepthMode.entries.first { it.value == selected } },
         )
         IntChoiceSection(
-          title = "Result count",
-          description = "More results improve coverage but increase prompt size.",
+          title = stringResource(R.string.search_config_result_count_title),
+          description = stringResource(R.string.search_config_result_count_description),
           selectedValue = resultCount,
           options = SEARCH_RESULT_COUNT_OPTIONS,
           onSelected = { resultCount = it },
         )
         ChoiceSection(
-          title = "Detail mode",
-          description = "Summary is the fastest. Full returns the most source text.",
+          title = stringResource(R.string.search_config_detail_mode_title),
+          description = stringResource(R.string.search_config_detail_mode_description),
           selectedValue = detailMode.value,
-          options = SearchDetailMode.entries.map { it.value to it.label },
+          options = searchDetailModeOptions(),
           onSelected = { selected ->
             detailMode = SearchDetailMode.entries.first { it.value == selected }
           },
         )
         ChoiceSection(
-          title = "Time range",
-          description = "Auto lets the model decide when recency matters.",
+          title = stringResource(R.string.search_config_time_range_title),
+          description = stringResource(R.string.search_config_time_range_description),
           selectedValue = timeMode.value,
-          options = SearchTimeMode.entries.map { it.value to it.label },
+          options = searchTimeModeOptions(),
           onSelected = { selected -> timeMode = SearchTimeMode.entries.first { it.value == selected } },
         )
       }
@@ -123,8 +125,8 @@ fun SearchSkillConfigDialog(
       var detailMode by remember { mutableStateOf(readExaSearchConfig(dataStoreRepository).detailMode) }
       var timeMode by remember { mutableStateOf(readExaSearchConfig(dataStoreRepository).timeMode) }
       SearchConfigDialogFrame(
-        title = "Exa search settings",
-        subtitle = "These defaults control Exa search type, coverage, and how much source text comes back.",
+        title = stringResource(R.string.search_config_exa_title),
+        subtitle = stringResource(R.string.search_config_exa_subtitle),
         onDismiss = onDismiss,
         onSave = {
           saveExaSearchConfig(
@@ -141,42 +143,42 @@ fun SearchSkillConfigDialog(
         },
       ) {
         ChoiceSection(
-          title = "Topic",
-          description = "Auto lets the model decide when the request is general, news, or finance.",
+          title = stringResource(R.string.search_config_topic_title),
+          description = stringResource(R.string.search_config_topic_description),
           selectedValue = topicMode.value,
-          options = SearchTopicMode.entries.map { it.value to it.label },
+          options = searchTopicOptions(),
           onSelected = { selected -> topicMode = SearchTopicMode.entries.first { it.value == selected } },
         )
         ChoiceSection(
-          title = "Search type",
-          description = "Deep gives the richest search but can be slower and heavier.",
+          title = stringResource(R.string.search_config_search_type_title),
+          description = stringResource(R.string.search_config_search_type_description),
           selectedValue = searchTypeMode.value,
-          options = ExaSearchTypeMode.entries.map { it.value to it.label },
+          options = exaSearchTypeOptions(),
           onSelected = { selected ->
             searchTypeMode = ExaSearchTypeMode.entries.first { it.value == selected }
           },
         )
         IntChoiceSection(
-          title = "Result count",
-          description = "Higher counts improve coverage but increase prompt size.",
+          title = stringResource(R.string.search_config_result_count_title),
+          description = stringResource(R.string.search_config_result_count_description),
           selectedValue = resultCount,
           options = SEARCH_RESULT_COUNT_OPTIONS,
           onSelected = { resultCount = it },
         )
         ChoiceSection(
-          title = "Detail mode",
-          description = "Full returns the most page text available from Exa.",
+          title = stringResource(R.string.search_config_detail_mode_title),
+          description = stringResource(R.string.search_config_detail_mode_description),
           selectedValue = detailMode.value,
-          options = SearchDetailMode.entries.map { it.value to it.label },
+          options = searchDetailModeOptions(),
           onSelected = { selected ->
             detailMode = SearchDetailMode.entries.first { it.value == selected }
           },
         )
         ChoiceSection(
-          title = "Time range",
-          description = "Auto lets the model request recent web results only when needed.",
+          title = stringResource(R.string.search_config_time_range_title),
+          description = stringResource(R.string.search_config_time_range_description),
           selectedValue = timeMode.value,
-          options = SearchTimeMode.entries.map { it.value to it.label },
+          options = searchTimeModeOptions(),
           onSelected = { selected -> timeMode = SearchTimeMode.entries.first { it.value == selected } },
         )
       }
@@ -192,8 +194,8 @@ fun SearchSkillConfigDialog(
         mutableStateOf(readLangSearchConfig(dataStoreRepository).detailMode)
       }
       SearchConfigDialogFrame(
-        title = "LangSearch settings",
-        subtitle = "These defaults control result freshness, result count, and how much returned text is kept.",
+        title = stringResource(R.string.search_config_langsearch_title),
+        subtitle = stringResource(R.string.search_config_langsearch_subtitle),
         onDismiss = onDismiss,
         onSave = {
           saveLangSearchConfig(
@@ -208,26 +210,26 @@ fun SearchSkillConfigDialog(
         },
       ) {
         ChoiceSection(
-          title = "Freshness",
-          description = "Auto lets the model ask for recency only when it matters.",
+          title = stringResource(R.string.search_config_freshness_title),
+          description = stringResource(R.string.search_config_freshness_description),
           selectedValue = freshnessMode.value,
-          options = LangSearchFreshnessMode.entries.map { it.value to it.label },
+          options = langSearchFreshnessOptions(),
           onSelected = { selected ->
             freshnessMode = LangSearchFreshnessMode.entries.first { it.value == selected }
           },
         )
         IntChoiceSection(
-          title = "Result count",
-          description = "Higher counts improve coverage but add more context for the model to read.",
+          title = stringResource(R.string.search_config_result_count_title),
+          description = stringResource(R.string.search_config_result_count_description),
           selectedValue = resultCount,
           options = SEARCH_RESULT_COUNT_OPTIONS,
           onSelected = { resultCount = it },
         )
         ChoiceSection(
-          title = "Detail mode",
-          description = "Full keeps the most detail available from LangSearch results.",
+          title = stringResource(R.string.search_config_detail_mode_title),
+          description = stringResource(R.string.search_config_detail_mode_description),
           selectedValue = detailMode.value,
-          options = SearchDetailMode.entries.map { it.value to it.label },
+          options = searchDetailModeOptions(),
           onSelected = { selected ->
             detailMode = SearchDetailMode.entries.first { it.value == selected }
           },
@@ -261,8 +263,8 @@ private fun SearchConfigDialogFrame(
         content()
       }
     },
-    confirmButton = { TextButton(onClick = onSave) { Text("Save") } },
-    dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    confirmButton = { TextButton(onClick = onSave) { Text(stringResource(R.string.save)) } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
   )
 }
 
@@ -325,5 +327,98 @@ private fun IntChoiceSection(
         )
       }
     }
+  }
+}
+
+@Composable
+private fun searchTopicOptions(): List<Pair<String, String>> {
+  return SearchTopicMode.entries.map { mode ->
+    mode.value to
+      stringResource(
+        when (mode) {
+          SearchTopicMode.AUTO -> R.string.search_config_choice_auto
+          SearchTopicMode.GENERAL -> R.string.search_config_choice_general
+          SearchTopicMode.NEWS -> R.string.search_config_choice_news
+          SearchTopicMode.FINANCE -> R.string.search_config_choice_finance
+        }
+      )
+  }
+}
+
+@Composable
+private fun searchTimeModeOptions(): List<Pair<String, String>> {
+  return SearchTimeMode.entries.map { mode ->
+    mode.value to
+      stringResource(
+        when (mode) {
+          SearchTimeMode.AUTO -> R.string.search_config_choice_auto
+          SearchTimeMode.OFF -> R.string.search_config_choice_off
+          SearchTimeMode.DAY -> R.string.search_config_choice_day
+          SearchTimeMode.WEEK -> R.string.search_config_choice_week
+          SearchTimeMode.MONTH -> R.string.search_config_choice_month
+          SearchTimeMode.YEAR -> R.string.search_config_choice_year
+        }
+      )
+  }
+}
+
+@Composable
+private fun searchDetailModeOptions(): List<Pair<String, String>> {
+  return SearchDetailMode.entries.map { mode ->
+    mode.value to
+      stringResource(
+        when (mode) {
+          SearchDetailMode.SUMMARY -> R.string.search_config_choice_summary
+          SearchDetailMode.LIGHT -> R.string.search_config_choice_light
+          SearchDetailMode.STANDARD -> R.string.search_config_choice_standard
+          SearchDetailMode.FULL -> R.string.search_config_choice_full
+        }
+      )
+  }
+}
+
+@Composable
+private fun tavilyDepthOptions(): List<Pair<String, String>> {
+  return TavilyDepthMode.entries.map { mode ->
+    mode.value to
+      stringResource(
+        when (mode) {
+          TavilyDepthMode.AUTO -> R.string.search_config_choice_auto
+          TavilyDepthMode.BASIC -> R.string.search_config_choice_basic
+          TavilyDepthMode.ADVANCED -> R.string.search_config_choice_advanced
+        }
+      )
+  }
+}
+
+@Composable
+private fun exaSearchTypeOptions(): List<Pair<String, String>> {
+  return ExaSearchTypeMode.entries.map { mode ->
+    mode.value to
+      stringResource(
+        when (mode) {
+          ExaSearchTypeMode.AUTO -> R.string.search_config_choice_auto
+          ExaSearchTypeMode.INSTANT -> R.string.search_config_choice_instant
+          ExaSearchTypeMode.FAST -> R.string.search_config_choice_fast
+          ExaSearchTypeMode.DEEP -> R.string.search_config_choice_deep
+        }
+      )
+  }
+}
+
+@Composable
+private fun langSearchFreshnessOptions(): List<Pair<String, String>> {
+  return LangSearchFreshnessMode.entries.map { mode ->
+    mode.value to
+      stringResource(
+        when (mode) {
+          LangSearchFreshnessMode.AUTO -> R.string.search_config_choice_auto
+          LangSearchFreshnessMode.NO_LIMIT -> R.string.search_config_choice_no_limit
+          LangSearchFreshnessMode.ONE_DAY -> R.string.search_config_choice_day
+          LangSearchFreshnessMode.ONE_WEEK -> R.string.search_config_choice_week
+          LangSearchFreshnessMode.ONE_MONTH -> R.string.search_config_choice_month
+          LangSearchFreshnessMode.ONE_YEAR -> R.string.search_config_choice_year
+        }
+      )
   }
 }

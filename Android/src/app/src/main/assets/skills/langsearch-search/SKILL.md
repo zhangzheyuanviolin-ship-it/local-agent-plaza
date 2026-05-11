@@ -1,9 +1,9 @@
 ---
 name: langsearch-search
-description: Search the live web with LangSearch and return concise source-grounded results for on-device models.
+description: 使用 LangSearch 搜索实时网络内容，并向端侧模型返回简洁且带来源依据的结果。
 metadata:
   require-secret: true
-  require-secret-description: Enter your LangSearch API key.
+  require-secret-description: 请输入您的 LangSearch API 密钥。
   homepage: https://langsearch.com
 ---
 

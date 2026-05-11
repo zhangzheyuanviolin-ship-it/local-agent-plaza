@@ -16,6 +16,9 @@
 
 package com.google.ai.edge.gallery.ui.common.chat
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -48,6 +51,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -78,6 +82,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.dimensionResource
@@ -133,6 +138,7 @@ fun ChatPanel(
   showAudioPicker: Boolean = false,
   emptyStateComposable: @Composable (Model) -> Unit = {},
 ) {
+  val context = LocalContext.current
   val uiState by viewModel.uiState.collectAsState()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val messages = uiState.messagesByModel[selectedModel.name] ?: listOf()
@@ -515,6 +521,31 @@ fun ChatPanel(
                       horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                       LatencyText(message = message)
+
+                      if (message is ChatMessageText && message.content.isNotEmpty()) {
+                        MessageActionButton(
+                          label = stringResource(R.string.copy),
+                          icon = Icons.Rounded.ContentCopy,
+                          onClick = {
+                            val clipboard =
+                              context.getSystemService(Context.CLIPBOARD_SERVICE) as
+                                ClipboardManager
+                            clipboard.setPrimaryClip(
+                              ClipData.newPlainText("AI Response", message.content)
+                            )
+                          },
+                          enabled = !uiState.inProgress,
+                        )
+                      }
+
+                      if (selectedModel.showRunAgainButton) {
+                        MessageActionButton(
+                          label = stringResource(R.string.run_again),
+                          icon = Icons.Rounded.Refresh,
+                          onClick = { onRunAgainClicked(selectedModel, message) },
+                          enabled = !uiState.inProgress,
+                        )
+                      }
                     }
                   } else if (message.side == ChatSide.USER) {
                     Row(

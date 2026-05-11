@@ -953,7 +953,7 @@ private fun SkillItemRow(
                 modifier = Modifier.size(18.dp),
               )
               Text(
-                "Config",
+                stringResource(R.string.skill_config),
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(start = 4.dp),
               )

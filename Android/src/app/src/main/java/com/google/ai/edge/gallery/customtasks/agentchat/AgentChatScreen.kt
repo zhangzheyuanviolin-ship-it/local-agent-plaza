@@ -101,6 +101,8 @@ import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.tool
 import java.lang.Exception
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlin.coroutines.resume
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -431,14 +433,14 @@ fun AgentChatScreen(
               )
               Text(
                 buildAnnotatedString {
-                  append("Use specialized, high-order reasoning by loading different skills or ")
+                  append("通过加载不同技能或")
                   append(
                     buildTrackableUrlAnnotatedString(
                       url = "https://github.com/google-ai-edge/gallery/tree/main/skills",
-                      linkText = "creating\u00A0your\u00A0own",
+                      linkText = "创建您自己的技能",
                     )
                   )
-                  append(".\n\nTry tapping a sample prompt below to see Agent Skills in action!")
+                  append("来获得更专业、更高阶的推理能力。\n\n点击下方示例提示词即可体验智能体技能。")
                 },
                 style =
                   MaterialTheme.typography.headlineSmall.copy(fontSize = 16.sp, lineHeight = 22.sp),
@@ -545,7 +547,7 @@ fun AgentChatScreen(
   if (showAlertForDisabledSkill) {
     AlertDialog(
       onDismissRequest = { showAlertForDisabledSkill = false },
-      title = { Text("The \"$disabledSkillName\" skill is currently disabled") },
+      title = { Text(stringResource(R.string.skill_disabled_dialog_title, disabledSkillName)) },
       text = { Text(stringResource(R.string.enable_skill_dialog_content)) },
       confirmButton = {
         Button(onClick = { showAlertForDisabledSkill = false }) {
@@ -631,6 +633,64 @@ class ChatWebViewJavascriptInterface {
   @JavascriptInterface
   fun onResultReady(result: String) {
     onResultListener?.invoke(result)
+  }
+
+  @JavascriptInterface
+  fun exaSearch(requestBody: String, secret: String): String {
+    val trimmedSecret = secret.trim()
+    if (trimmedSecret.isEmpty()) {
+      return JSONObject()
+        .put("ok", false)
+        .put("status", 0)
+        .put("body", JSONObject().put("error", "Missing Exa API key.").toString())
+        .toString()
+    }
+
+    var connection: HttpURLConnection? = null
+    return try {
+      connection = (URL("https://api.exa.ai/search").openConnection() as HttpURLConnection).apply {
+        requestMethod = "POST"
+        connectTimeout = 20000
+        readTimeout = 20000
+        doOutput = true
+        setRequestProperty("Content-Type", "application/json")
+        setRequestProperty("Accept", "application/json")
+        setRequestProperty("x-api-key", trimmedSecret)
+      }
+
+      connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+        writer.write(requestBody)
+      }
+
+      val statusCode = connection.responseCode
+      val stream =
+        if (statusCode in 200..299) {
+          connection.inputStream
+        } else {
+          connection.errorStream ?: connection.inputStream
+        }
+      val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: "{}"
+
+      JSONObject()
+        .put("ok", statusCode in 200..299)
+        .put("status", statusCode)
+        .put("body", body)
+        .toString()
+    } catch (e: Exception) {
+      Log.e(TAG, "Exa native bridge request failed", e)
+      JSONObject()
+        .put("ok", false)
+        .put("status", 0)
+        .put(
+          "body",
+          JSONObject()
+            .put("error", "Failed to run Exa search: ${e.message ?: "Unknown error"}")
+            .toString(),
+        )
+        .toString()
+    } finally {
+      connection?.disconnect()
+    }
   }
 }
 

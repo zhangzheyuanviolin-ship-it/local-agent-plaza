@@ -1,9 +1,9 @@
 ---
 name: exa-search
-description: Search the live web with Exa and return rich source-grounded results for on-device models.
+description: 使用 Exa 搜索实时网络内容，并向端侧模型返回更丰富的来源依据结果。
 metadata:
   require-secret: true
-  require-secret-description: Enter your Exa API key.
+  require-secret-description: 请输入您的 Exa API 密钥。
   homepage: https://exa.ai
 ---
 

@@ -1,9 +1,9 @@
 ---
 name: tavily-search
-description: Search the live web with Tavily and return source-grounded results optimized for on-device models.
+description: 使用 Tavily 搜索实时网络内容，并向端侧模型返回带来源依据的结果。
 metadata:
   require-secret: true
-  require-secret-description: Enter your Tavily API key. It usually starts with tvly-.
+  require-secret-description: 请输入您的 Tavily API 密钥，通常以 tvly- 开头。
   homepage: https://tavily.com
 ---
 
