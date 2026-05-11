@@ -17,16 +17,16 @@ limitations under the License.
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tavily Search</title>
+    <title>Exa Search</title>
   </head>
   <body>
     <script>
-      const API_URL = "https://api.tavily.com/search";
+      const API_URL = "https://api.exa.ai/search";
       const ALLOWED_TOPICS = new Set(["general", "news", "finance"]);
-      const ALLOWED_DEPTHS = new Set(["basic", "advanced"]);
+      const ALLOWED_SEARCH_TYPES = new Set(["auto", "instant", "fast", "deep"]);
       const ALLOWED_DETAIL_MODES = new Set(["summary", "light", "standard", "full"]);
       const ALLOWED_RESULT_COUNTS = [1, 3, 5, 8];
-      const ALLOWED_TIME_RANGES = new Set(["day", "week", "month", "year", "d", "w", "m", "y"]);
+      const ALLOWED_TIME_RANGES = new Set(["day", "week", "month", "year"]);
 
       function capText(value, maxChars) {
         if (!value) return "";
@@ -57,69 +57,82 @@ limitations under the License.
         return value.map((item) => String(item || "").trim()).filter(Boolean);
       }
 
+      function toIsoAfter(range) {
+        if (!ALLOWED_TIME_RANGES.has(range)) return null;
+        const now = Date.now();
+        const offsets = {
+          day: 1,
+          week: 7,
+          month: 30,
+          year: 365,
+        };
+        return new Date(now - offsets[range] * 24 * 60 * 60 * 1000).toISOString();
+      }
+
       function normalizeParams(rawData, rawConfig) {
         const topicFromConfig = rawConfig.topic_mode;
         const topicFromData = rawData.topic;
         const topic =
           ALLOWED_TOPICS.has(topicFromConfig) ? topicFromConfig : ALLOWED_TOPICS.has(topicFromData) ? topicFromData : "general";
-
+        const searchType =
+          ALLOWED_SEARCH_TYPES.has(rawConfig.search_type_mode) ? rawConfig.search_type_mode : ALLOWED_SEARCH_TYPES.has(rawData.search_type) ? rawData.search_type : "auto";
         const detailMode =
           ALLOWED_DETAIL_MODES.has(rawConfig.detail_mode) ? rawConfig.detail_mode : ALLOWED_DETAIL_MODES.has(rawData.detail_mode) ? rawData.detail_mode : "summary";
-
-        const depthFromConfig = rawConfig.depth_mode;
-        const depthFromData = rawData.search_depth;
-        const requestedDepth =
-          ALLOWED_DEPTHS.has(depthFromConfig) ? depthFromConfig : ALLOWED_DEPTHS.has(depthFromData) ? depthFromData : "basic";
-        const searchDepth = detailMode === "full" ? "advanced" : requestedDepth;
-
-        const maxResults = clampResultCount(rawConfig.result_count || rawData.max_results || 3);
-
-        const timeMode = rawConfig.time_mode;
-        const dataTimeRange = rawData.time_range;
-        const timeRange =
-          ALLOWED_TIME_RANGES.has(timeMode) ? timeMode : ALLOWED_TIME_RANGES.has(dataTimeRange) ? dataTimeRange : null;
-
+        const resultCount = clampResultCount(rawConfig.result_count || rawData.max_results || 3);
+        const timeMode = ALLOWED_TIME_RANGES.has(rawConfig.time_mode) ? rawConfig.time_mode : ALLOWED_TIME_RANGES.has(rawData.time_range) ? rawData.time_range : null;
         return {
           query: String(rawData.query || "").trim(),
           topic,
+          searchType,
           detailMode,
-          searchDepth,
-          maxResults,
-          timeRange,
-          exactMatch: Boolean(rawData.exact_match),
+          resultCount,
+          startPublishedDate: toIsoAfter(timeMode),
           includeDomains: normalizeArray(rawData.include_domains),
           excludeDomains: normalizeArray(rawData.exclude_domains),
+        };
+      }
+
+      function buildContents(params) {
+        if (params.detailMode === "summary") {
+          return { summary: { query: params.query } };
+        }
+        if (params.detailMode === "light") {
+          return { highlights: { query: params.query, numSentences: 2, highlightsPerUrl: 2 } };
+        }
+        if (params.detailMode === "standard") {
+          return {
+            summary: { query: params.query },
+            highlights: { query: params.query, numSentences: 3, highlightsPerUrl: 3 },
+          };
+        }
+        return {
+          summary: { query: params.query },
+          text: true,
+          highlights: { query: params.query, numSentences: 4, highlightsPerUrl: 4 },
         };
       }
 
       function buildRequestBody(params) {
         const body = {
           query: params.query,
-          topic: params.topic,
-          search_depth: params.searchDepth,
-          max_results: params.maxResults,
-          include_answer: params.detailMode === "summary" || params.detailMode === "light" ? "basic" : "advanced",
-          include_raw_content: false,
-          include_favicon: false,
-          include_usage: true,
-          auto_parameters: false,
-          exact_match: params.exactMatch,
+          type: params.searchType,
+          numResults: params.resultCount,
+          contents: buildContents(params),
         };
 
-        if (params.timeRange) {
-          body.time_range = params.timeRange;
+        if (params.topic === "news") {
+          body.category = "news";
+        } else if (params.topic === "finance") {
+          body.category = "financial report";
+        }
+        if (params.startPublishedDate) {
+          body.startPublishedDate = params.startPublishedDate;
         }
         if (params.includeDomains.length > 0) {
-          body.include_domains = params.includeDomains;
+          body.includeDomains = params.includeDomains;
         }
-        if (params.excludeDomains.length > 0) {
-          body.exclude_domains = params.excludeDomains;
-        }
-        if (params.searchDepth === "advanced") {
-          body.chunks_per_source = params.detailMode === "full" ? 3 : 2;
-        }
-        if (params.detailMode === "full") {
-          body.include_raw_content = "markdown";
+        if (params.excludeDomains.length > 0 && !["company", "people"].includes(body.category)) {
+          body.excludeDomains = params.excludeDomains;
         }
         return body;
       }
@@ -128,22 +141,25 @@ limitations under the License.
         const parts = [];
         parts.push(`[${index + 1}] ${capText(result.title || "Untitled", 160)}`);
         if (result.url) parts.push(`URL: ${result.url}`);
-        if (result.published_date) parts.push(`Published: ${result.published_date}`);
-        if (typeof result.score === "number") parts.push(`Score: ${result.score.toFixed(3)}`);
+        if (result.publishedDate) parts.push(`Published: ${result.publishedDate}`);
+        if (result.author) parts.push(`Author: ${capText(result.author, 160)}`);
 
-        const contentLimitByMode = {
-          summary: 140,
-          light: 260,
-          standard: 520,
-          full: 800,
+        const textLimitByMode = {
+          summary: 0,
+          light: 0,
+          standard: 0,
+          full: 2200,
         };
-        const content = capText(result.content || "", contentLimitByMode[params.detailMode] || 260);
-        if (content) parts.push(`Snippet: ${content}`);
 
-        if (params.detailMode === "full" && result.raw_content) {
-          parts.push(`Extracted: ${capText(result.raw_content, 1800)}`);
+        if (result.summary) {
+          parts.push(`Summary: ${capText(result.summary, params.detailMode === "summary" ? 600 : 1200)}`);
         }
-
+        if (Array.isArray(result.highlights) && result.highlights.length > 0) {
+          parts.push(`Highlights: ${capText(result.highlights.join(" | "), params.detailMode === "light" ? 900 : 1600)}`);
+        }
+        if (params.detailMode === "full" && result.text) {
+          parts.push(`Text: ${capText(result.text, textLimitByMode[params.detailMode])}`);
+        }
         return parts.join("\n");
       }
 
@@ -151,16 +167,11 @@ limitations under the License.
         const lines = [];
         lines.push(`Search query: ${params.query}`);
         lines.push(`Topic: ${params.topic}`);
-        lines.push(`Search depth: ${params.searchDepth}`);
+        lines.push(`Search type: ${params.searchType}`);
         lines.push(`Detail mode: ${params.detailMode}`);
-        lines.push(`Max results requested: ${params.maxResults}`);
-        if (response.request_id) lines.push(`Request ID: ${response.request_id}`);
-        if (typeof response.response_time !== "undefined") lines.push(`Response time: ${response.response_time}`);
-        if (response.answer) {
-          lines.push("");
-          lines.push("Tavily answer:");
-          lines.push(capText(response.answer, params.detailMode === "summary" ? 600 : 1200));
-        }
+        lines.push(`Max results requested: ${params.resultCount}`);
+        if (response.requestId) lines.push(`Request ID: ${response.requestId}`);
+        if (response.searchType) lines.push(`Resolved search type: ${response.searchType}`);
 
         const results = Array.isArray(response.results) ? response.results : [];
         if (results.length > 0) {
@@ -175,24 +186,23 @@ limitations under the License.
           lines.push("Sources: none");
         }
 
-        if (response.usage) {
+        if (response.costDollars) {
           lines.push("Usage:");
-          lines.push(capText(JSON.stringify(response.usage), 400));
+          lines.push(capText(JSON.stringify(response.costDollars), 500));
         }
 
-        const combined = lines.join("\n").trim();
         const totalLimitByMode = {
           summary: 3200,
           light: 5600,
           standard: 9600,
           full: 18000,
         };
-        return capText(combined, totalLimitByMode[params.detailMode] || 5600);
+        return capText(lines.join("\n").trim(), totalLimitByMode[params.detailMode] || 5600);
       }
 
-      async function searchWithTavily(data, secret, config) {
+      async function searchWithExa(data, secret, config) {
         if (!secret || !String(secret).trim()) {
-          return { error: "Missing Tavily API key. Open the skill list, choose the Tavily skill, and set its secret first." };
+          return { error: "Missing Exa API key. Open the skill list, choose the Exa skill, and set its secret first." };
         }
 
         const rawData = parseJsonSafe(data);
@@ -206,7 +216,7 @@ limitations under the License.
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${String(secret).trim()}`,
+            "x-api-key": String(secret).trim(),
           },
           body: JSON.stringify(buildRequestBody(params)),
         });
@@ -223,22 +233,20 @@ limitations under the License.
             payload?.error ||
             payload?.detail ||
             payload?.message ||
-            `Tavily request failed with HTTP ${response.status}.`;
+            `Exa request failed with HTTP ${response.status}.`;
           return { error: errorMessage };
         }
 
-        return {
-          result: formatResponse(payload || {}, params),
-        };
+        return { result: formatResponse(payload || {}, params) };
       }
 
       window["ai_edge_gallery_get_result"] = async (data, secret, config) => {
         try {
-          const result = await searchWithTavily(data, secret, config);
+          const result = await searchWithExa(data, secret, config);
           return JSON.stringify(result);
         } catch (error) {
           console.error(error);
-          return JSON.stringify({ error: `Failed to run Tavily search: ${error.message}` });
+          return JSON.stringify({ error: `Failed to run Exa search: ${error.message}` });
         }
       };
     </script>

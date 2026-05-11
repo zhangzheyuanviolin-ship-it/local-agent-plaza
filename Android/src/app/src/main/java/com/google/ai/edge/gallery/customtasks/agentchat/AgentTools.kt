@@ -156,6 +156,10 @@ open class AgentTools() : ToolSet {
           ?: return@runBlocking mapOf(
             "result" to "JS Skill URL not set properly or skill not found"
           )
+      val config =
+        skillManagerViewModel.dataStoreRepository.readSecret(
+          key = getSkillConfigKey(skillName = skillName)
+        ) ?: ""
       Log.d(TAG, "Calling JS script.\n- url: $url\n- data: $data")
 
       // Update progress.
@@ -171,7 +175,12 @@ open class AgentTools() : ToolSet {
 
       // Actually run it and wait for the result.
       val action =
-        CallJsAgentAction(url = url, data = data.trim().ifEmpty { "{}" }, secret = secret)
+        CallJsAgentAction(
+          url = url,
+          data = data.trim().ifEmpty { "{}" },
+          secret = secret,
+          config = config,
+        )
       _actionChannel.send(action)
       val result = action.result.await()
 
@@ -251,4 +260,8 @@ open class AgentTools() : ToolSet {
 
 fun getSkillSecretKey(skillName: String): String {
   return "skill___${skillName}"
+}
+
+fun getSkillConfigKey(skillName: String): String {
+  return "skill_config___${skillName}"
 }

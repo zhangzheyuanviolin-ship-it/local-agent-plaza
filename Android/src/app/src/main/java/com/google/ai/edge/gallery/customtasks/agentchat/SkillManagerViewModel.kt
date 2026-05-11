@@ -121,6 +121,18 @@ val TRYOUT_CHIPS: List<SkillTryOutChip> =
       prompt = "Search the latest Google AI Edge Gallery updates on the live web and summarize the key changes.",
       skillName = "tavily-search",
     ),
+    SkillTryOutChip(
+      icon = Icons.Outlined.LocalLibrary,
+      label = "Exa Search",
+      prompt = "Search the latest on-device AI model news on the live web and summarize the key updates.",
+      skillName = "exa-search",
+    ),
+    SkillTryOutChip(
+      icon = Icons.Outlined.LocalLibrary,
+      label = "LangSearch",
+      prompt = "Search recent Android AI agent news on the live web and summarize the key points.",
+      skillName = "langsearch-search",
+    ),
   )
 
 enum class SkillSource(val sourceName: String) {

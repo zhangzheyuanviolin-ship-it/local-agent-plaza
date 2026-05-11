@@ -37,6 +37,7 @@ class CallJsAgentAction(
   val url: String,
   val data: String,
   val secret: String = "",
+  val config: String = "",
   val result: CompletableDeferred<String> = CompletableDeferred(),
 ) : AgentAction(name = AgentActionName.CALL_JS_SKILL) {}
 

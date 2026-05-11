@@ -195,7 +195,19 @@ fun SkillTesterBottomSheet(agentTools: AgentTools, skill: Skill, onDismiss: () -
               if (url == null) {
                 error = "JS skill url not specified"
               } else {
-                val action = CallJsAgentAction(url = url, data = inputData)
+                val action =
+                  CallJsAgentAction(
+                    url = url,
+                    data = inputData,
+                    secret =
+                      agentTools.skillManagerViewModel.dataStoreRepository.readSecret(
+                        getSkillSecretKey(skill.name)
+                      ) ?: "",
+                    config =
+                      agentTools.skillManagerViewModel.dataStoreRepository.readSecret(
+                        getSkillConfigKey(skill.name)
+                      ) ?: "",
+                  )
                 agentTools.sendAgentAction(action)
                 val curResult = action.result.await()
 

@@ -49,6 +49,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ListAlt
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DriveFolderUpload
 import androidx.compose.material.icons.outlined.RemoveRedEye
@@ -169,9 +170,11 @@ fun SkillManagerBottomSheet(
   var showDeleteSkillDialog by remember { mutableStateOf(false) }
   var showJsSkillTesterBottomSheet by remember { mutableStateOf(false) }
   var showSecretEditorDialog by remember { mutableStateOf(false) }
+  var showSearchConfigDialog by remember { mutableStateOf(false) }
   var showDisclaimerDialog by remember { mutableStateOf(false) }
   var skillToDeleteName by remember { mutableStateOf("") }
   var skillToTest by remember { mutableStateOf<Skill?>(null) }
+  var skillToConfigure by remember { mutableStateOf<Skill?>(null) }
   var addSkillOptionTypeToConfirm by remember { mutableStateOf<AddSkillOptionType?>(null) }
   var skillToEditIndex by remember { mutableIntStateOf(-1) }
   var searchQuery by remember { mutableStateOf("") }
@@ -497,6 +500,10 @@ fun SkillManagerBottomSheet(
                           skillToEditIndex = uiState.skills.indexOf(skillState)
                           showSecretEditorDialog = true
                         },
+                        onConfigClick = {
+                          skillToConfigure = skillState.skill
+                          showSearchConfigDialog = true
+                        },
                         onDeleteClick = {
                           skillToDeleteName = skillState.skill.name
                           showDeleteSkillDialog = true
@@ -569,6 +576,10 @@ fun SkillManagerBottomSheet(
                         onSecretClick = {
                           skillToEditIndex = uiState.skills.indexOf(skillState)
                           showSecretEditorDialog = true
+                        },
+                        onConfigClick = {
+                          skillToConfigure = skillState.skill
+                          showSearchConfigDialog = true
                         },
                         onDeleteClick = {
                           skillToDeleteName = skillState.skill.name
@@ -749,6 +760,19 @@ fun SkillManagerBottomSheet(
     }
   }
 
+  if (showSearchConfigDialog) {
+    skillToConfigure?.let { skill ->
+      SearchSkillConfigDialog(
+        skill = skill,
+        dataStoreRepository = skillManagerViewModel.dataStoreRepository,
+        onDismiss = {
+          showSearchConfigDialog = false
+          skillToConfigure = null
+        },
+      )
+    }
+  }
+
   if (showDisclaimerDialog) {
     AddSkillDisclaimerDialog(
       onDismiss = {
@@ -779,6 +803,7 @@ private fun SkillItemRow(
   onSkillEnabledChange: (Boolean) -> Unit,
   onViewClick: () -> Unit,
   onSecretClick: () -> Unit,
+  onConfigClick: () -> Unit,
   onDeleteClick: () -> Unit,
   uriHandler: androidx.compose.ui.platform.UriHandler,
 ) {
@@ -909,6 +934,26 @@ private fun SkillItemRow(
               )
               Text(
                 stringResource(R.string.secret),
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(start = 4.dp),
+              )
+            }
+          }
+
+          if (isSearchSkill(skill.name)) {
+            FilledTonalButton(
+              onClick = onConfigClick,
+              modifier = Modifier.height(32.dp).padding(end = 8.dp),
+              contentPadding = BUTTON_CONTENT_PADDING,
+            ) {
+              Icon(
+                Icons.Outlined.Settings,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+              )
+              Text(
+                "Config",
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(start = 4.dp),
               )

@@ -1,0 +1,187 @@
+<!--
+@license
+Copyright 2026 Google LLC
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LangSearch</title>
+  </head>
+  <body>
+    <script>
+      const API_URL = "https://api.langsearch.com/v1/web-search";
+      const ALLOWED_FRESHNESS = new Set(["oneDay", "oneWeek", "oneMonth", "oneYear", "noLimit"]);
+      const ALLOWED_DETAIL_MODES = new Set(["summary", "light", "standard", "full"]);
+      const ALLOWED_RESULT_COUNTS = [1, 3, 5, 8];
+
+      function capText(value, maxChars) {
+        if (!value) return "";
+        const normalized = String(value).replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+        if (normalized.length <= maxChars) return normalized;
+        return normalized.slice(0, maxChars) + "\n...[TRUNCATED]";
+      }
+
+      function parseJsonSafe(value) {
+        try {
+          return JSON.parse(value || "{}");
+        } catch (error) {
+          return {};
+        }
+      }
+
+      function clampResultCount(value) {
+        const num = Number(value);
+        if (ALLOWED_RESULT_COUNTS.includes(num)) return num;
+        if (!Number.isFinite(num) || num <= 1) return 1;
+        if (num <= 3) return 3;
+        if (num <= 5) return 5;
+        return 8;
+      }
+
+      function normalizeParams(rawData, rawConfig) {
+        const detailMode =
+          ALLOWED_DETAIL_MODES.has(rawConfig.detail_mode) ? rawConfig.detail_mode : ALLOWED_DETAIL_MODES.has(rawData.detail_mode) ? rawData.detail_mode : "summary";
+        const freshness =
+          ALLOWED_FRESHNESS.has(rawConfig.freshness_mode) ? rawConfig.freshness_mode : ALLOWED_FRESHNESS.has(rawData.freshness) ? rawData.freshness : "noLimit";
+        const resultCount = clampResultCount(rawConfig.result_count || rawData.count || 3);
+        return {
+          query: String(rawData.query || "").trim(),
+          detailMode,
+          freshness,
+          resultCount,
+        };
+      }
+
+      function buildRequestBody(params) {
+        return {
+          query: params.query,
+          freshness: params.freshness,
+          summary: params.detailMode === "standard" || params.detailMode === "full",
+          count: params.resultCount,
+        };
+      }
+
+      function formatResultBlock(result, index, params) {
+        const parts = [];
+        parts.push(`[${index + 1}] ${capText(result.name || "Untitled", 160)}`);
+        if (result.url) parts.push(`URL: ${result.url}`);
+        if (result.displayUrl) parts.push(`Display URL: ${result.displayUrl}`);
+        if (result.datePublished) parts.push(`Published: ${result.datePublished}`);
+        if (result.siteName) parts.push(`Site: ${result.siteName}`);
+
+        const snippetLimitByMode = {
+          summary: 180,
+          light: 320,
+          standard: 500,
+          full: 800,
+        };
+        const summaryLimitByMode = {
+          summary: 0,
+          light: 0,
+          standard: 900,
+          full: 1800,
+        };
+
+        if (result.snippet) {
+          parts.push(`Snippet: ${capText(result.snippet, snippetLimitByMode[params.detailMode] || 320)}`);
+        }
+        if (result.summary && summaryLimitByMode[params.detailMode] > 0) {
+          parts.push(`Summary: ${capText(result.summary, summaryLimitByMode[params.detailMode])}`);
+        }
+        return parts.join("\n");
+      }
+
+      function formatResponse(response, params) {
+        const lines = [];
+        lines.push(`Search query: ${params.query}`);
+        lines.push(`Freshness: ${params.freshness}`);
+        lines.push(`Detail mode: ${params.detailMode}`);
+        lines.push(`Max results requested: ${params.resultCount}`);
+        if (response.log_id) lines.push(`Log ID: ${response.log_id}`);
+
+        const values = response?.data?.webPages?.value;
+        const results = Array.isArray(values) ? values : [];
+        if (results.length > 0) {
+          lines.push("");
+          lines.push("Sources:");
+          results.forEach((result, index) => {
+            lines.push(formatResultBlock(result, index, params));
+            lines.push("");
+          });
+        } else {
+          lines.push("");
+          lines.push("Sources: none");
+        }
+
+        const totalLimitByMode = {
+          summary: 3200,
+          light: 5600,
+          standard: 9600,
+          full: 18000,
+        };
+        return capText(lines.join("\n").trim(), totalLimitByMode[params.detailMode] || 5600);
+      }
+
+      async function searchWithLangSearch(data, secret, config) {
+        if (!secret || !String(secret).trim()) {
+          return { error: "Missing LangSearch API key. Open the skill list, choose the LangSearch skill, and set its secret first." };
+        }
+
+        const rawData = parseJsonSafe(data);
+        const rawConfig = parseJsonSafe(config);
+        const params = normalizeParams(rawData, rawConfig);
+        if (!params.query) {
+          return { error: "No search query was provided." };
+        }
+
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${String(secret).trim()}`,
+          },
+          body: JSON.stringify(buildRequestBody(params)),
+        });
+
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (error) {
+          payload = null;
+        }
+
+        if (!response.ok || !payload || payload.code !== 200) {
+          const errorMessage =
+            payload?.msg ||
+            payload?.message ||
+            `LangSearch request failed with HTTP ${response.status}.`;
+          return { error: errorMessage };
+        }
+
+        return { result: formatResponse(payload, params) };
+      }
+
+      window["ai_edge_gallery_get_result"] = async (data, secret, config) => {
+        try {
+          const result = await searchWithLangSearch(data, secret, config);
+          return JSON.stringify(result);
+        } catch (error) {
+          console.error(error);
+          return JSON.stringify({ error: `Failed to run LangSearch: ${error.message}` });
+        }
+      };
+    </script>
+  </body>
+</html>

@@ -1,17 +1,17 @@
 ---
-name: tavily-search
-description: Search the live web with Tavily and return source-grounded results optimized for on-device models.
+name: exa-search
+description: Search the live web with Exa and return rich source-grounded results for on-device models.
 metadata:
   require-secret: true
-  require-secret-description: Enter your Tavily API key. It usually starts with tvly-.
-  homepage: https://tavily.com
+  require-secret-description: Enter your Exa API key.
+  homepage: https://exa.ai
 ---
 
-# Tavily Search
+# Exa Search
 
 ## When to use
 
-Use this skill when the user asks for live web information, current events, product changes, or facts that may be newer than the model's local knowledge.
+Use this skill when the user asks for live web information and you want stronger semantic retrieval or richer returned source text.
 
 ## Instructions
 
@@ -23,13 +23,12 @@ Required field:
 
 Optional fields:
 
-- `topic`: Use `general`, `news`, or `finance` only when the query clearly needs it.
+- `topic`: Use `general`, `news`, or `finance` only when it is clearly implied.
 - `time_range`: Use `day`, `week`, `month`, or `year` only when the user explicitly asks for recency.
-- `exact_match`: Use `true` only when the user clearly needs an exact phrase.
 - `include_domains`: Optional array of domains when the user explicitly restricts sources.
 - `exclude_domains`: Optional array of domains when the user explicitly wants some sources excluded.
 
-The app already applies the user's saved defaults for search depth, result count, and detail level. Do not send extra fields unless they materially improve the search.
+The app already applies the user's saved defaults for search type, result count, and detail level. Do not send extra fields unless they materially improve the search.
 
 ## Constraints
 

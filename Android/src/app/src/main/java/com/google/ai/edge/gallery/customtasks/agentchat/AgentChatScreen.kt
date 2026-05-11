@@ -302,6 +302,7 @@ fun AgentChatScreen(
 
                 val safeData = JSONObject.quote(action.data)
                 val safeSecret = JSONObject.quote(action.secret)
+                val safeConfig = JSONObject.quote(action.config)
                 val script =
                   """
                   (async function() {
@@ -317,7 +318,7 @@ fun AgentChatScreen(
                           break;
                         }
                       }
-                      var result = await ai_edge_gallery_get_result($safeData, $safeSecret);
+                      var result = await ai_edge_gallery_get_result($safeData, $safeSecret, $safeConfig);
                       AiEdgeGallery.onResultReady(result);
                   })()
                   """
