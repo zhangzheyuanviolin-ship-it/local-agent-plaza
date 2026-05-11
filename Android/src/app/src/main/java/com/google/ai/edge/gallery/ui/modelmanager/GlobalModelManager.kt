@@ -434,7 +434,7 @@ fun GlobalModelManager(
           modifier = Modifier.fillMaxWidth().padding(16.dp),
         ) {
           Icon(Icons.AutoMirrored.Outlined.NoteAdd, contentDescription = null)
-          Text("From local model file", modifier = Modifier.clearAndSetSemantics {})
+          Text("从本地模型文件导入", modifier = Modifier.clearAndSetSemantics {})
         }
       }
     }
@@ -486,8 +486,8 @@ fun GlobalModelManager(
         )
       },
       onDismissRequest = { showUnsupportedFileTypeDialog = false },
-      title = { Text("Unsupported file type") },
-      text = { Text("Only \".task\" or \".litertlm\" file type is supported.") },
+      title = { Text("不支持的文件类型") },
+      text = { Text("仅支持“.task”或“.litertlm”文件类型。") },
       confirmButton = {
         Button(onClick = { showUnsupportedFileTypeDialog = false }) {
           Text(stringResource(R.string.ok))
@@ -507,8 +507,8 @@ fun GlobalModelManager(
         )
       },
       onDismissRequest = { showUnsupportedWebModelDialog = false },
-      title = { Text("Unsupported model type") },
-      text = { Text("Looks like the model is a web-only model and is not supported by the app.") },
+      title = { Text("不支持的模型类型") },
+      text = { Text("该模型看起来仅适用于网页环境，当前应用暂不支持。") },
       confirmButton = {
         Button(onClick = { showUnsupportedWebModelDialog = false }) {
           Text(stringResource(R.string.ok))

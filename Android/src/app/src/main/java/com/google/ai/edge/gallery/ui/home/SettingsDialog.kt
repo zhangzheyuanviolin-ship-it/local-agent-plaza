@@ -229,7 +229,7 @@ fun SettingsDialog(
                 },
                 enabled = curHfToken != null,
               ) {
-                Text("Clear")
+                Text("清除")
               }
               val handleSaveToken = {
                 modelManagerViewModel.saveAccessToken(
@@ -305,7 +305,7 @@ fun SettingsDialog(
                 context.startActivity(intent)
               }
             ) {
-              Text("View licenses")
+              Text("查看许可证")
             }
           }
 
@@ -337,7 +337,7 @@ fun SettingsDialog(
           horizontalArrangement = Arrangement.End,
         ) {
           // Close button
-          Button(onClick = { onDismissed() }) { Text("Close") }
+          Button(onClick = { onDismissed() }) { Text("关闭") }
         }
       }
     }

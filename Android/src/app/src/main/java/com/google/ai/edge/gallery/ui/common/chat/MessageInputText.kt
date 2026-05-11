@@ -452,7 +452,7 @@ fun MessageInputText(
                               horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                               Icon(Icons.Rounded.PhotoCamera, contentDescription = null)
-                              Text("Take a picture")
+                              Text("拍照")
                             }
                           },
                           enabled = enableAddImageMenuItems,
@@ -489,7 +489,7 @@ fun MessageInputText(
                               horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                               Icon(Icons.Rounded.Photo, contentDescription = null)
-                              Text("Pick from album")
+                              Text("从相册选择")
                             }
                           },
                           enabled = enableAddImageMenuItems,
@@ -521,7 +521,7 @@ fun MessageInputText(
                               horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                               Icon(Icons.Rounded.Mic, contentDescription = null)
-                              Text("Record audio clip")
+                              Text("录制音频片段")
                             }
                           },
                           enabled = enableRecordAudioClipMenuItems,
@@ -553,7 +553,7 @@ fun MessageInputText(
                               horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                               Icon(Icons.Rounded.AudioFile, contentDescription = null)
-                              Text("Pick wav file")
+                              Text("选择 WAV 文件")
                             }
                           },
                           enabled = enableRecordAudioClipMenuItems,
@@ -588,7 +588,7 @@ fun MessageInputText(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                           ) {
                             Icon(Icons.Rounded.History, contentDescription = null)
-                            Text("Input history")
+                            Text("输入历史")
                           }
                         },
                         onClick = {

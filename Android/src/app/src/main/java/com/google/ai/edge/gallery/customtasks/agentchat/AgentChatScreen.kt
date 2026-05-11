@@ -356,6 +356,16 @@ fun AgentChatScreen(
         modifier = Modifier.size(300.dp),
         onWebViewCreated = { webView ->
           webViewRef = webView
+          chatViewJavascriptInterface.onExaResultListener = { requestId, result ->
+            val safeRequestId = JSONObject.quote(requestId)
+            val safeResult = JSONObject.quote(result)
+            webView.post {
+              webView.evaluateJavascript(
+                "window.ai_edge_gallery_receive_exa_result($safeRequestId, $safeResult);",
+                null,
+              )
+            }
+          }
           webView.addJavascriptInterface(chatViewJavascriptInterface, "AiEdgeGallery")
         },
         customWebViewClient = chatWebViewClient,
@@ -629,6 +639,7 @@ private fun resetSessionWithCurrentSkills(
 
 class ChatWebViewJavascriptInterface {
   var onResultListener: ((String) -> Unit)? = null
+  var onExaResultListener: ((String, String) -> Unit)? = null
 
   @JavascriptInterface
   fun onResultReady(result: String) {
@@ -636,16 +647,23 @@ class ChatWebViewJavascriptInterface {
   }
 
   @JavascriptInterface
-  fun exaSearch(requestBody: String, secret: String): String {
+  fun exaSearchAsync(requestId: String, requestBody: String, secret: String) {
     val trimmedSecret = secret.trim()
     if (trimmedSecret.isEmpty()) {
-      return JSONObject()
-        .put("ok", false)
-        .put("status", 0)
-        .put("body", JSONObject().put("error", "Missing Exa API key.").toString())
-        .toString()
+      onExaResultListener?.invoke(
+        requestId,
+        JSONObject().put("error", "Missing Exa API key.").toString(),
+      )
+      return
     }
 
+    Thread {
+      onExaResultListener?.invoke(requestId, performExaSearch(requestBody = requestBody, secret = trimmedSecret))
+    }.start()
+  }
+
+  private fun performExaSearch(requestBody: String, secret: String): String {
+    val requestMeta = parseExaRequestMeta(requestBody = requestBody)
     var connection: HttpURLConnection? = null
     return try {
       connection = (URL("https://api.exa.ai/search").openConnection() as HttpURLConnection).apply {
@@ -655,7 +673,7 @@ class ChatWebViewJavascriptInterface {
         doOutput = true
         setRequestProperty("Content-Type", "application/json")
         setRequestProperty("Accept", "application/json")
-        setRequestProperty("x-api-key", trimmedSecret)
+        setRequestProperty("x-api-key", secret)
       }
 
       connection.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
@@ -671,28 +689,195 @@ class ChatWebViewJavascriptInterface {
         }
       val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: "{}"
 
-      JSONObject()
-        .put("ok", statusCode in 200..299)
-        .put("status", statusCode)
-        .put("body", body)
-        .toString()
+      if (statusCode !in 200..299) {
+        JSONObject().put("error", extractExaErrorMessage(body = body, statusCode = statusCode)).toString()
+      } else {
+        JSONObject().put("result", formatExaResponse(body = body, requestMeta = requestMeta)).toString()
+      }
     } catch (e: Exception) {
       Log.e(TAG, "Exa native bridge request failed", e)
       JSONObject()
-        .put("ok", false)
-        .put("status", 0)
-        .put(
-          "body",
-          JSONObject()
-            .put("error", "Failed to run Exa search: ${e.message ?: "Unknown error"}")
-            .toString(),
-        )
+        .put("error", "Failed to run Exa search: ${e.message ?: "Unknown error"}")
         .toString()
     } finally {
       connection?.disconnect()
     }
   }
+
+  private fun parseExaRequestMeta(requestBody: String): ExaRequestMeta {
+    val request = runCatching { JSONObject(requestBody) }.getOrNull()
+    val category = request?.optString("category").orEmpty()
+    val contents = request?.optJSONObject("contents")
+    val detailMode =
+      when {
+        contents?.optBoolean("text") == true -> "full"
+        contents != null &&
+          contents.optJSONObject("summary") != null &&
+          contents.optJSONObject("highlights") != null ->
+          "standard"
+        contents != null && contents.optJSONObject("highlights") != null -> "light"
+        else -> "summary"
+      }
+    val topic =
+      when (category) {
+        "news" -> "news"
+        "financial report" -> "finance"
+        else -> "general"
+      }
+    return ExaRequestMeta(
+      query = request?.optString("query").orEmpty(),
+      topic = topic,
+      searchType = request?.optString("type").takeUnless { it.isNullOrBlank() } ?: "auto",
+      detailMode = detailMode,
+      resultCount = request?.optInt("numResults", 3) ?: 3,
+    )
+  }
+
+  private fun extractExaErrorMessage(body: String, statusCode: Int): String {
+    val payload = runCatching { JSONObject(body) }.getOrNull()
+    return payload?.optString("error").takeUnless { it.isNullOrBlank() }
+      ?: payload?.optString("detail").takeUnless { it.isNullOrBlank() }
+      ?: payload?.optString("message").takeUnless { it.isNullOrBlank() }
+      ?: "Exa request failed with HTTP $statusCode."
+  }
+
+  private fun formatExaResponse(body: String, requestMeta: ExaRequestMeta): String {
+    val response = runCatching { JSONObject(body) }.getOrNull()
+    if (response == null) {
+      return "搜索查询: ${requestMeta.query}\nExa 返回了无法解析的响应。"
+    }
+
+    val lines = mutableListOf<String>()
+    lines += "搜索查询: ${requestMeta.query}"
+    lines += "主题: ${requestMeta.topic}"
+    lines += "搜索类型: ${requestMeta.searchType}"
+    lines += "详细度: ${requestMeta.detailMode}"
+    lines += "请求条目数: ${requestMeta.resultCount}"
+
+    val requestId = response.optString("requestId")
+    if (requestId.isNotBlank()) {
+      lines += "请求 ID: $requestId"
+    }
+    val resolvedSearchType = response.optString("searchType")
+    if (resolvedSearchType.isNotBlank()) {
+      lines += "实际搜索类型: $resolvedSearchType"
+    }
+
+    val results = response.optJSONArray("results")
+    if (results != null && results.length() > 0) {
+      lines += ""
+      lines += "来源:"
+      for (i in 0 until results.length()) {
+        val result = results.optJSONObject(i) ?: continue
+        lines += formatExaResultBlock(result = result, index = i, detailMode = requestMeta.detailMode)
+        lines += ""
+      }
+    } else {
+      lines += ""
+      lines += "来源: 无"
+    }
+
+    val usage = response.optJSONObject("costDollars")
+    if (usage != null) {
+      lines += "用量:"
+      lines += capText(usage.toString(), 300)
+    }
+
+    val totalLimitByMode =
+      mapOf(
+        "summary" to 2400,
+        "light" to 4200,
+        "standard" to 7600,
+        "full" to 12000,
+      )
+    return capText(lines.joinToString("\n").trim(), totalLimitByMode[requestMeta.detailMode] ?: 4200)
+  }
+
+  private fun formatExaResultBlock(result: JSONObject, index: Int, detailMode: String): String {
+    val parts = mutableListOf<String>()
+    parts += "[${index + 1}] ${capText(result.optString("title").ifBlank { "Untitled" }, 120)}"
+
+    val url = result.optString("url")
+    if (url.isNotBlank()) {
+      parts += "URL: $url"
+    }
+    val publishedDate = result.optString("publishedDate")
+    if (publishedDate.isNotBlank()) {
+      parts += "发布时间: $publishedDate"
+    }
+    val author = result.optString("author")
+    if (author.isNotBlank()) {
+      parts += "作者: ${capText(author, 120)}"
+    }
+
+    val summaryLimitByMode =
+      mapOf(
+        "summary" to 320,
+        "light" to 480,
+        "standard" to 720,
+        "full" to 900,
+      )
+    val highlightLimitByMode =
+      mapOf(
+        "summary" to 0,
+        "light" to 600,
+        "standard" to 960,
+        "full" to 1280,
+      )
+    val textLimitByMode =
+      mapOf(
+        "summary" to 0,
+        "light" to 0,
+        "standard" to 0,
+        "full" to 1600,
+      )
+
+    val summary = result.optString("summary")
+    if (summary.isNotBlank()) {
+      parts += "摘要: ${capText(summary, summaryLimitByMode[detailMode] ?: 480)}"
+    }
+
+    val highlightLimit = highlightLimitByMode[detailMode] ?: 0
+    val highlights = result.optJSONArray("highlights")
+    if (highlightLimit > 0 && highlights != null && highlights.length() > 0) {
+      val items = mutableListOf<String>()
+      for (i in 0 until highlights.length()) {
+        val value = highlights.optString(i)
+        if (value.isNotBlank()) {
+          items += value
+        }
+      }
+      if (items.isNotEmpty()) {
+        parts += "要点: ${capText(items.joinToString(" | "), highlightLimit)}"
+      }
+    }
+
+    val textLimit = textLimitByMode[detailMode] ?: 0
+    val text = result.optString("text")
+    if (textLimit > 0 && text.isNotBlank()) {
+      parts += "正文摘录: ${capText(text, textLimit)}"
+    }
+
+    return parts.joinToString("\n")
+  }
+
+  private fun capText(value: String, maxChars: Int): String {
+    val normalized =
+      value.replace(Regex("\\s+\\n"), "\n").replace(Regex("\\n{3,}"), "\n\n").trim()
+    if (maxChars <= 0 || normalized.length <= maxChars) {
+      return normalized
+    }
+    return normalized.take(maxChars) + "\n...[TRUNCATED]"
+  }
 }
+
+private data class ExaRequestMeta(
+  val query: String,
+  val topic: String,
+  val searchType: String,
+  val detailMode: String,
+  val resultCount: Int,
+)
 
 class ChatWebViewClient(val context: Context) : BaseGalleryWebViewClient(context = context) {
   private var onPageLoaded: (() -> Unit)? = null

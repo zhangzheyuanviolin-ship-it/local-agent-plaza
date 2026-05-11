@@ -27,6 +27,7 @@ limitations under the License.
       const ALLOWED_DETAIL_MODES = new Set(["summary", "light", "standard", "full"]);
       const ALLOWED_RESULT_COUNTS = [1, 3, 5, 8];
       const ALLOWED_TIME_RANGES = new Set(["day", "week", "month", "year"]);
+      const pendingExaRequests = new Map();
 
       function capText(value, maxChars) {
         if (!value) return "";
@@ -161,6 +162,21 @@ limitations under the License.
       }
 
       async function requestExa(requestBody, secret) {
+        if (window.AiEdgeGallery && typeof window.AiEdgeGallery.exaSearchAsync === "function") {
+          return new Promise((resolve) => {
+            const requestId = `exa-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            const timeoutId = setTimeout(() => {
+              pendingExaRequests.delete(requestId);
+              resolve({ error: "Exa request timed out." });
+            }, 25000);
+            pendingExaRequests.set(requestId, (parsedResult) => {
+              clearTimeout(timeoutId);
+              resolve(parsedResult);
+            });
+            window.AiEdgeGallery.exaSearchAsync(requestId, JSON.stringify(requestBody), String(secret).trim());
+          });
+        }
+
         if (window.AiEdgeGallery && typeof window.AiEdgeGallery.exaSearch === "function") {
           return parseNativeResponse(window.AiEdgeGallery.exaSearch(JSON.stringify(requestBody), String(secret).trim()));
         }
@@ -195,18 +211,30 @@ limitations under the License.
         if (result.publishedDate) parts.push(`Published: ${result.publishedDate}`);
         if (result.author) parts.push(`Author: ${capText(result.author, 160)}`);
 
+        const summaryLimitByMode = {
+          summary: 320,
+          light: 480,
+          standard: 720,
+          full: 900,
+        };
+        const highlightLimitByMode = {
+          summary: 0,
+          light: 600,
+          standard: 960,
+          full: 1280,
+        };
         const textLimitByMode = {
           summary: 0,
           light: 0,
           standard: 0,
-          full: 2200,
+          full: 1600,
         };
 
         if (result.summary) {
-          parts.push(`Summary: ${capText(result.summary, params.detailMode === "summary" ? 600 : 1200)}`);
+          parts.push(`Summary: ${capText(result.summary, summaryLimitByMode[params.detailMode] || 480)}`);
         }
-        if (Array.isArray(result.highlights) && result.highlights.length > 0) {
-          parts.push(`Highlights: ${capText(result.highlights.join(" | "), params.detailMode === "light" ? 900 : 1600)}`);
+        if ((highlightLimitByMode[params.detailMode] || 0) > 0 && Array.isArray(result.highlights) && result.highlights.length > 0) {
+          parts.push(`Highlights: ${capText(result.highlights.join(" | "), highlightLimitByMode[params.detailMode] || 600)}`);
         }
         if (params.detailMode === "full" && result.text) {
           parts.push(`Text: ${capText(result.text, textLimitByMode[params.detailMode])}`);
@@ -243,10 +271,10 @@ limitations under the License.
         }
 
         const totalLimitByMode = {
-          summary: 3200,
-          light: 5600,
-          standard: 9600,
-          full: 18000,
+          summary: 2400,
+          light: 4200,
+          standard: 7600,
+          full: 12000,
         };
         return capText(lines.join("\n").trim(), totalLimitByMode[params.detailMode] || 5600);
       }
@@ -264,6 +292,9 @@ limitations under the License.
         }
 
         const nativeResponse = await requestExa(buildRequestBody(params), secret);
+        if (nativeResponse?.result || nativeResponse?.error) {
+          return nativeResponse.result ? { result: nativeResponse.result } : { error: nativeResponse.error };
+        }
         const payload = parseResponseBody(nativeResponse.body);
 
         if (!nativeResponse.ok) {
@@ -286,6 +317,15 @@ limitations under the License.
           console.error(error);
           return JSON.stringify({ error: `Failed to run Exa search: ${error.message}` });
         }
+      };
+
+      window.ai_edge_gallery_receive_exa_result = (requestId, rawValue) => {
+        const resolver = pendingExaRequests.get(requestId);
+        if (!resolver) {
+          return;
+        }
+        pendingExaRequests.delete(requestId);
+        resolver(parseNativeResponse(rawValue));
       };
     </script>
   </body>

@@ -54,7 +54,7 @@ fun ErrorDialog(error: String, onDismiss: () -> Unit) {
         )
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-          Button(onClick = onDismiss) { Text("Close") }
+          Button(onClick = onDismiss) { Text("关闭") }
         }
       }
     }

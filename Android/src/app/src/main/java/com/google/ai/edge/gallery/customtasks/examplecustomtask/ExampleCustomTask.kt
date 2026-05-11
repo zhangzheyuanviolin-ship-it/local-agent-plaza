@@ -62,8 +62,8 @@ class ExampleCustomTask @Inject constructor() : CustomTask {
   override val task: Task =
     Task(
       id = "example_custom_task",
-      label = "Model Viewer",
-      category = CategoryInfo(id = "example", label = "Example"),
+      label = "模型查看器",
+      category = CategoryInfo(id = "example", label = "示例"),
       icon = Icons.Outlined.TextFields,
       description =
         "This example task demonstrates a custom task that reads and displays the content of a " +
