@@ -338,8 +338,6 @@
     <item quantity="one">%d 次运行</item>
     <item quantity="other">%d 次运行</item>
   </plurals>
-  <string name="selected_custom_skills_count">已选择 %d 个自定义技能</string>
-  <string name="skills_count">技能数量：%d</string>
   <string name="update">更新</string>
   <string name="update_available">发现更新</string>
   <string name="clear_all">全部清除</string>
@@ -347,7 +345,6 @@
   <string name="clear_history_dialog_title">清除聊天记录</string>
   <string name="chat_history_demo_notice">演示模式下的聊天记录不会被保留。</string>
   <string name="chat_history_title">聊天记录</string>
-  <string name="delete_selected_skills_content">确定要删除已选技能吗？</string>
   <string name="skill_config">配置</string>
   <string name="skill_disabled_dialog_title">技能“%1$s”当前已关闭</string>
   <string name="search_config_tavily_title">Tavily 搜索设置</string>
