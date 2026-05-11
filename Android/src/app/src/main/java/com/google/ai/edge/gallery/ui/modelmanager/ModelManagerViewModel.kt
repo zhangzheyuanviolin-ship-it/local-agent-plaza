@@ -918,7 +918,9 @@ constructor(
 
         if (modelAllowlist == null) {
           // Load from github.
-          var version = BuildConfig.VERSION_NAME.replace(".", "_")
+          // Custom downstream builds may append a local suffix such as "-ala.1".
+          // The upstream allowlist files are versioned only by the base semantic version.
+          val version = BuildConfig.VERSION_NAME.substringBefore("-").replace(".", "_")
           val url = getAllowlistUrl(version)
           Log.d(TAG, "Loading model allowlist from internet. Url: $url")
           val data = getJsonResponse<ModelAllowlist>(url = url)
