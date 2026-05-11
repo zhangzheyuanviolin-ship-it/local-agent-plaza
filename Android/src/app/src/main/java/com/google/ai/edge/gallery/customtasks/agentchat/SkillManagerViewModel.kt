@@ -115,6 +115,12 @@ val TRYOUT_CHIPS: List<SkillTryOutChip> =
       prompt = "Generate QR code for https://deepmind.google/models/gemma/",
       skillName = "qr-code",
     ),
+    SkillTryOutChip(
+      icon = Icons.Outlined.LocalLibrary,
+      label = "Tavily Search",
+      prompt = "Search the latest Google AI Edge Gallery updates on the live web and summarize the key changes.",
+      skillName = "tavily-search",
+    ),
   )
 
 enum class SkillSource(val sourceName: String) {
