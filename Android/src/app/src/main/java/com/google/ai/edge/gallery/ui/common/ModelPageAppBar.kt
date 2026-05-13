@@ -87,6 +87,21 @@ fun ModelPageAppBar(
     modelInitializationStatus?.status == ModelInitializationStatusType.INITIALIZING
   val isModelInitialized =
     modelInitializationStatus?.status == ModelInitializationStatusType.INITIALIZED
+  val configSubtitle =
+    buildList {
+        model.llmMaxContextLength?.let {
+          add(context.getString(R.string.model_config_context_limit, it))
+        }
+        val currentMaxTokens =
+          model.getIntConfigValue(
+            key = ConfigKeys.MAX_TOKENS,
+            defaultValue = model.llmMaxToken,
+          )
+        if (currentMaxTokens > 0) {
+          add(context.getString(R.string.model_config_output_limit, currentMaxTokens))
+        }
+      }
+      .joinToString("  •  ")
 
   CenterAlignedTopAppBar(
     title = {
@@ -204,10 +219,12 @@ fun ModelPageAppBar(
       modelConfigs.removeIf { it.key == ConfigKeys.ENABLE_SPECULATIVE_DECODING }
     }
     ConfigDialog(
-      title = "Configurations",
+      title = stringResource(R.string.model_configurations_title),
       configs = modelConfigs,
       initialValues = model.configValues,
       onDismissed = { showConfigDialog = false },
+      okBtnLabel = stringResource(R.string.save),
+      subtitle = configSubtitle,
       onOk = { curConfigValues, oldSystemPrompt, newSystemPrompt ->
         // Hide config dialog.
         showConfigDialog = false
@@ -247,6 +264,7 @@ fun ModelPageAppBar(
         val oldConfigValues = model.configValues
         model.prevConfigValues = oldConfigValues
         model.configValues = curConfigValues
+        modelManagerViewModel.persistModelConfigValues(model)
         modelManagerViewModel.updateConfigValuesUpdateTrigger()
 
         if (!task.handleModelConfigChangesInTask) {

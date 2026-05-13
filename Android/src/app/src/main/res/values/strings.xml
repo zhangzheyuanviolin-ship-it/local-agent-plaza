@@ -466,5 +466,14 @@
   <string name="search_config_choice_fast">Fast</string>
   <string name="search_config_choice_deep">Deep</string>
   <string name="search_config_choice_no_limit">No limit</string>
+  <string name="file_workspace_config_title">File workspace settings</string>
+  <string name="file_workspace_config_subtitle">Choose one folder that the agent can access. All file operations stay inside this folder and its subfolders.</string>
+  <string name="file_workspace_selected_folder_label">Mounted folder</string>
+  <string name="file_workspace_no_folder_selected">No folder selected</string>
+  <string name="file_workspace_choose_folder">Choose folder</string>
+  <string name="file_workspace_clear_folder">Clear</string>
+  <string name="model_configurations_title">Model settings</string>
+  <string name="model_config_context_limit">Total context limit: %1$d</string>
+  <string name="model_config_output_limit">Current max output tokens: %1$d</string>
 
 </resources>

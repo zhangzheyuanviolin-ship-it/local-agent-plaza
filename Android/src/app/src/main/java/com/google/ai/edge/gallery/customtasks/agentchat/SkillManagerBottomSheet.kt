@@ -170,7 +170,7 @@ fun SkillManagerBottomSheet(
   var showDeleteSkillDialog by remember { mutableStateOf(false) }
   var showJsSkillTesterBottomSheet by remember { mutableStateOf(false) }
   var showSecretEditorDialog by remember { mutableStateOf(false) }
-  var showSearchConfigDialog by remember { mutableStateOf(false) }
+  var showSkillConfigDialog by remember { mutableStateOf(false) }
   var showDisclaimerDialog by remember { mutableStateOf(false) }
   var skillToDeleteName by remember { mutableStateOf("") }
   var skillToTest by remember { mutableStateOf<Skill?>(null) }
@@ -502,7 +502,7 @@ fun SkillManagerBottomSheet(
                         },
                         onConfigClick = {
                           skillToConfigure = skillState.skill
-                          showSearchConfigDialog = true
+                          showSkillConfigDialog = true
                         },
                         onDeleteClick = {
                           skillToDeleteName = skillState.skill.name
@@ -579,7 +579,7 @@ fun SkillManagerBottomSheet(
                         },
                         onConfigClick = {
                           skillToConfigure = skillState.skill
-                          showSearchConfigDialog = true
+                          showSkillConfigDialog = true
                         },
                         onDeleteClick = {
                           skillToDeleteName = skillState.skill.name
@@ -760,16 +760,27 @@ fun SkillManagerBottomSheet(
     }
   }
 
-  if (showSearchConfigDialog) {
+  if (showSkillConfigDialog) {
     skillToConfigure?.let { skill ->
-      SearchSkillConfigDialog(
-        skill = skill,
-        dataStoreRepository = skillManagerViewModel.dataStoreRepository,
-        onDismiss = {
-          showSearchConfigDialog = false
-          skillToConfigure = null
-        },
-      )
+      when {
+        isSearchSkill(skill.name) ->
+          SearchSkillConfigDialog(
+            skill = skill,
+            dataStoreRepository = skillManagerViewModel.dataStoreRepository,
+            onDismiss = {
+              showSkillConfigDialog = false
+              skillToConfigure = null
+            },
+          )
+        skill.name == FILE_WORKSPACE_SKILL_NAME ->
+          FileWorkspaceConfigDialog(
+            dataStoreRepository = skillManagerViewModel.dataStoreRepository,
+            onDismiss = {
+              showSkillConfigDialog = false
+              skillToConfigure = null
+            },
+          )
+      }
     }
   }
 
@@ -940,7 +951,7 @@ private fun SkillItemRow(
             }
           }
 
-          if (isSearchSkill(skill.name)) {
+          if (hasSkillConfig(skill.name)) {
             FilledTonalButton(
               onClick = onConfigClick,
               modifier = Modifier.height(32.dp).padding(end = 8.dp),

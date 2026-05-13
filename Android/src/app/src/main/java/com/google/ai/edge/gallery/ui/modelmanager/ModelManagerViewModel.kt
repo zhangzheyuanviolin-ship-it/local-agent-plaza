@@ -53,6 +53,7 @@ import com.google.ai.edge.gallery.data.TMP_FILE_EXT
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.ValueType
 import com.google.ai.edge.gallery.data.createLlmChatConfigs
+import com.google.ai.edge.gallery.data.convertValueToTargetType
 import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.proto.Theme
@@ -77,9 +78,11 @@ import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
 import net.openid.appauth.ResponseTypeValues
+import org.json.JSONObject
 
 private const val TAG = "AGModelManagerViewModel"
 private const val TEXT_INPUT_HISTORY_MAX_SIZE = 50
+private const val MODEL_CONFIG_SECRET_PREFIX = "model_config___"
 private const val MODEL_ALLOWLIST_FILENAME = "model_allowlist.json"
 private const val MODEL_ALLOWLIST_TEST_FILENAME = "model_allowlist_test.json"
 private const val ALLOWLIST_BASE_URL =
@@ -279,6 +282,15 @@ constructor(
 
   fun updateConfigValuesUpdateTrigger() {
     _uiState.update { _uiState.value.copy(configValuesUpdateTrigger = System.currentTimeMillis()) }
+  }
+
+  fun persistModelConfigValues(model: Model) {
+    val json = JSONObject()
+    for (config in model.configs) {
+      val value = model.configValues[config.key.label] ?: continue
+      json.put(config.key.label, value)
+    }
+    dataStoreRepository.saveSecret(getModelConfigSecretKey(model.name), json.toString())
   }
 
   fun selectModel(model: Model) {
@@ -1166,6 +1178,8 @@ constructor(
         )
     }
 
+    applyPersistedConfigValues(tasks.values)
+
     val textInputHistory = dataStoreRepository.readTextInputHistory()
     Log.d(TAG, "text input history: $textInputHistory")
 
@@ -1177,6 +1191,39 @@ constructor(
       modelInitializationStatus = modelInstances,
       textInputHistory = textInputHistory,
     )
+  }
+
+  private fun applyPersistedConfigValues(tasks: Collection<Task>) {
+    val appliedModelNames = mutableSetOf<String>()
+    for (task in tasks) {
+      for (model in task.models) {
+        if (appliedModelNames.add(model.name)) {
+          applyPersistedConfigValues(model)
+        }
+      }
+    }
+  }
+
+  private fun applyPersistedConfigValues(model: Model) {
+    val savedJson = dataStoreRepository.readSecret(getModelConfigSecretKey(model.name)) ?: return
+    val savedValues = runCatching { JSONObject(savedJson) }.getOrNull() ?: return
+    val mergedValues = model.configValues.toMutableMap()
+    for (config in model.configs) {
+      val key = config.key.label
+      if (!savedValues.has(key)) {
+        continue
+      }
+      mergedValues[key] =
+        convertValueToTargetType(
+          value = savedValues.get(key),
+          valueType = config.valueType,
+        )
+    }
+    model.configValues = mergedValues
+  }
+
+  private fun getModelConfigSecretKey(modelName: String): String {
+    return "$MODEL_CONFIG_SECRET_PREFIX$modelName"
   }
 
   private fun createModelFromImportedModelInfo(info: ImportedModel): Model {

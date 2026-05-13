@@ -215,6 +215,7 @@ data class AllowedModel(
       llmSupportMobileActions = llmSupportMobileActions == true,
       capabilities = capabilities ?: emptyList(),
       llmMaxToken = llmMaxToken,
+      llmMaxContextLength = llmMaxContextLength,
       accelerators = accelerators,
       visionAccelerator = visionAccelerator,
       bestForTaskIds = bestForTaskTypes ?: listOf(),

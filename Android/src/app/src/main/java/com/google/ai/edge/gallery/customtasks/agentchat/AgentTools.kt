@@ -253,6 +253,61 @@ open class AgentTools() : ToolSet {
     }
   }
 
+  @Tool(
+    description =
+      "Runs an Android intent with the saved configuration of the specified skill. Use this when a skill needs its own mounted folder or other stored settings."
+  )
+  fun runConfiguredIntent(
+    @ToolParam(description = "The name of the skill that owns the saved configuration.")
+    skillName: String,
+    @ToolParam(description = "The intent to run.") intent: String,
+    @ToolParam(
+      description = "A JSON string containing the parameter values required for the intent."
+    )
+    parameters: String,
+  ): Map<String, String> {
+    return runBlocking(Dispatchers.Default) {
+      val skill = skillManagerViewModel.getSelectedSkills().find { it.name == skillName.trim() }
+      if (skill == null) {
+        _actionChannel.send(
+          SkillProgressAgentAction(
+            label = "Failed to execute configured intent \"$intent\"",
+            inProgress = false,
+          )
+        )
+        return@runBlocking mapOf(
+          "action" to intent,
+          "parameters" to parameters,
+          "result" to """{"status":"failed","error":"Skill \"$skillName\" not found."}""",
+        )
+      }
+
+      val config =
+        skillManagerViewModel.dataStoreRepository.readSecret(
+          key = getSkillConfigKey(skillName = skillName)
+        ) ?: ""
+
+      _actionChannel.send(
+        SkillProgressAgentAction(
+          label = "Executing configured intent \"$intent\"",
+          inProgress = true,
+          addItemTitle = "Execute configured intent \"$intent\"",
+          addItemDescription = "Skill: $skillName\nParameters: $parameters",
+          customData = skill,
+        )
+      )
+      val res =
+        IntentHandler.handleConfiguredAction(
+          context = context,
+          skillName = skillName,
+          action = intent,
+          parameters = parameters,
+          config = config,
+        )
+      return@runBlocking mapOf("action" to intent, "parameters" to parameters, "result" to res)
+    }
+  }
+
   fun sendAgentAction(action: AgentAction) {
     runBlocking(Dispatchers.Default) { _actionChannel.send(action) }
   }

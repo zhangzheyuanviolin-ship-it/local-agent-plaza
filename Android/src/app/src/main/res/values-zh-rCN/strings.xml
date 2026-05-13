@@ -386,6 +386,15 @@
   <string name="search_config_choice_fast">快速</string>
   <string name="search_config_choice_deep">深度</string>
   <string name="search_config_choice_no_limit">不限</string>
+  <string name="file_workspace_config_title">文件工作区设置</string>
+  <string name="file_workspace_config_subtitle">请选择一个授权给智能体访问的文件夹，后续所有文件操作都会被限制在这个文件夹及其子目录内。</string>
+  <string name="file_workspace_selected_folder_label">已挂载文件夹</string>
+  <string name="file_workspace_no_folder_selected">尚未选择文件夹</string>
+  <string name="file_workspace_choose_folder">选择文件夹</string>
+  <string name="file_workspace_clear_folder">清除</string>
+  <string name="model_configurations_title">模型设置</string>
+  <string name="model_config_context_limit">总上下文长度上限：%1$d</string>
+  <string name="model_config_output_limit">当前最大输出令牌数：%1$d</string>
 
   <string name="cd_scroll_to_bottom">滚动到底部</string>
   <string name="cd_chat_history">聊天记录</string>
