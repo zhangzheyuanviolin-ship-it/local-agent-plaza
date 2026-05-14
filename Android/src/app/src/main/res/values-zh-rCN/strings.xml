@@ -39,7 +39,7 @@
   <string name="benchmark_model">基准测试模型</string>
   <string name="benchmark_results">基准测试结果</string>
   <string name="benchmark_no_results">暂无基准测试结果</string>
-  <string name="benchmark_tokens_limit_message">确保预填充和解码 token 总数不超过模型的最大 token 限制（%d vs %d）</string>
+  <string name="benchmark_tokens_limit_message">确保预填充和解码 token 总数不超过模型的最大 token 限制（%1$d 对 %2$d）</string>
   <string name="best_overall">最佳综合</string>
   <string name="model_list_experimental_label">实验性</string>
   <string name="cancel">取消</string>

@@ -101,6 +101,7 @@ import com.google.ai.edge.gallery.data.LabelConfig
 import com.google.ai.edge.gallery.data.NumberSliderConfig
 import com.google.ai.edge.gallery.data.SegmentedButtonConfig
 import com.google.ai.edge.gallery.data.ValueType
+import com.google.ai.edge.gallery.data.convertValueToTargetType
 import com.google.ai.edge.gallery.ui.theme.labelSmallNarrow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
