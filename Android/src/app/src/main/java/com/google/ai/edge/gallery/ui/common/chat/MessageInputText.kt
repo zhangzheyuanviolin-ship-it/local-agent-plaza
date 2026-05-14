@@ -612,7 +612,7 @@ fun MessageInputText(
 
                 // Stop button.
                 if (inProgress && showStopButtonWhenInProgress) {
-                  if (!modelInitializing && !modelPreparing) {
+                  if (!modelInitializing) {
                     IconButton(
                       onClick = onStopButtonClicked,
                       colors =

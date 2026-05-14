@@ -67,6 +67,8 @@ fun LlmChatScreen(
   taskId: String = BuiltInTaskId.LLM_CHAT,
   onFirstToken: (Model) -> Unit = {},
   onGenerateResponseDone: (Model) -> Unit = {},
+  onStopButtonClickedOverride: ((Model) -> Unit)? = null,
+  onInterceptPartialResult: (Model, String, Boolean, String?) -> Boolean = { _, _, _, _ -> false },
   onSkillClicked: () -> Unit = {},
   onResetSessionClickedOverride: ((Task, Model, List<ChatMessage>) -> Unit)? = null,
   composableBelowMessageList: @Composable (Model) -> Unit = {},
@@ -89,6 +91,8 @@ fun LlmChatScreen(
     onSkillClicked = onSkillClicked,
     onFirstToken = onFirstToken,
     onGenerateResponseDone = onGenerateResponseDone,
+    onStopButtonClickedOverride = onStopButtonClickedOverride,
+    onInterceptPartialResult = onInterceptPartialResult,
     onResetSessionClickedOverride = onResetSessionClickedOverride,
     composableBelowMessageList = composableBelowMessageList,
     allowEditingSystemPrompt = allowEditingSystemPrompt,
@@ -202,6 +206,8 @@ fun ChatViewWrapper(
   onSkillClicked: () -> Unit = {},
   onFirstToken: (Model) -> Unit = {},
   onGenerateResponseDone: (Model) -> Unit = {},
+  onStopButtonClickedOverride: ((Model) -> Unit)? = null,
+  onInterceptPartialResult: (Model, String, Boolean, String?) -> Boolean = { _, _, _, _ -> false },
   onResetSessionClickedOverride: ((Task, Model, List<ChatMessage>) -> Unit)? = null,
   composableBelowMessageList: @Composable (Model) -> Unit = {},
   emptyStateComposable: @Composable (Model) -> Unit = {},
@@ -273,6 +279,7 @@ fun ChatViewWrapper(
             )
           },
           allowThinking = task.allowCapability(ModelCapability.LLM_THINKING, model),
+          onInterceptPartialResult = onInterceptPartialResult,
         )
 
         val activeSkills = getActiveSkills()
@@ -338,7 +345,13 @@ fun ChatViewWrapper(
       }
     },
     showStopButtonInInputWhenInProgress = true,
-    onStopButtonClicked = { model -> viewModel.stopResponse(model = model) },
+    onStopButtonClicked = { model ->
+      if (onStopButtonClickedOverride != null) {
+        onStopButtonClickedOverride(model)
+      } else {
+        viewModel.stopResponse(model = model)
+      }
+    },
     onSkillClicked = onSkillClicked,
     navigateUp = navigateUp,
     modifier = modifier,

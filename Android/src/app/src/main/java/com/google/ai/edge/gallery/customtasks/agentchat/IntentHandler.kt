@@ -76,6 +76,7 @@ object IntentHandler {
   data class PendingAssistantWrite(
     val treeUriString: String,
     val path: String,
+    val bytesWritten: Int = 0,
   )
 
   data class PendingAssistantWriteCommitResult(
@@ -191,7 +192,7 @@ object IntentHandler {
 
   fun commitPendingAssistantWrite(
     context: Context,
-    content: String,
+    content: String? = null,
   ): PendingAssistantWriteCommitResult? {
     val pending = pendingAssistantWrite ?: return null
     return try {
@@ -200,33 +201,68 @@ object IntentHandler {
         pendingAssistantWrite = null
         null
       } else {
+        var bytesWritten = pending.bytesWritten
+        if (bytesWritten == 0 && !content.isNullOrEmpty()) {
+          val document =
+            ensureWritableFile(
+              root = root,
+              path = pending.path,
+              createParents = true,
+              overwrite = true,
+            )
+          if (document == null) {
+            pendingAssistantWrite = null
+            return null
+          }
+          context.contentResolver.openOutputStream(document.uri, "wt")?.use { output ->
+            output.write(content.toByteArray(Charsets.UTF_8))
+          }
+          bytesWritten = content.toByteArray(Charsets.UTF_8).size
+        }
+        pendingAssistantWrite = null
+        PendingAssistantWriteCommitResult(
+          path = normalizeDisplayPath(pending.path),
+          bytesWritten = bytesWritten,
+        )
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to commit pending assistant write.", e)
+      pendingAssistantWrite = null
+      null
+    }
+  }
+
+  fun hasPendingAssistantWrite(): Boolean = pendingAssistantWrite != null
+
+  fun appendPendingAssistantWrite(context: Context, contentChunk: String): Boolean {
+    val pending = pendingAssistantWrite ?: return false
+    if (contentChunk.isEmpty()) {
+      return true
+    }
+    return try {
+      val root = DocumentFile.fromTreeUri(context, Uri.parse(pending.treeUriString))
+      if (root == null || !root.exists()) {
+        pendingAssistantWrite = null
+        false
+      } else {
         val document =
           ensureWritableFile(
             root = root,
             path = pending.path,
             createParents = true,
             overwrite = true,
-          )
-        if (document == null) {
-          pendingAssistantWrite = null
-          null
-        } else {
-          context.contentResolver.openOutputStream(document.uri, "wt")?.use { output ->
-            output.write(content.toByteArray(Charsets.UTF_8))
-          }
-          val result =
-            PendingAssistantWriteCommitResult(
-              path = normalizeDisplayPath(pending.path),
-              bytesWritten = content.toByteArray(Charsets.UTF_8).size,
-            )
-          pendingAssistantWrite = null
-          result
-        }
+          ) ?: return false
+        val bytes = contentChunk.toByteArray(Charsets.UTF_8)
+        context.contentResolver.openOutputStream(document.uri, "wa")?.use { output ->
+          output.write(bytes)
+        } ?: return false
+        pendingAssistantWrite = pending.copy(bytesWritten = pending.bytesWritten + bytes.size)
+        true
       }
     } catch (e: Exception) {
-      Log.e(TAG, "Failed to commit pending assistant write.", e)
+      Log.e(TAG, "Failed to append pending assistant write.", e)
       pendingAssistantWrite = null
-      null
+      false
     }
   }
 

@@ -27,7 +27,7 @@ Rules:
 - Do not use `/home`, `/data`, `/mnt`, `..`, or any system path.
 - If the target path is uncertain, call `list` or `stat` first.
 - To create a text file with content, use `write_text` directly.
-- If the file body is long, do not put the whole body in tool JSON. Instead call `write_text` with `content` set to `__ASSISTANT_RESPONSE__`, then write the full file body in your next normal reply only, with no explanation before or after it.
+- If the file body is long, do not put the whole body in tool JSON. First call `write_text` with `content` set to `__ASSISTANT_RESPONSE__`. Then output the file body only. Do not add commentary, summary, markdown fences, or any extra text.
 - If the task needs multiple file steps, keep calling tools until the task is actually finished.
 
 Supported operations:

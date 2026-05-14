@@ -105,8 +105,6 @@ import java.lang.Exception
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.coroutines.resume
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
 
@@ -148,6 +146,37 @@ fun AgentChatScreen(
     modelManagerViewModel = modelManagerViewModel,
     taskId = BuiltInTaskId.LLM_AGENT_CHAT,
     navigateUp = navigateUp,
+    onStopButtonClickedOverride = { model ->
+      viewModel.stopResponse(model = model)
+      val pendingWriteResult = IntentHandler.commitPendingAssistantWrite(context = context)
+      IntentHandler.clearPendingAssistantWrite()
+      if (pendingWriteResult != null) {
+        viewModel.addMessage(
+          model = model,
+          message =
+            ChatMessageInfo(
+              content =
+                "已手动停止当前任务，并保留 ${pendingWriteResult.path} 中已写入的 ${pendingWriteResult.bytesWritten} 字节内容。"
+            ),
+        )
+      } else {
+        viewModel.addMessage(model = model, message = ChatMessageInfo(content = "已手动停止当前任务。"))
+      }
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "chat.manual_stop",
+        message = "User stopped the current task for model ${model.name}",
+      )
+    },
+    onInterceptPartialResult = { _, partialResult, _, partialThinkingResult ->
+      if (!partialThinkingResult.isNullOrEmpty()) {
+        false
+      } else if (!IntentHandler.hasPendingAssistantWrite()) {
+        false
+      } else {
+        IntentHandler.appendPendingAssistantWrite(context = context, contentChunk = partialResult)
+      }
+    },
     onFirstToken = { model ->
       AgentDiagnosticsLogger.log(
         context = context,
@@ -164,11 +193,11 @@ fun AgentChatScreen(
           side = ChatSide.AGENT,
         ) as? ChatMessageText
       val pendingWriteResult =
-        IntentHandler.commitPendingAssistantWrite(
-          context = context,
-          content = lastAgentText?.content ?: "",
-        )
+        IntentHandler.commitPendingAssistantWrite(context = context, content = lastAgentText?.content)
       if (pendingWriteResult != null) {
+        if (lastAgentText != null) {
+          viewModel.removeLastMessage(model = model)
+        }
         val savedMessage =
           "已将上一条回复写入 ${pendingWriteResult.path}，共 ${pendingWriteResult.bytesWritten} 字节。"
         viewModel.addMessage(model = model, message = ChatMessageInfo(content = savedMessage))
@@ -312,42 +341,6 @@ fun AgentChatScreen(
                   message = "Dispatching JS skill $skillName",
                   detail = "url=${action.url}",
                 )
-                // Set up a safety net timeout so we NEVER hang the chat or tool execution
-                launch {
-                  delay(60000L) // 60 seconds max
-                  if (!action.result.isCompleted) {
-                    Log.e(TAG, "JS Execution timed out, completing with error.")
-                    appendProgressLog(
-                      viewModel = viewModel,
-                      model = currentModel,
-                      level = LogMessageLevel.Error,
-                      source = "js_timeout",
-                      message = "JS skill $skillName timed out after 60 seconds.",
-                    )
-                    AgentDiagnosticsLogger.log(
-                      context = context,
-                      category = "chat.js_timeout",
-                      message = "JS skill $skillName timed out",
-                    )
-                    Log.d(
-                      TAG,
-                      "Analytics: skill_execution, skill_name=$skillName, success=false, error_type=timeout",
-                    )
-                    firebaseAnalytics?.logEvent(
-                      GalleryEvent.SKILL_EXECUTION.id,
-                      Bundle().apply {
-                        putString("skill_name", skillName)
-                        putString("skill_id", skillId)
-                        putBoolean("success", false)
-                        putString("error_type", "timeout")
-                      },
-                    )
-                    action.result.complete(
-                      "{\"error\": \"Skill execution timed out. Please check network connection.\"}"
-                    )
-                  }
-                }
-
                 // Load url.
                 suspendCancellableCoroutine<Unit> { continuation ->
                   chatWebViewClient.setPageLoadListener {

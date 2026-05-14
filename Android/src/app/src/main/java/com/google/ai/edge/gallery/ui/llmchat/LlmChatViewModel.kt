@@ -53,7 +53,6 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val TAG = "AGLlmChatViewModel"
-private const val MODEL_STALL_TIMEOUT_MS = 60000L
 
 @OptIn(ExperimentalApi::class)
 open class LlmChatViewModelBase(
@@ -129,6 +128,7 @@ open class LlmChatViewModelBase(
     onDone: () -> Unit = {},
     onError: (String) -> Unit,
     allowThinking: Boolean = false,
+    onInterceptPartialResult: (Model, String, Boolean, String?) -> Boolean = { _, _, _, _ -> false },
   ) {
     val accelerator = model.getStringConfigValue(key = ConfigKeys.ACCELERATOR, defaultValue = "")
     viewModelScope.launch(Dispatchers.Default) {
@@ -142,15 +142,6 @@ open class LlmChatViewModelBase(
           setPreparing(false)
           model.runtimeHelper.stopResponse(model)
           onError(message)
-        }
-      }
-
-      viewModelScope.launch(Dispatchers.Default) {
-        delay(MODEL_STALL_TIMEOUT_MS)
-        if (!generationFinished.get()) {
-          finishWithError(
-            "Model stalled while planning a response or tool call for more than 60 seconds."
-          )
         }
       }
 
@@ -174,13 +165,31 @@ open class LlmChatViewModelBase(
 
       try {
         val resultListener: (String, Boolean, String?) -> Unit =
-          { partialResult, done, partialThinkingResult ->
+          resultListener@{ partialResult, done, partialThinkingResult ->
             if (!generationFinished.get()) {
               if (partialResult.startsWith("<ctrl")) {
                 // Do nothing. Ignore control tokens.
               } else {
-              // Remove the last message if it is a "loading" message.
-              // This will only be done once.
+                val intercepted =
+                  onInterceptPartialResult(model, partialResult, done, partialThinkingResult)
+                if (intercepted) {
+                  val lastMessage = getLastMessage(model = model)
+                  if (lastMessage?.type == ChatMessageType.LOADING) {
+                    removeLastMessage(model = model)
+                  }
+                  if (firstRun) {
+                    firstRun = false
+                    setPreparing(false)
+                    onFirstToken(model)
+                  }
+                  if (done && generationFinished.compareAndSet(false, true)) {
+                    setInProgress(false)
+                    onDone()
+                  }
+                  return@resultListener
+                }
+                // Remove the last message if it is a "loading" message.
+                // This will only be done once.
                 val lastMessage = getLastMessage(model = model)
                 val wasLoading = lastMessage?.type == ChatMessageType.LOADING
                 if (wasLoading) {
