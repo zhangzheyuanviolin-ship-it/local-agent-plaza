@@ -288,7 +288,7 @@ constructor(
     val json = JSONObject()
     for (config in model.configs) {
       val value = model.configValues[config.key.label] ?: continue
-      json.put(config.key.label, value)
+      json.put(config.key.label, normalizePersistedConfigValue(config = config, value = value))
     }
     dataStoreRepository.saveSecret(getModelConfigSecretKey(model.name), json.toString())
   }
@@ -1208,22 +1208,42 @@ constructor(
     val savedJson = dataStoreRepository.readSecret(getModelConfigSecretKey(model.name)) ?: return
     val savedValues = runCatching { JSONObject(savedJson) }.getOrNull() ?: return
     val mergedValues = model.configValues.toMutableMap()
+    var changed = false
     for (config in model.configs) {
       val key = config.key.label
       if (!savedValues.has(key)) {
         continue
       }
-      mergedValues[key] =
-        convertValueToTargetType(
-          value = savedValues.get(key),
-          valueType = config.valueType,
+      val normalizedValue =
+        normalizePersistedConfigValue(
+          config = config,
+          value =
+            convertValueToTargetType(
+              value = savedValues.get(key),
+              valueType = config.valueType,
+            ),
         )
+      if (mergedValues[key] != normalizedValue) {
+        changed = true
+      }
+      mergedValues[key] = normalizedValue
     }
     model.configValues = mergedValues
+    if (changed) {
+      persistModelConfigValues(model)
+    }
   }
 
   private fun getModelConfigSecretKey(modelName: String): String {
     return "$MODEL_CONFIG_SECRET_PREFIX$modelName"
+  }
+
+  private fun normalizePersistedConfigValue(config: Config, value: Any): Any {
+    return when (config) {
+      is NumberSliderConfig ->
+        convertValueToTargetType(value = value, valueType = ValueType.FLOAT)
+      else -> value
+    }
   }
 
   private fun createModelFromImportedModelInfo(info: ImportedModel): Model {
