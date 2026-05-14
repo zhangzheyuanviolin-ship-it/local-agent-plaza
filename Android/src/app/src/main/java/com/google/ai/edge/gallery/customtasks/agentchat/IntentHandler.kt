@@ -76,6 +76,7 @@ object IntentHandler {
   data class PendingAssistantWrite(
     val treeUriString: String,
     val path: String,
+    val bufferedContent: String = "",
     val bytesWritten: Int = 0,
   )
 
@@ -201,8 +202,14 @@ object IntentHandler {
         pendingAssistantWrite = null
         null
       } else {
+        val finalContent =
+          when {
+            pending.bufferedContent.isNotEmpty() -> pending.bufferedContent
+            !content.isNullOrEmpty() -> content
+            else -> ""
+          }
         var bytesWritten = pending.bytesWritten
-        if (bytesWritten == 0 && !content.isNullOrEmpty()) {
+        if (finalContent.isNotEmpty()) {
           val document =
             ensureWritableFile(
               root = root,
@@ -215,9 +222,9 @@ object IntentHandler {
             return null
           }
           context.contentResolver.openOutputStream(document.uri, "wt")?.use { output ->
-            output.write(content.toByteArray(Charsets.UTF_8))
+            output.write(finalContent.toByteArray(Charsets.UTF_8))
           }
-          bytesWritten = content.toByteArray(Charsets.UTF_8).size
+          bytesWritten = finalContent.toByteArray(Charsets.UTF_8).size
         }
         pendingAssistantWrite = null
         PendingAssistantWriteCommitResult(
@@ -240,25 +247,13 @@ object IntentHandler {
       return true
     }
     return try {
-      val root = DocumentFile.fromTreeUri(context, Uri.parse(pending.treeUriString))
-      if (root == null || !root.exists()) {
-        pendingAssistantWrite = null
-        false
-      } else {
-        val document =
-          ensureWritableFile(
-            root = root,
-            path = pending.path,
-            createParents = true,
-            overwrite = true,
-          ) ?: return false
-        val bytes = contentChunk.toByteArray(Charsets.UTF_8)
-        context.contentResolver.openOutputStream(document.uri, "wa")?.use { output ->
-          output.write(bytes)
-        } ?: return false
-        pendingAssistantWrite = pending.copy(bytesWritten = pending.bytesWritten + bytes.size)
-        true
-      }
+      val bytes = contentChunk.toByteArray(Charsets.UTF_8)
+      pendingAssistantWrite =
+        pending.copy(
+          bufferedContent = pending.bufferedContent + contentChunk,
+          bytesWritten = pending.bytesWritten + bytes.size,
+        )
+      true
     } catch (e: Exception) {
       Log.e(TAG, "Failed to append pending assistant write.", e)
       pendingAssistantWrite = null
@@ -443,8 +438,12 @@ object IntentHandler {
         overwrite = false,
       ) ?: return errorJson("Failed to create target file: $path")
 
-    context.contentResolver.openOutputStream(document.uri, "wa")?.use { output ->
-      output.write(content.toByteArray(Charsets.UTF_8))
+    val existingBytes =
+      context.contentResolver.openInputStream(document.uri)?.use { input -> input.readBytes() }
+        ?: byteArrayOf()
+    val appendedBytes = existingBytes + content.toByteArray(Charsets.UTF_8)
+    context.contentResolver.openOutputStream(document.uri, "wt")?.use { output ->
+      output.write(appendedBytes)
     } ?: return errorJson("Failed to open file for appending: $path")
 
     return successJson()

@@ -50,6 +50,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val TAG = "AGLlmChatViewModel"
@@ -61,6 +62,7 @@ open class LlmChatViewModelBase(
 ) : ChatViewModel(userDataDataStore) {
   private val _uiSystemPrompt = MutableStateFlow("")
   val uiSystemPrompt = _uiSystemPrompt.asStateFlow()
+  private val stopRequestedModels = Collections.synchronizedSet(mutableSetOf<String>())
 
   /**
    * Sets the system prompt in the UI.
@@ -132,6 +134,7 @@ open class LlmChatViewModelBase(
   ) {
     val accelerator = model.getStringConfigValue(key = ConfigKeys.ACCELERATOR, defaultValue = "")
     viewModelScope.launch(Dispatchers.Default) {
+      stopRequestedModels.remove(model.name)
       setInProgress(true)
       setPreparing(true)
       val generationFinished = AtomicBoolean(false)
@@ -167,6 +170,13 @@ open class LlmChatViewModelBase(
         val resultListener: (String, Boolean, String?) -> Unit =
           resultListener@{ partialResult, done, partialThinkingResult ->
             if (!generationFinished.get()) {
+              if (stopRequestedModels.contains(model.name)) {
+                if (done && generationFinished.compareAndSet(false, true)) {
+                  setInProgress(false)
+                  setPreparing(false)
+                }
+                return@resultListener
+              }
               if (partialResult.startsWith("<ctrl")) {
                 // Do nothing. Ignore control tokens.
               } else {
@@ -178,6 +188,11 @@ open class LlmChatViewModelBase(
                     removeLastMessage(model = model)
                   }
                   if (firstRun) {
+                    val hasVisibleProgress =
+                      partialResult.isNotEmpty() || !partialThinkingResult.isNullOrEmpty()
+                    if (!hasVisibleProgress && !done) {
+                      return@resultListener
+                    }
                     firstRun = false
                     setPreparing(false)
                     onFirstToken(model)
@@ -270,6 +285,11 @@ open class LlmChatViewModelBase(
                 }
 
                 if (firstRun) {
+                  val hasVisibleProgress =
+                    partialResult.isNotEmpty() || !partialThinkingResult.isNullOrEmpty()
+                  if (!hasVisibleProgress && !done) {
+                    return@resultListener
+                  }
                   firstRun = false
                   setPreparing(false)
                   onFirstToken(model)
@@ -336,6 +356,7 @@ open class LlmChatViewModelBase(
 
   fun stopResponse(model: Model) {
     Log.d(TAG, "Stopping response for model ${model.name}...")
+    stopRequestedModels.add(model.name)
     if (getLastMessage(model = model) is ChatMessageLoading) {
       removeLastMessage(model = model)
     }
