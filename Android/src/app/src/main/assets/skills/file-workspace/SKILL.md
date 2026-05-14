@@ -27,6 +27,7 @@ Rules:
 - Do not use `/home`, `/data`, `/mnt`, `..`, or any system path.
 - If the target path is uncertain, call `list` or `stat` first.
 - To create a text file with content, use `write_text` directly.
+- If the file body is long, do not put the whole body in tool JSON. Instead call `write_text` with `content` set to `__ASSISTANT_RESPONSE__`, then write the full file body in your next normal reply only, with no explanation before or after it.
 - If the task needs multiple file steps, keep calling tools until the task is actually finished.
 
 Supported operations:
@@ -47,6 +48,7 @@ Examples:
 - List root: `{"operation":"list"}`
 - Read file: `{"operation":"read_text","path":"notes/todo.txt"}`
 - Create or replace a file: `{"operation":"write_text","path":"notes/intro.txt","content":"你好"}`
+- Prepare a long file body: `{"operation":"write_text","path":"stories/city.txt","content":"__ASSISTANT_RESPONSE__"}`
 - Move file: `{"operation":"move","path":"todo.txt","destination_path":"archive/todo.txt"}`
 
 After the tool returns, answer in the same language as the user.

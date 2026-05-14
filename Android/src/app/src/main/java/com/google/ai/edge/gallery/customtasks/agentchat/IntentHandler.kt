@@ -68,8 +68,20 @@ object IntentHandler {
   private const val TAG = "IntentHandler"
   private const val DEFAULT_READ_MAX_BYTES = 16000
   private const val DEFAULT_LIST_MAX_ENTRIES = 200
+  private const val ASSISTANT_RESPONSE_PLACEHOLDER = "__ASSISTANT_RESPONSE__"
   private const val WORKSPACE_PATH_HINT =
     "Use workspace-relative paths only. Prefer an empty path for the workspace root."
+  private var pendingAssistantWrite: PendingAssistantWrite? = null
+
+  data class PendingAssistantWrite(
+    val treeUriString: String,
+    val path: String,
+  )
+
+  data class PendingAssistantWriteCommitResult(
+    val path: String,
+    val bytesWritten: Int,
+  )
 
   fun handleAction(context: Context, action: String, parameters: String): String {
     return when (IntentAction.from(action)) {
@@ -175,6 +187,51 @@ object IntentHandler {
         handleFileWorkspaceAction(context = context, parameters = parameters, config = config)
       else -> handleAction(context = context, action = action, parameters = parameters)
     }
+  }
+
+  fun commitPendingAssistantWrite(
+    context: Context,
+    content: String,
+  ): PendingAssistantWriteCommitResult? {
+    val pending = pendingAssistantWrite ?: return null
+    return try {
+      val root = DocumentFile.fromTreeUri(context, Uri.parse(pending.treeUriString))
+      if (root == null || !root.exists()) {
+        pendingAssistantWrite = null
+        null
+      } else {
+        val document =
+          ensureWritableFile(
+            root = root,
+            path = pending.path,
+            createParents = true,
+            overwrite = true,
+          )
+        if (document == null) {
+          pendingAssistantWrite = null
+          null
+        } else {
+          context.contentResolver.openOutputStream(document.uri, "wt")?.use { output ->
+            output.write(content.toByteArray(Charsets.UTF_8))
+          }
+          val result =
+            PendingAssistantWriteCommitResult(
+              path = normalizeDisplayPath(pending.path),
+              bytesWritten = content.toByteArray(Charsets.UTF_8).size,
+            )
+          pendingAssistantWrite = null
+          result
+        }
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to commit pending assistant write.", e)
+      pendingAssistantWrite = null
+      null
+    }
+  }
+
+  fun clearPendingAssistantWrite() {
+    pendingAssistantWrite = null
   }
 
   private fun handleFileWorkspaceAction(
@@ -294,6 +351,31 @@ object IntentHandler {
     val path = request.optString("path")
     val content = request.optString("content")
     val createParents = request.optBoolean("create_parents", true)
+    if (content.trim() == ASSISTANT_RESPONSE_PLACEHOLDER) {
+      val document =
+        ensureWritableFile(
+          root = root,
+          path = path,
+          createParents = createParents,
+          overwrite = true,
+        ) ?: return errorJson("Failed to prepare target file: $path")
+      context.contentResolver.openOutputStream(document.uri, "wt")?.use { output ->
+        output.write(byteArrayOf())
+      } ?: return errorJson("Failed to prepare file for writing: $path")
+      pendingAssistantWrite =
+        PendingAssistantWrite(
+          treeUriString = root.uri.toString(),
+          path = path,
+        )
+      return successJson()
+        .put("operation", "prepare_write_text")
+        .put("path", normalizeDisplayPath(path))
+        .put(
+          "summary",
+          "Prepared ${normalizeDisplayPath(path)}. Now write the full file content in your next normal reply only.",
+        )
+        .toString()
+    }
     val document =
       ensureWritableFile(
         root = root,

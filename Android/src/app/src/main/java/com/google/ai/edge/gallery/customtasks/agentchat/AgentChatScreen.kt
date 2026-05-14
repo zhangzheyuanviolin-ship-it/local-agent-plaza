@@ -86,6 +86,7 @@ import com.google.ai.edge.gallery.ui.common.GalleryWebView
 import com.google.ai.edge.gallery.ui.common.buildTrackableUrlAnnotatedString
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessage
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageCollapsableProgressPanel
+import com.google.ai.edge.gallery.ui.common.chat.ChatMessageInfo
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageImage
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageText
 import com.google.ai.edge.gallery.ui.common.chat.ChatMessageType
@@ -156,6 +157,28 @@ fun AgentChatScreen(
       updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
     },
     onGenerateResponseDone = { model ->
+      val lastAgentText =
+        viewModel.getLastMessageWithTypeAndSide(
+          model = model,
+          type = ChatMessageType.TEXT,
+          side = ChatSide.AGENT,
+        ) as? ChatMessageText
+      val pendingWriteResult =
+        IntentHandler.commitPendingAssistantWrite(
+          context = context,
+          content = lastAgentText?.content ?: "",
+        )
+      if (pendingWriteResult != null) {
+        val savedMessage =
+          "已将上一条回复写入 ${pendingWriteResult.path}，共 ${pendingWriteResult.bytesWritten} 字节。"
+        viewModel.addMessage(model = model, message = ChatMessageInfo(content = savedMessage))
+        AgentDiagnosticsLogger.log(
+          context = context,
+          category = "chat.pending_write_committed",
+          message = "Saved assistant reply to ${pendingWriteResult.path}",
+          detail = "bytes=${pendingWriteResult.bytesWritten}",
+        )
+      }
       AgentDiagnosticsLogger.log(
         context = context,
         category = "chat.generation_done",
@@ -741,6 +764,7 @@ private fun resetSessionWithCurrentSkills(
   onDone: (Model) -> Unit = {},
   initialMessages: List<ChatMessage> = listOf(),
 ) {
+  IntentHandler.clearPendingAssistantWrite()
   val model = modelManagerViewModel.uiState.value.selectedModel
   val litertMessages = initialMessages.mapNotNull { chatMessage ->
     if (chatMessage is ChatMessageText) {

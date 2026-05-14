@@ -559,6 +559,12 @@ private fun buildConfiguredIntentResult(
       flattened["summary"] =
         "Read ${flattened["path"] ?: "file"} (${flattened["bytes_read"]} bytes${if (payload.optBoolean("truncated", false)) ", truncated" else ""})."
     }
+    "prepare_write_text" -> {
+      flattened["summary"] =
+        payload.optString("summary").ifBlank {
+          "Prepared ${flattened["path"] ?: "file"} for the next assistant reply."
+        }
+    }
     "write_text", "append_text" -> {
       flattened["bytes_written"] = payload.optInt("bytes_written", 0)
       flattened["summary"] =
