@@ -772,7 +772,7 @@ fun SkillManagerBottomSheet(
               skillToConfigure = null
             },
           )
-        skill.name == FILE_WORKSPACE_SKILL_NAME ->
+        isWorkspaceSkill(skill.name) ->
           FileWorkspaceConfigDialog(
             dataStoreRepository = skillManagerViewModel.dataStoreRepository,
             onDismiss = {

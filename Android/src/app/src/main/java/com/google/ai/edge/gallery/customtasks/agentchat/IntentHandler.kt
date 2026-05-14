@@ -185,7 +185,7 @@ object IntentHandler {
     config: String,
   ): String {
     return when {
-      skillName == FILE_WORKSPACE_SKILL_NAME && action == IntentAction.FILE_WORKSPACE.action ->
+      isWorkspaceSkill(skillName) && action == IntentAction.FILE_WORKSPACE.action ->
         handleFileWorkspaceAction(context = context, parameters = parameters, config = config)
       else -> handleAction(context = context, action = action, parameters = parameters)
     }
@@ -383,29 +383,10 @@ object IntentHandler {
     val content = request.optString("content")
     val createParents = request.optBoolean("create_parents", true)
     if (content.trim() == ASSISTANT_RESPONSE_PLACEHOLDER) {
-      val document =
-        ensureWritableFile(
-          root = root,
-          path = path,
-          createParents = createParents,
-          overwrite = true,
-        ) ?: return errorJson("Failed to prepare target file: $path")
-      context.contentResolver.openOutputStream(document.uri, "wt")?.use { output ->
-        output.write(byteArrayOf())
-      } ?: return errorJson("Failed to prepare file for writing: $path")
-      pendingAssistantWrite =
-        PendingAssistantWrite(
-          treeUriString = root.uri.toString(),
-          path = path,
-        )
-      return successJson()
-        .put("operation", "prepare_write_text")
-        .put("path", normalizeDisplayPath(path))
-        .put(
-          "summary",
-          "Prepared ${normalizeDisplayPath(path)}. Now write the full file content in your next normal reply only.",
-        )
-        .toString()
+      clearPendingAssistantWrite()
+      return errorJson(
+        "Do not use __ASSISTANT_RESPONSE__. Retry write_text with the full final text in content."
+      )
     }
     val document =
       ensureWritableFile(

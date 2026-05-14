@@ -600,6 +600,8 @@ private fun putIfNotBlank(target: MutableMap<String, Any>, key: String, value: S
 
 private fun buildRecoveryHint(operation: String, error: String): String {
   return when {
+    error.contains("__ASSISTANT_RESPONSE__", ignoreCase = true) ->
+      "Do not use __ASSISTANT_RESPONSE__. Retry one write_text call and put the full final text directly in content."
     error.contains("workspace-relative", ignoreCase = true) ||
       error.contains("Directory not found", ignoreCase = true) ||
       error.contains("Path not found", ignoreCase = true) ||
@@ -622,5 +624,8 @@ fun getSkillSecretKey(skillName: String): String {
 }
 
 fun getSkillConfigKey(skillName: String): String {
+  if (isWorkspaceSkill(skillName)) {
+    return "skill_config___${FILE_WORKSPACE_SKILL_NAME}"
+  }
   return "skill_config___${skillName}"
 }
