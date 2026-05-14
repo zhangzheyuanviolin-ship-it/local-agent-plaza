@@ -55,6 +55,11 @@ open class AgentTools() : ToolSet {
     @ToolParam(description = "The name of the skill to load.") skillName: String
   ): Map<String, String> {
     return runBlocking(Dispatchers.Default) {
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "tool.load_skill.start",
+        message = "Loading skill $skillName",
+      )
       val skills = skillManagerViewModel.getSelectedSkills()
       val skill = skills.find { it.name == skillName.trim() }
       val skillContent =
@@ -78,14 +83,30 @@ open class AgentTools() : ToolSet {
           SkillProgressAgentAction(
             label = "Loaded skill \"$skillName\"",
             inProgress = false,
+            addItemTitle = "Skill ready",
+            addItemDescription = "Instruction length: ${skill.instructions.length} chars",
           )
+        )
+        AgentDiagnosticsLogger.log(
+          context = context,
+          category = "tool.load_skill.success",
+          message = "Loaded skill $skillName",
+          detail = "instruction_length=${skill.instructions.length}",
         )
       } else {
         _actionChannel.send(
           SkillProgressAgentAction(
             label = "Failed to load skill \"$skillName\"",
             inProgress = false,
+            addItemTitle = "Error",
+            addItemDescription = "Skill not found.",
           )
+        )
+        AgentDiagnosticsLogger.log(
+          context = context,
+          category = "tool.load_skill.failed",
+          message = "Failed to load skill $skillName",
+          detail = "skill_not_found",
         )
       }
 
@@ -110,6 +131,12 @@ open class AgentTools() : ToolSet {
         "runJS tool called with:" +
           "\n- skillName: ${skillName}\n- scriptName: ${scriptName}\n- data: ${data}\n",
       )
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "tool.run_js.start",
+        message = "Calling JS skill ${skillName}/${scriptName}",
+        detail = "data=$data",
+      )
 
       val skills = skillManagerViewModel.getSelectedSkills()
       val skill = skills.find { it.name == skillName.trim() }
@@ -119,7 +146,14 @@ open class AgentTools() : ToolSet {
           SkillProgressAgentAction(
             label = "Failed to call skill \"$scriptName\"",
             inProgress = false,
+            addItemTitle = "Error",
+            addItemDescription = "Skill not found.",
           )
+        )
+        AgentDiagnosticsLogger.log(
+          context = context,
+          category = "tool.run_js.failed",
+          message = "Failed to find JS skill ${skillName}/${scriptName}",
         )
         return@runBlocking mapOf(
           "error" to "Skill \"${scriptName}\" not found",
@@ -195,14 +229,23 @@ open class AgentTools() : ToolSet {
         try {
           action.result.await()
         } catch (e: Exception) {
+          val errorMessage = e.message ?: "Failed to execute JS skill."
           _actionChannel.send(
             SkillProgressAgentAction(
               label = "Failed to call skill \"$skillName/$scriptName\"",
               inProgress = false,
+              addItemTitle = "Error",
+              addItemDescription = errorMessage,
             )
           )
+          AgentDiagnosticsLogger.log(
+            context = context,
+            category = "tool.run_js.failed",
+            message = "JS skill ${skillName}/${scriptName} threw",
+            detail = errorMessage,
+          )
           return@runBlocking mapOf(
-            "error" to (e.message ?: "Failed to execute JS skill."),
+            "error" to errorMessage,
             "status" to "failed",
           )
         }
@@ -219,11 +262,20 @@ open class AgentTools() : ToolSet {
         resultJson == null ||
           (resultJson.result == null && resultJson.webview == null && resultJson.image == null)
       ) {
+        val shortResult = result.take(500)
         _actionChannel.send(
           SkillProgressAgentAction(
             label = "Called JS script \"$skillName/$scriptName\"",
             inProgress = false,
+            addItemTitle = "JS result",
+            addItemDescription = shortResult,
           )
+        )
+        AgentDiagnosticsLogger.log(
+          context = context,
+          category = "tool.run_js.success",
+          message = "JS skill ${skillName}/${scriptName} returned raw text",
+          detail = shortResult,
         )
         mapOf("result" to result, "status" to "succeeded")
       }
@@ -233,7 +285,15 @@ open class AgentTools() : ToolSet {
           SkillProgressAgentAction(
             label = "Failed to call skill \"$skillName/$scriptName\"",
             inProgress = false,
+            addItemTitle = "Error",
+            addItemDescription = error,
           )
+        )
+        AgentDiagnosticsLogger.log(
+          context = context,
+          category = "tool.run_js.failed",
+          message = "JS skill ${skillName}/${scriptName} returned error",
+          detail = error,
         )
         mapOf("error" to error, "status" to "failed")
       }
@@ -261,7 +321,15 @@ open class AgentTools() : ToolSet {
           SkillProgressAgentAction(
             label = "Called JS script \"$skillName/$scriptName\"",
             inProgress = false,
+            addItemTitle = "JS result",
+            addItemDescription = (resultJson.result ?: "").take(500),
           )
+        )
+        AgentDiagnosticsLogger.log(
+          context = context,
+          category = "tool.run_js.success",
+          message = "JS skill ${skillName}/${scriptName} returned structured result",
+          detail = (resultJson.result ?: "").take(1000),
         )
         mapOf("result" to (resultJson.result ?: ""), "status" to "succeeded")
       }
@@ -280,6 +348,12 @@ open class AgentTools() : ToolSet {
     parameters: String,
   ): Map<String, String> {
     return runBlocking(Dispatchers.Default) {
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "tool.run_intent.start",
+        message = "Executing intent $intent",
+        detail = parameters,
+      )
       Log.d(TAG, "Run intent. Intent: '$intent', parameters: '$parameters'")
       _actionChannel.send(
         SkillProgressAgentAction(
@@ -294,7 +368,15 @@ open class AgentTools() : ToolSet {
         SkillProgressAgentAction(
           label = "Executed intent \"$intent\"",
           inProgress = false,
+          addItemTitle = "Intent result",
+          addItemDescription = res.take(500),
         )
+      )
+      AgentDiagnosticsLogger.logJson(
+        context = context,
+        category = "tool.run_intent.done",
+        message = "Intent $intent finished",
+        rawJson = res,
       )
       return@runBlocking mapOf("action" to intent, "parameters" to parameters, "result" to res)
     }
@@ -314,6 +396,12 @@ open class AgentTools() : ToolSet {
     parameters: String,
   ): Map<String, Any> {
     return runBlocking(Dispatchers.Default) {
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "tool.run_configured_intent.start",
+        message = "Executing configured intent $intent for $skillName",
+        detail = parameters,
+      )
       val skill = skillManagerViewModel.getSelectedSkills().find { it.name == skillName.trim() }
       if (skill == null) {
         _actionChannel.send(
@@ -352,6 +440,7 @@ open class AgentTools() : ToolSet {
           config = config,
         )
       val flattened = buildConfiguredIntentResult(intent = intent, parameters = parameters, result = res)
+      val summary = (flattened["summary"] as? String) ?: (flattened["error"] as? String).orEmpty()
       _actionChannel.send(
         SkillProgressAgentAction(
           label =
@@ -361,7 +450,21 @@ open class AgentTools() : ToolSet {
               "Failed to execute configured intent \"$intent\""
             },
           inProgress = false,
+          addItemTitle = if ((flattened["status"] as? String) == "succeeded") "Intent result" else "Intent error",
+          addItemDescription = summary,
         )
+      )
+      AgentDiagnosticsLogger.logJson(
+        context = context,
+        category = "tool.run_configured_intent.raw",
+        message = "Configured intent $intent raw result",
+        rawJson = res,
+      )
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "tool.run_configured_intent.flattened",
+        message = "Configured intent $intent flattened result",
+        detail = flattened.toString(),
       )
       return@runBlocking flattened
     }

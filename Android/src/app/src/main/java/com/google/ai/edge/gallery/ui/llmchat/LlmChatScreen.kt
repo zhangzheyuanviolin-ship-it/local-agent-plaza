@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.customtasks.agentchat.AgentDiagnosticsLogger
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelCapability
@@ -239,6 +240,13 @@ fun ChatViewWrapper(
         }
       }
       if ((text.isNotEmpty() && chatMessageText != null) || audioMessages.isNotEmpty()) {
+        AgentDiagnosticsLogger.log(
+          context = context,
+          category = "chat.send_message",
+          message = "Submitting message to model ${model.name}",
+          detail =
+            "text=${text.take(1000)} | images=${images.size} | audio=${audioMessages.size} | skills=${getActiveSkills().joinToString(",")}",
+        )
         if (text.isNotEmpty()) {
           modelManagerViewModel.addTextInputHistory(text)
         }
@@ -250,6 +258,12 @@ fun ChatViewWrapper(
           onFirstToken = onFirstToken,
           onDone = { onGenerateResponseDone(model) },
           onError = { errorMessage ->
+            AgentDiagnosticsLogger.log(
+              context = context,
+              category = "chat.error",
+              message = "Inference error for model ${model.name}",
+              detail = errorMessage,
+            )
             viewModel.handleError(
               context = context,
               task = task,
@@ -301,6 +315,12 @@ fun ChatViewWrapper(
     },
     onBenchmarkClicked = { _, _, _, _ -> },
     onResetSessionClicked = { model, chatMessages, onDone ->
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "chat.reset_session",
+        message = "Resetting session for model ${model.name}",
+        detail = "message_count=${chatMessages.size}",
+      )
       val litertMessages = chatMessages.mapNotNull { convertToLitertMessage(it) }
       if (onResetSessionClickedOverride != null) {
         onResetSessionClickedOverride(task, model, chatMessages)

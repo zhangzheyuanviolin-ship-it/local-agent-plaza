@@ -148,9 +148,19 @@ fun AgentChatScreen(
     taskId = BuiltInTaskId.LLM_AGENT_CHAT,
     navigateUp = navigateUp,
     onFirstToken = { model ->
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "chat.first_token",
+        message = "First token received for model ${model.name}",
+      )
       updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
     },
     onGenerateResponseDone = { model ->
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "chat.generation_done",
+        message = "Generation finished for model ${model.name}",
+      )
       // Show any image produced by tools.
       agentTools.resultImageToShow?.let { resultImage ->
         resultImage.base64?.let { base64 ->
@@ -233,6 +243,26 @@ fun AgentChatScreen(
                 addItemDescription = action.addItemDescription,
                 customData = action.customData,
               )
+              appendProgressLog(
+                viewModel = viewModel,
+                model = currentModel,
+                level = LogMessageLevel.Info,
+                source = "agent_action",
+                message =
+                  buildString {
+                    append(action.label)
+                    if (action.addItemDescription.isNotBlank()) {
+                      append(" | ")
+                      append(action.addItemDescription)
+                    }
+                  },
+              )
+              AgentDiagnosticsLogger.log(
+                context = context,
+                category = "chat.skill_progress",
+                message = action.label,
+                detail = action.addItemDescription,
+              )
             }
             is CallJsAgentAction -> {
               val skillName =
@@ -246,11 +276,36 @@ fun AgentChatScreen(
               val skill = skillManagerViewModel.getSkill(name = skillName)
               val skillId = skill?.let { skillManagerViewModel.getSkillShortId(it) } ?: "xxxx"
               try {
+                appendProgressLog(
+                  viewModel = viewModel,
+                  model = currentModel,
+                  level = LogMessageLevel.Info,
+                  source = "js_dispatch",
+                  message = "Dispatching JS skill $skillName.",
+                )
+                AgentDiagnosticsLogger.log(
+                  context = context,
+                  category = "chat.js_dispatch",
+                  message = "Dispatching JS skill $skillName",
+                  detail = "url=${action.url}",
+                )
                 // Set up a safety net timeout so we NEVER hang the chat or tool execution
                 launch {
                   delay(60000L) // 60 seconds max
                   if (!action.result.isCompleted) {
                     Log.e(TAG, "JS Execution timed out, completing with error.")
+                    appendProgressLog(
+                      viewModel = viewModel,
+                      model = currentModel,
+                      level = LogMessageLevel.Error,
+                      source = "js_timeout",
+                      message = "JS skill $skillName timed out after 60 seconds.",
+                    )
+                    AgentDiagnosticsLogger.log(
+                      context = context,
+                      category = "chat.js_timeout",
+                      message = "JS skill $skillName timed out",
+                    )
                     Log.d(
                       TAG,
                       "Analytics: skill_execution, skill_name=$skillName, success=false, error_type=timeout",
@@ -274,9 +329,34 @@ fun AgentChatScreen(
                 suspendCancellableCoroutine<Unit> { continuation ->
                   chatWebViewClient.setPageLoadListener {
                     chatWebViewClient.setPageLoadListener(null)
+                    appendProgressLog(
+                      viewModel = viewModel,
+                      model = currentModel,
+                      level = LogMessageLevel.Info,
+                      source = "js_page",
+                      message = "Skill page loaded for $skillName.",
+                    )
+                    AgentDiagnosticsLogger.log(
+                      context = context,
+                      category = "chat.js_page_loaded",
+                      message = "Skill page loaded for $skillName",
+                    )
                     continuation.resume(Unit)
                   }
                   Log.d(TAG, "Loading url: ${action.url}")
+                  appendProgressLog(
+                    viewModel = viewModel,
+                    model = currentModel,
+                    level = LogMessageLevel.Info,
+                    source = "js_page",
+                    message = "Loading skill page ${action.url.replace(LOCAL_URL_BASE, "")}",
+                  )
+                  AgentDiagnosticsLogger.log(
+                    context = context,
+                    category = "chat.js_page_load_start",
+                    message = "Loading skill page for $skillName",
+                    detail = action.url,
+                  )
                   webViewRef?.loadUrl(action.url)
                 }
 
@@ -284,6 +364,19 @@ fun AgentChatScreen(
                 Log.d(TAG, "Start to run js")
                 chatViewJavascriptInterface.onResultListener = { result ->
                   Log.d(TAG, "Got result:\n$result")
+                  appendProgressLog(
+                    viewModel = viewModel,
+                    model = currentModel,
+                    level = LogMessageLevel.Info,
+                    source = "js_result",
+                    message = "JS skill $skillName returned ${result.length} chars.",
+                  )
+                  AgentDiagnosticsLogger.log(
+                    context = context,
+                    category = "chat.js_result",
+                    message = "JS skill $skillName returned",
+                    detail = result.take(1000),
+                  )
                   action.result.complete(result)
                   val isSuccess = !result.contains("\"error\":")
                   val errorType = if (isSuccess) "" else "js_error"
@@ -325,8 +418,34 @@ fun AgentChatScreen(
                   })()
                   """
                     .trimIndent()
+                appendProgressLog(
+                  viewModel = viewModel,
+                  model = currentModel,
+                  level = LogMessageLevel.Info,
+                  source = "js_exec",
+                  message = "Executing ai_edge_gallery_get_result for $skillName.",
+                )
+                AgentDiagnosticsLogger.log(
+                  context = context,
+                  category = "chat.js_eval_start",
+                  message = "Executing JS bridge for $skillName",
+                  detail = action.data.take(1000),
+                )
                 webViewRef?.evaluateJavascript(script, null)
               } catch (e: Exception) {
+                appendProgressLog(
+                  viewModel = viewModel,
+                  model = currentModel,
+                  level = LogMessageLevel.Error,
+                  source = "js_exception",
+                  message = "JS skill $skillName crashed: ${e.message ?: "Unknown error"}",
+                )
+                AgentDiagnosticsLogger.log(
+                  context = context,
+                  category = "chat.js_exception",
+                  message = "JS skill $skillName crashed",
+                  detail = e.stackTraceToString(),
+                )
                 Log.d(
                   TAG,
                   "Analytics: skill_execution, skill_name=$skillName, success=false, error_type=exception",
@@ -356,6 +475,7 @@ fun AgentChatScreen(
         modifier = Modifier.size(300.dp),
         onWebViewCreated = { webView ->
           webViewRef = webView
+          chatViewJavascriptInterface.appContext = context.applicationContext
           chatViewJavascriptInterface.onExaResultListener = { requestId, result ->
             val safeRequestId = JSONObject.quote(requestId)
             val safeResult = JSONObject.quote(result)
@@ -388,6 +508,13 @@ fun AgentChatScreen(
             viewModel.addLogMessageToLastCollapsableProgressPanel(
               model = model,
               logMessage = logMessage,
+            )
+            AgentDiagnosticsLogger.log(
+              context = context,
+              category = "chat.webview_console",
+              message = curConsoleMessage.messageLevel().name,
+              detail =
+                "${curConsoleMessage.sourceId()}:${curConsoleMessage.lineNumber()} ${curConsoleMessage.message()}",
             )
             Log.d(
               TAG,
@@ -640,14 +767,31 @@ private fun resetSessionWithCurrentSkills(
 class ChatWebViewJavascriptInterface {
   var onResultListener: ((String) -> Unit)? = null
   var onExaResultListener: ((String, String) -> Unit)? = null
+  var appContext: Context? = null
 
   @JavascriptInterface
   fun onResultReady(result: String) {
+    appContext?.let {
+      AgentDiagnosticsLogger.log(
+        context = it,
+        category = "js.on_result_ready",
+        message = "WebView returned JS result",
+        detail = result.take(1000),
+      )
+    }
     onResultListener?.invoke(result)
   }
 
   @JavascriptInterface
   fun exaSearchAsync(requestId: String, requestBody: String, secret: String) {
+    appContext?.let {
+      AgentDiagnosticsLogger.log(
+        context = it,
+        category = "exa.async_start",
+        message = "Starting Exa native bridge request",
+        detail = requestBody.take(1000),
+      )
+    }
     val trimmedSecret = secret.trim()
     if (trimmedSecret.isEmpty()) {
       onExaResultListener?.invoke(
@@ -696,6 +840,14 @@ class ChatWebViewJavascriptInterface {
       }
     } catch (e: Exception) {
       Log.e(TAG, "Exa native bridge request failed", e)
+      appContext?.let {
+        AgentDiagnosticsLogger.log(
+          context = it,
+          category = "exa.async_failed",
+          message = "Exa native bridge request failed",
+          detail = e.stackTraceToString(),
+        )
+      }
       JSONObject()
         .put("error", "Failed to run Exa search: ${e.message ?: "Unknown error"}")
         .toString()
@@ -878,6 +1030,19 @@ private data class ExaRequestMeta(
   val detailMode: String,
   val resultCount: Int,
 )
+
+private fun appendProgressLog(
+  viewModel: LlmChatViewModel,
+  model: Model,
+  level: LogMessageLevel,
+  source: String,
+  message: String,
+) {
+  viewModel.addLogMessageToLastCollapsableProgressPanel(
+    model = model,
+    logMessage = LogMessage(level = level, source = source, message = message),
+  )
+}
 
 class ChatWebViewClient(val context: Context) : BaseGalleryWebViewClient(context = context) {
   private var onPageLoaded: (() -> Unit)? = null
