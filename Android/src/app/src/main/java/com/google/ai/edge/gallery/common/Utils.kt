@@ -54,6 +54,8 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 private const val TAG = "AGUtils"
+private const val DEFAULT_HTTP_CONNECT_TIMEOUT_MS = 5000
+private const val DEFAULT_HTTP_READ_TIMEOUT_MS = 8000
 
 const val LOCAL_URL_BASE = "https://appassets.androidplatform.net"
 
@@ -73,6 +75,8 @@ inline fun <reified T> getJsonResponse(url: String): JsonObjAndTextContent<T>? {
   try {
     val connection = URL(url).openConnection() as HttpURLConnection
     connection.requestMethod = "GET"
+    connection.connectTimeout = DEFAULT_HTTP_CONNECT_TIMEOUT_MS
+    connection.readTimeout = DEFAULT_HTTP_READ_TIMEOUT_MS
     connection.connect()
 
     val responseCode = connection.responseCode

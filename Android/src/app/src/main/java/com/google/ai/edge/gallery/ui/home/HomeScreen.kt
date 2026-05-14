@@ -233,8 +233,10 @@ fun HomeScreen(
       }
     }
 
+    val hasTaskContent = uiState.tasks.isNotEmpty()
+
     // Label and spinner to show when in the process of loading model allowlist.
-    if (loadingModelAllowlistDelayed) {
+    if (loadingModelAllowlistDelayed && !hasTaskContent) {
       Row(
         modifier = Modifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
@@ -252,7 +254,7 @@ fun HomeScreen(
       }
     }
     // Main UI when allowlist is done loading.
-    if (!loadingModelAllowlistDelayed && !uiState.loadingModelAllowlist) {
+    if (hasTaskContent || (!loadingModelAllowlistDelayed && !uiState.loadingModelAllowlist)) {
       val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
       val requestPermissionLauncher =
@@ -477,6 +479,31 @@ fun HomeScreen(
                   grid = grid,
                 )
 
+                if (loadingModelAllowlistDelayed) {
+                  Row(
+                    modifier =
+                      Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                        .fillMaxWidth()
+                        .background(
+                          color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                          shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                        )
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  ) {
+                    CircularProgressIndicator(
+                      trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                      strokeWidth = 2.dp,
+                      modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                      text = "正在同步模型列表，本地已可继续使用",
+                      style = MaterialTheme.typography.bodySmall,
+                    )
+                  }
+                }
+
                 Spacer(modifier = Modifier.height(innerPadding.calculateBottomPadding() + 10.dp))
               }
             }
@@ -528,7 +555,7 @@ fun HomeScreen(
         )
       },
       title = { Text(uiState.loadingModelAllowlistError) },
-      text = { Text("请检查网络连接后稍后重试。") },
+      text = { Text("请检查网络连接后稍后重试。已缓存或已导入的本地模型仍可继续使用。") },
       onDismissRequest = { modelManagerViewModel.loadModelAllowlist() },
       confirmButton = {
         TextButton(onClick = { modelManagerViewModel.loadModelAllowlist() }) { Text("重试") }

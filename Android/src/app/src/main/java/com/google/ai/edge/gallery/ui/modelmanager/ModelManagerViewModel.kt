@@ -203,7 +203,7 @@ constructor(
   @ApplicationContext private val context: Context,
 ) : ViewModel() {
   private val externalFilesDir = context.getExternalFilesDir(null)
-  protected val _uiState = MutableStateFlow(createEmptyUiState())
+  protected val _uiState = MutableStateFlow(createBootstrapUiState())
   open val uiState = _uiState.asStateFlow()
 
   private var _allowlistModels: MutableList<Model> = mutableListOf()
@@ -262,6 +262,23 @@ constructor(
     return getAllModels().filter {
       uiState.value.modelDownloadStatus[it.name]?.status == ModelDownloadStatusType.SUCCEEDED &&
         it.isLlm
+    }
+  }
+
+  private fun clearNonImportedModelsFromTasks(tasks: Collection<Task>) {
+    for (task in tasks) {
+      if (task.models.removeAll { !it.imported }) {
+        task.updateTrigger.value = System.currentTimeMillis()
+      }
+    }
+  }
+
+  private fun clearAllModelsFromTasks(tasks: Collection<Task>) {
+    for (task in tasks) {
+      if (task.models.isNotEmpty()) {
+        task.models.clear()
+        task.updateTrigger.value = System.currentTimeMillis()
+      }
     }
   }
 
@@ -907,6 +924,9 @@ constructor(
 
     viewModelScope.launch(Dispatchers.IO) {
       try {
+        val curTasks = getActiveCustomTasks().map { it.task }
+        clearNonImportedModelsFromTasks(curTasks)
+
         // Clear existing allowlist models.
         _allowlistModels.clear()
 
@@ -949,7 +969,11 @@ constructor(
 
         if (modelAllowlist == null) {
           _uiState.update {
-            uiState.value.copy(loadingModelAllowlistError = "Failed to load model list")
+            createBootstrapUiState()
+              .copy(
+                loadingModelAllowlist = false,
+                loadingModelAllowlistError = "Failed to load model list",
+              )
           }
           return@launch
         }
@@ -971,7 +995,6 @@ constructor(
         }
 
         // Convert models in the allowlist.
-        val curTasks = getActiveCustomTasks().map { it.task }
         val nameToModel = mutableMapOf<String, Model>()
         for (allowedModel in modelAllowlist.models) {
           if (allowedModel.disabled == true) {
@@ -1046,6 +1069,13 @@ constructor(
         checkAICoreModelStatuses()
       } catch (e: Exception) {
         e.printStackTrace()
+        _uiState.update {
+          createBootstrapUiState()
+            .copy(
+              loadingModelAllowlist = false,
+              loadingModelAllowlistError = "Failed to load model list",
+            )
+        }
       }
     }
   }
@@ -1122,6 +1152,34 @@ constructor(
     )
   }
 
+  private fun createBootstrapUiState(): ModelManagerUiState {
+    val activeTasks = getActiveCustomTasks().map { it.task }
+    clearAllModelsFromTasks(activeTasks)
+
+    val modelDownloadStatus: MutableMap<String, ModelDownloadStatus> = mutableMapOf()
+    val modelInstances: MutableMap<String, ModelInitializationStatus> = mutableMapOf()
+    val tasks: MutableMap<String, Task> = mutableMapOf()
+    for (task in activeTasks) {
+      tasks[task.id] = task
+    }
+    addImportedModelsToTasks(tasks = tasks, modelDownloadStatus = modelDownloadStatus)
+    for (task in activeTasks) {
+      for (model in task.models) {
+        modelInstances[model.name] =
+          ModelInitializationStatus(status = ModelInitializationStatusType.NOT_INITIALIZED)
+      }
+    }
+    val textInputHistory = dataStoreRepository.readTextInputHistory()
+    return ModelManagerUiState(
+      tasks = activeTasks,
+      tasksByCategory = groupTasksByCategory(),
+      modelDownloadStatus = modelDownloadStatus,
+      modelInitializationStatus = modelInstances,
+      textInputHistory = textInputHistory,
+      loadingModelAllowlist = true,
+    )
+  }
+
   private fun createUiState(): ModelManagerUiState {
     val modelDownloadStatus: MutableMap<String, ModelDownloadStatus> = mutableMapOf()
     val modelInstances: MutableMap<String, ModelInitializationStatus> = mutableMapOf()
@@ -1141,42 +1199,7 @@ constructor(
       }
     }
 
-    // Load imported models.
-    for (importedModel in dataStoreRepository.readImportedModels()) {
-      Log.d(TAG, "stored imported model: $importedModel")
-
-      // Create model.
-      val model = createModelFromImportedModelInfo(info = importedModel)
-
-      // Add to task.
-      tasks.get(key = BuiltInTaskId.LLM_CHAT)?.models?.add(model)
-      tasks.get(key = BuiltInTaskId.LLM_PROMPT_LAB)?.models?.add(model)
-      tasks.get(key = BuiltInTaskId.LLM_AGENT_CHAT)?.models?.add(model)
-      if (model.llmSupportImage) {
-        tasks.get(key = BuiltInTaskId.LLM_ASK_IMAGE)?.models?.add(model)
-      }
-      if (model.llmSupportAudio) {
-        tasks.get(key = BuiltInTaskId.LLM_ASK_AUDIO)?.models?.add(model)
-      }
-      if (model.llmSupportTinyGarden) {
-        tasks.get(key = BuiltInTaskId.LLM_TINY_GARDEN)?.models?.add(model)
-        val newConfigs = model.configs.toMutableList()
-        newConfigs.add(RESET_CONVERSATION_TURN_COUNT_CONFIG)
-        model.configs = newConfigs
-        model.preProcess()
-      }
-      if (model.llmSupportMobileActions) {
-        tasks.get(key = BuiltInTaskId.LLM_MOBILE_ACTIONS)?.models?.add(model)
-      }
-
-      // Update status.
-      modelDownloadStatus[model.name] =
-        ModelDownloadStatus(
-          status = ModelDownloadStatusType.SUCCEEDED,
-          receivedBytes = importedModel.fileSize,
-          totalBytes = importedModel.fileSize,
-        )
-    }
+    addImportedModelsToTasks(tasks = tasks, modelDownloadStatus = modelDownloadStatus)
 
     applyPersistedConfigValues(tasks.values)
 
@@ -1236,6 +1259,51 @@ constructor(
 
   private fun getModelConfigSecretKey(modelName: String): String {
     return "$MODEL_CONFIG_SECRET_PREFIX$modelName"
+  }
+
+  private fun addImportedModelsToTasks(
+    tasks: MutableMap<String, Task>,
+    modelDownloadStatus: MutableMap<String, ModelDownloadStatus>,
+  ) {
+    for (importedModel in dataStoreRepository.readImportedModels()) {
+      Log.d(TAG, "stored imported model: $importedModel")
+
+      val model = createModelFromImportedModelInfo(info = importedModel)
+
+      fun addModelIfMissing(taskId: String) {
+        val task = tasks[taskId] ?: return
+        if (task.models.none { it.name == model.name }) {
+          task.models.add(model)
+        }
+      }
+
+      addModelIfMissing(BuiltInTaskId.LLM_CHAT)
+      addModelIfMissing(BuiltInTaskId.LLM_PROMPT_LAB)
+      addModelIfMissing(BuiltInTaskId.LLM_AGENT_CHAT)
+      if (model.llmSupportImage) {
+        addModelIfMissing(BuiltInTaskId.LLM_ASK_IMAGE)
+      }
+      if (model.llmSupportAudio) {
+        addModelIfMissing(BuiltInTaskId.LLM_ASK_AUDIO)
+      }
+      if (model.llmSupportTinyGarden) {
+        addModelIfMissing(BuiltInTaskId.LLM_TINY_GARDEN)
+        val newConfigs = model.configs.toMutableList()
+        newConfigs.add(RESET_CONVERSATION_TURN_COUNT_CONFIG)
+        model.configs = newConfigs
+        model.preProcess()
+      }
+      if (model.llmSupportMobileActions) {
+        addModelIfMissing(BuiltInTaskId.LLM_MOBILE_ACTIONS)
+      }
+
+      modelDownloadStatus[model.name] =
+        ModelDownloadStatus(
+          status = ModelDownloadStatusType.SUCCEEDED,
+          receivedBytes = importedModel.fileSize,
+          totalBytes = importedModel.fileSize,
+        )
+    }
   }
 
   private fun normalizePersistedConfigValue(config: Config, value: Any): Any {

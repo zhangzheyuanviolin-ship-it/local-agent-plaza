@@ -137,6 +137,8 @@ fun ChatPanel(
   showImagePicker: Boolean = false,
   showAudioPicker: Boolean = false,
   emptyStateComposable: @Composable (Model) -> Unit = {},
+  contextUsageSummary: String = "",
+  contextUsageWarning: Boolean = false,
 ) {
   val context = LocalContext.current
   val uiState by viewModel.uiState.collectAsState()
@@ -324,6 +326,34 @@ fun ChatPanel(
     Column(
       modifier = modifier.padding(innerPadding).consumeWindowInsets(innerPadding).imePadding()
     ) {
+      if (contextUsageSummary.isNotBlank()) {
+        Box(
+          modifier =
+            Modifier.fillMaxWidth()
+              .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp)
+              .clip(RoundedCornerShape(12.dp))
+              .background(
+                if (contextUsageWarning) {
+                  MaterialTheme.colorScheme.errorContainer
+                } else {
+                  MaterialTheme.colorScheme.surfaceContainerHigh
+                }
+              )
+              .padding(horizontal = 12.dp, vertical = 9.dp)
+        ) {
+          Text(
+            text = contextUsageSummary,
+            style = MaterialTheme.typography.bodySmall,
+            color =
+              if (contextUsageWarning) {
+                MaterialTheme.colorScheme.onErrorContainer
+              } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+              },
+            fontWeight = FontWeight.Medium,
+          )
+        }
+      }
       Box(
         contentAlignment = Alignment.BottomCenter,
         modifier =

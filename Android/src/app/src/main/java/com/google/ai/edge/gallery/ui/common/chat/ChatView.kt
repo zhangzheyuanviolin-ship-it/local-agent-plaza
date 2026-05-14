@@ -83,6 +83,8 @@ import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import java.io.File
 import java.util.UUID
+import kotlin.math.ceil
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,6 +92,7 @@ import kotlinx.coroutines.withContext
 private const val TAG = "AGChatView"
 
 data class SendMessageTrigger(val model: Model, val messages: List<ChatMessage>)
+private data class ContextUsageSummary(val label: String, val warning: Boolean)
 
 /**
  * A composable that displays a chat interface, allowing users to interact with different models
@@ -144,6 +147,20 @@ fun ChatView(
   val context = LocalContext.current
 
   val currentMessages = uiState.messagesByModel[selectedModel.name] ?: emptyList()
+  val contextUsageSummary =
+    remember(
+      currentMessages,
+      selectedModel.name,
+      selectedModel.llmMaxContextLength,
+      curSystemPrompt,
+      modelManagerUiState.configValuesUpdateTrigger,
+    ) {
+      buildContextUsageSummary(
+        model = selectedModel,
+        messages = currentMessages,
+        systemPrompt = curSystemPrompt,
+      )
+    }
   LaunchedEffect(uiState.inProgress) {
     if (!uiState.inProgress && currentMessages.isNotEmpty()) {
       viewModel.saveSession(
@@ -370,6 +387,8 @@ fun ChatView(
                       showImagePicker = showImagePicker,
                       showAudioPicker = showAudioPicker,
                       emptyStateComposable = emptyStateComposable,
+                      contextUsageSummary = contextUsageSummary.label,
+                      contextUsageWarning = contextUsageSummary.warning,
                     )
                   // Model download
                   false ->
@@ -550,4 +569,80 @@ private fun deserializeProtoMessages(
       else -> null
     }
   }
+}
+
+private fun buildContextUsageSummary(
+  model: Model,
+  messages: List<ChatMessage>,
+  systemPrompt: String,
+): ContextUsageSummary {
+  val maxContext =
+    model.llmMaxContextLength ?: return ContextUsageSummary(label = "", warning = false)
+  val reservedOutputTokens =
+    model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = model.llmMaxToken)
+
+  var usedTokens = 0
+  if (systemPrompt.isNotBlank()) {
+    usedTokens += estimateTextTokens(systemPrompt) + 8
+  }
+  for (message in messages) {
+    when (message) {
+      is ChatMessageText -> usedTokens += estimateTextTokens(message.content) + 6
+      is ChatMessageImage -> usedTokens += message.bitmaps.size * 64
+      is ChatMessageAudioClip -> usedTokens += 96
+      else -> {}
+    }
+  }
+
+  val percent = ((usedTokens.toFloat() / maxContext.toFloat()) * 100f).coerceAtLeast(0f)
+  val status =
+    when {
+      usedTokens + reservedOutputTokens >= maxContext -> "接近上限"
+      percent >= 80f -> "偏高"
+      percent >= 60f -> "已过半"
+      else -> "正常"
+    }
+  val label =
+    "上下文估算 ${usedTokens}/${maxContext}，预留输出 ${reservedOutputTokens}，当前${status}"
+  return ContextUsageSummary(
+    label = label,
+    warning = usedTokens + reservedOutputTokens >= maxContext || percent >= 80f,
+  )
+}
+
+private fun estimateTextTokens(text: String): Int {
+  if (text.isBlank()) {
+    return 0
+  }
+
+  var tokens = 0.0
+  var asciiRun = 0
+
+  fun flushAsciiRun() {
+    if (asciiRun > 0) {
+      tokens += ceil(asciiRun / 4.0)
+      asciiRun = 0
+    }
+  }
+
+  for (char in text) {
+    when {
+      char.code <= 0x7F && char.isLetterOrDigit() -> {
+        asciiRun += 1
+      }
+      char.code <= 0x7F && char.isWhitespace() -> {
+        flushAsciiRun()
+      }
+      char.code <= 0x7F -> {
+        flushAsciiRun()
+        tokens += 0.5
+      }
+      else -> {
+        flushAsciiRun()
+        tokens += 1.0
+      }
+    }
+  }
+  flushAsciiRun()
+  return tokens.roundToInt().coerceAtLeast(1)
 }

@@ -11,13 +11,22 @@ Use this skill when the user asks to inspect, create, update, move, copy, rename
 
 ## Instructions
 
-Call the `run_configured_intent` tool with:
+Call `run_configured_intent` with:
 
 - `skillName`: `file-workspace`
 - `intent`: `file_workspace`
 - `parameters`: a compact JSON string
 
-The app already injects the saved mounted folder configuration. Never ask the user for absolute paths. Always work with relative paths inside the mounted folder only.
+The app already injects the mounted folder. Never ask for absolute paths.
+
+Rules:
+
+- Work inside the mounted folder only.
+- Prefer omitting `path` to mean the workspace root.
+- Use relative paths like `notes/todo.txt`.
+- Do not use `/home`, `/data`, `/mnt`, `..`, or any system path.
+- If the target path is uncertain, call `list` or `stat` first.
+- If the task needs multiple file steps, keep calling tools until the task is actually finished.
 
 Supported operations:
 
@@ -32,9 +41,10 @@ Supported operations:
 - `copy`: Copy a file or directory. Fields: `operation`, required `path`, required `destination_path`, optional `overwrite`.
 - `move`: Move or rename a file or directory. Fields: `operation`, required `path`, required `destination_path`, optional `overwrite`.
 
-## Constraints
+Examples:
 
-- For multi-step tasks, make as many tool calls as needed. Do not stop after a single call if the task still requires more file operations.
-- If you are unsure where the target file is, start with `list` before using `read_text`, `move`, `copy`, or `delete`.
-- Prefer the smallest operation that solves the task.
-- After the tool returns, answer in the same language as the user.
+- List root: `{"operation":"list"}`
+- Read file: `{"operation":"read_text","path":"notes/todo.txt"}`
+- Move file: `{"operation":"move","path":"todo.txt","destination_path":"archive/todo.txt"}`
+
+After the tool returns, answer in the same language as the user.

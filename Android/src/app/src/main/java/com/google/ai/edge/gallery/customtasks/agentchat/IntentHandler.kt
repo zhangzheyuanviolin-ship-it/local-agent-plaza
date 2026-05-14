@@ -68,6 +68,8 @@ object IntentHandler {
   private const val TAG = "IntentHandler"
   private const val DEFAULT_READ_MAX_BYTES = 16000
   private const val DEFAULT_LIST_MAX_ENTRIES = 200
+  private const val WORKSPACE_PATH_HINT =
+    "Use workspace-relative paths only. Prefer an empty path for the workspace root."
 
   fun handleAction(context: Context, action: String, parameters: String): String {
     return when (IntentAction.from(action)) {
@@ -230,7 +232,7 @@ object IntentHandler {
     val path = request.optString("path")
     val directory = if (path.isBlank()) root else resolveExistingDocument(root, path)
     if (directory == null || !directory.exists() || !directory.isDirectory) {
-      return errorJson("Directory not found: ${path.ifBlank { "." }}")
+      return errorJson("Directory not found: ${path.ifBlank { "." }}. $WORKSPACE_PATH_HINT")
     }
 
     val entries = directory.listFiles().sortedWith(compareBy<DocumentFile> { !it.isDirectory }.thenBy { it.name ?: "" })
@@ -256,7 +258,9 @@ object IntentHandler {
         .put("entry", documentToJson(root).put("name", root.name ?: "."))
         .toString()
     }
-    val document = resolveExistingDocument(root, path) ?: return errorJson("Path not found: $path")
+    val document =
+      resolveExistingDocument(root, path)
+        ?: return errorJson("Path not found: $path. $WORKSPACE_PATH_HINT")
     return successJson()
       .put("operation", "stat")
       .put("path", normalizeDisplayPath(path))
@@ -268,7 +272,7 @@ object IntentHandler {
     val path = request.optString("path")
     val document = resolveExistingDocument(root, path)
     if (document == null || !document.exists() || !document.isFile) {
-      return errorJson("File not found: $path")
+      return errorJson("File not found: $path. $WORKSPACE_PATH_HINT")
     }
 
     val maxBytes = request.optInt("max_bytes", DEFAULT_READ_MAX_BYTES).coerceIn(256, 200000)
@@ -351,7 +355,9 @@ object IntentHandler {
     if (path.isBlank()) {
       return errorJson("Refusing to delete the mounted root folder.")
     }
-    val target = resolveExistingDocument(root, path) ?: return errorJson("Path not found: $path")
+    val target =
+      resolveExistingDocument(root, path)
+        ?: return errorJson("Path not found: $path. $WORKSPACE_PATH_HINT")
     if (target.isDirectory && !recursive && target.listFiles().isNotEmpty()) {
       return errorJson("Directory is not empty. Set recursive=true to delete it.")
     }
@@ -371,7 +377,8 @@ object IntentHandler {
       return errorJson("Both path and destination_path are required for copy.")
     }
     val source =
-      resolveExistingDocument(root, sourcePath) ?: return errorJson("Source path not found: $sourcePath")
+      resolveExistingDocument(root, sourcePath)
+        ?: return errorJson("Source path not found: $sourcePath. $WORKSPACE_PATH_HINT")
     val copied =
       copyDocument(
         context = context,
@@ -399,7 +406,8 @@ object IntentHandler {
       return errorJson("Both path and destination_path are required for move.")
     }
     val source =
-      resolveExistingDocument(root, sourcePath) ?: return errorJson("Source path not found: $sourcePath")
+      resolveExistingDocument(root, sourcePath)
+        ?: return errorJson("Source path not found: $sourcePath. $WORKSPACE_PATH_HINT")
     val copied =
       copyDocument(
         context = context,
@@ -423,13 +431,15 @@ object IntentHandler {
 
   private fun normalizeSegments(path: String): List<String>? {
     val normalized = path.replace('\\', '/').trim()
-    if (normalized.isBlank()) {
+    if (
+      normalized.isBlank() ||
+        normalized == "." ||
+        normalized == "/" ||
+        normalized == "./"
+    ) {
       return emptyList()
     }
-    if (normalized.startsWith("/")) {
-      return null
-    }
-    val segments = normalized.split('/').filter { it.isNotBlank() }
+    val segments = normalized.trimStart('/').split('/').filter { it.isNotBlank() }
     if (segments.any { it == "." || it == ".." }) {
       return null
     }
