@@ -54,8 +54,8 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 private const val TAG = "AGUtils"
-private const val DEFAULT_HTTP_CONNECT_TIMEOUT_MS = 5000
-private const val DEFAULT_HTTP_READ_TIMEOUT_MS = 8000
+const val DEFAULT_HTTP_CONNECT_TIMEOUT_MS = 5000
+const val DEFAULT_HTTP_READ_TIMEOUT_MS = 8000
 
 const val LOCAL_URL_BASE = "https://appassets.androidplatform.net"
 
