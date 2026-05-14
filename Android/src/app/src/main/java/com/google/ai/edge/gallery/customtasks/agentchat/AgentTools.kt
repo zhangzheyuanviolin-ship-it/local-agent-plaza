@@ -34,8 +34,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
+import org.json.JSONObject
 
 private const val TAG = "AGAgentTools"
+private const val MAX_LIST_SUMMARY_ENTRIES = 12
 
 open class AgentTools() : ToolSet {
   lateinit var context: Context
@@ -69,6 +72,12 @@ open class AgentTools() : ToolSet {
             addItemTitle = "Load \"${skill.name}\"",
             addItemDescription = "Description: ${skill.description}",
             customData = skill,
+          )
+        )
+        _actionChannel.send(
+          SkillProgressAgentAction(
+            label = "Loaded skill \"$skillName\"",
+            inProgress = false,
           )
         )
       } else {
@@ -182,7 +191,21 @@ open class AgentTools() : ToolSet {
           config = config,
         )
       _actionChannel.send(action)
-      val result = action.result.await()
+      val result =
+        try {
+          action.result.await()
+        } catch (e: Exception) {
+          _actionChannel.send(
+            SkillProgressAgentAction(
+              label = "Failed to call skill \"$skillName/$scriptName\"",
+              inProgress = false,
+            )
+          )
+          return@runBlocking mapOf(
+            "error" to (e.message ?: "Failed to execute JS skill."),
+            "status" to "failed",
+          )
+        }
 
       // Try to parse result to CallJsSkillResult.
       val moshi: Moshi = Moshi.Builder().build()
@@ -196,10 +219,22 @@ open class AgentTools() : ToolSet {
         resultJson == null ||
           (resultJson.result == null && resultJson.webview == null && resultJson.image == null)
       ) {
+        _actionChannel.send(
+          SkillProgressAgentAction(
+            label = "Called JS script \"$skillName/$scriptName\"",
+            inProgress = false,
+          )
+        )
         mapOf("result" to result, "status" to "succeeded")
       }
       // Error case.
       else if (error != null) {
+        _actionChannel.send(
+          SkillProgressAgentAction(
+            label = "Failed to call skill \"$skillName/$scriptName\"",
+            inProgress = false,
+          )
+        )
         mapOf("error" to error, "status" to "failed")
       }
       // Non-error cases.
@@ -222,6 +257,12 @@ open class AgentTools() : ToolSet {
           resultWebviewToShow = webview.copy(url = webviewUrl)
         }
         Log.d(TAG, "Result: ${resultJson.result}")
+        _actionChannel.send(
+          SkillProgressAgentAction(
+            label = "Called JS script \"$skillName/$scriptName\"",
+            inProgress = false,
+          )
+        )
         mapOf("result" to (resultJson.result ?: ""), "status" to "succeeded")
       }
     }
@@ -249,6 +290,12 @@ open class AgentTools() : ToolSet {
         )
       )
       val res = IntentHandler.handleAction(context, intent, parameters)
+      _actionChannel.send(
+        SkillProgressAgentAction(
+          label = "Executed intent \"$intent\"",
+          inProgress = false,
+        )
+      )
       return@runBlocking mapOf("action" to intent, "parameters" to parameters, "result" to res)
     }
   }
@@ -265,7 +312,7 @@ open class AgentTools() : ToolSet {
       description = "A JSON string containing the parameter values required for the intent."
     )
     parameters: String,
-  ): Map<String, String> {
+  ): Map<String, Any> {
     return runBlocking(Dispatchers.Default) {
       val skill = skillManagerViewModel.getSelectedSkills().find { it.name == skillName.trim() }
       if (skill == null) {
@@ -277,8 +324,8 @@ open class AgentTools() : ToolSet {
         )
         return@runBlocking mapOf(
           "action" to intent,
-          "parameters" to parameters,
-          "result" to """{"status":"failed","error":"Skill \"$skillName\" not found."}""",
+          "status" to "failed",
+          "error" to "Skill \"$skillName\" not found.",
         )
       }
 
@@ -304,12 +351,160 @@ open class AgentTools() : ToolSet {
           parameters = parameters,
           config = config,
         )
-      return@runBlocking mapOf("action" to intent, "parameters" to parameters, "result" to res)
+      val flattened = buildConfiguredIntentResult(intent = intent, parameters = parameters, result = res)
+      _actionChannel.send(
+        SkillProgressAgentAction(
+          label =
+            if ((flattened["status"] as? String) == "succeeded") {
+              "Executed configured intent \"$intent\""
+            } else {
+              "Failed to execute configured intent \"$intent\""
+            },
+          inProgress = false,
+        )
+      )
+      return@runBlocking flattened
     }
   }
 
   fun sendAgentAction(action: AgentAction) {
     runBlocking(Dispatchers.Default) { _actionChannel.send(action) }
+  }
+}
+
+private fun buildConfiguredIntentResult(
+  intent: String,
+  parameters: String,
+  result: String,
+): Map<String, Any> {
+  val fallbackOperation = extractOperation(parameters)
+  val payload =
+    runCatching { JSONObject(result) }.getOrElse {
+      return mapOf(
+        "action" to intent,
+        "status" to "succeeded",
+        "operation" to fallbackOperation,
+        "summary" to result.take(1000),
+      )
+    }
+
+  val status = payload.optString("status").ifBlank { if (payload.has("error")) "failed" else "succeeded" }
+  val operation = payload.optString("operation").ifBlank { fallbackOperation }
+  val flattened =
+    linkedMapOf<String, Any>(
+      "action" to intent,
+      "status" to status,
+    )
+  if (operation.isNotBlank()) {
+    flattened["operation"] = operation
+  }
+  putIfNotBlank(flattened, "path", payload.optString("path"))
+  putIfNotBlank(flattened, "destination_path", payload.optString("destination_path"))
+
+  if (status != "succeeded") {
+    val error = payload.optString("error").ifBlank { "Tool execution failed." }
+    flattened["error"] = error
+    flattened["recovery_hint"] = buildRecoveryHint(operation = operation, error = error)
+    flattened["summary"] = "Failed $operation: $error"
+    return flattened
+  }
+
+  when (operation) {
+    "status" -> {
+      val folderName = payload.optString("folder_name").ifBlank { "workspace" }
+      flattened["mounted"] = payload.optBoolean("mounted", false)
+      flattened["folder_name"] = folderName
+      flattened["can_read"] = payload.optBoolean("can_read", false)
+      flattened["can_write"] = payload.optBoolean("can_write", false)
+      flattened["summary"] =
+        "Workspace \"$folderName\" is mounted. Read=${payload.optBoolean("can_read", false)}, write=${payload.optBoolean("can_write", false)}."
+    }
+    "list" -> {
+      val entries = payload.optJSONArray("entries") ?: JSONArray()
+      val entryNames = mutableListOf<String>()
+      for (i in 0 until minOf(entries.length(), MAX_LIST_SUMMARY_ENTRIES)) {
+        val entry = entries.optJSONObject(i) ?: continue
+        val name = entry.optString("name").ifBlank { "(unnamed)" }
+        val type = entry.optString("type")
+        entryNames += if (type == "directory") "$name/" else name
+      }
+      flattened["entry_count"] = entries.length()
+      flattened["truncated"] = payload.optBoolean("truncated", false)
+      flattened["entry_names"] = entryNames.joinToString(", ")
+      flattened["summary"] =
+        if (entryNames.isEmpty()) {
+          "Listed ${flattened["path"] ?: "."}. The directory is empty."
+        } else {
+          "Listed ${flattened["path"] ?: "."}. Found ${entries.length()} entries: ${entryNames.joinToString(", ")}"
+        }
+    }
+    "stat" -> {
+      val entry = payload.optJSONObject("entry") ?: JSONObject()
+      val name = entry.optString("name").ifBlank { payload.optString("path").ifBlank { "." } }
+      val type = entry.optString("type").ifBlank { "unknown" }
+      val size = entry.optLong("size", 0L)
+      flattened["entry_name"] = name
+      flattened["entry_type"] = type
+      flattened["size"] = size
+      flattened["summary"] = "Path ${flattened["path"] ?: "."} is a $type named $name with size $size bytes."
+    }
+    "read_text" -> {
+      val content = payload.optString("content")
+      flattened["content"] = content
+      flattened["bytes_read"] = payload.optInt("bytes_read", content.toByteArray(Charsets.UTF_8).size)
+      flattened["truncated"] = payload.optBoolean("truncated", false)
+      flattened["summary"] =
+        "Read ${flattened["path"] ?: "file"} (${flattened["bytes_read"]} bytes${if (payload.optBoolean("truncated", false)) ", truncated" else ""})."
+    }
+    "write_text", "append_text" -> {
+      flattened["bytes_written"] = payload.optInt("bytes_written", 0)
+      flattened["summary"] =
+        "${if (operation == "write_text") "Wrote" else "Appended"} ${flattened["bytes_written"]} bytes to ${flattened["path"] ?: "file"}."
+    }
+    "create_dir" -> {
+      flattened["summary"] = "Created directory ${flattened["path"] ?: "."}."
+    }
+    "delete" -> {
+      flattened["summary"] = "Deleted ${flattened["path"] ?: "target"}."
+    }
+    "copy", "move" -> {
+      flattened["summary"] =
+        "${if (operation == "copy") "Copied" else "Moved"} ${flattened["path"] ?: "source"} to ${flattened["destination_path"] ?: "destination"}."
+    }
+    else -> {
+      flattened["summary"] = result.take(1000)
+    }
+  }
+
+  return flattened
+}
+
+private fun extractOperation(parameters: String): String {
+  return runCatching { JSONObject(parameters.ifBlank { "{}" }).optString("operation") }.getOrDefault("")
+}
+
+private fun putIfNotBlank(target: MutableMap<String, Any>, key: String, value: String) {
+  if (value.isNotBlank()) {
+    target[key] = value
+  }
+}
+
+private fun buildRecoveryHint(operation: String, error: String): String {
+  return when {
+    error.contains("workspace-relative", ignoreCase = true) ||
+      error.contains("Directory not found", ignoreCase = true) ||
+      error.contains("Path not found", ignoreCase = true) ||
+      error.contains("Source path not found", ignoreCase = true) ->
+      "Use workspace-relative paths only. If unsure, list the parent directory first."
+    error.contains("Both path and destination_path are required", ignoreCase = true) ->
+      "Retry with both path and destination_path."
+    error.contains("required", ignoreCase = true) && operation == "read_text" ->
+      "Retry with operation=read_text and a workspace-relative path."
+    error.contains("required", ignoreCase = true) && operation == "write_text" ->
+      "Retry with operation=write_text plus path and content."
+    error.contains("Directory is not empty", ignoreCase = true) ->
+      "If the user wants to remove the directory and its contents, retry with recursive=true."
+    else -> "Check the required fields and retry with a workspace-relative path."
   }
 }
 
