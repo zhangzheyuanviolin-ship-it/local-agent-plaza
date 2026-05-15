@@ -470,6 +470,126 @@ open class AgentTools() : ToolSet {
     }
   }
 
+  @Tool(
+    description =
+      "Writes one txt or md file inside the mounted workspace using the saved long-text-writer configuration. Use this for both short and long document writing."
+  )
+  fun writeWorkspaceTextFile(
+    @ToolParam(description = "Workspace-relative file path ending in .txt or .md.")
+    path: String,
+    @ToolParam(description = "The full final text to write into the file.")
+    content: String,
+  ): Map<String, Any> {
+    return runBlocking(Dispatchers.Default) {
+      val skillName = LONG_TEXT_WRITER_SKILL_NAME
+      val trimmedPath = path.trim()
+      if (trimmedPath.isBlank()) {
+        return@runBlocking mapOf(
+          "action" to "write_workspace_text_file",
+          "status" to "failed",
+          "error" to "Path is required.",
+          "recovery_hint" to "Retry with a workspace-relative .txt or .md file path.",
+        )
+      }
+      if (
+        !trimmedPath.lowercase().endsWith(".txt") &&
+          !trimmedPath.lowercase().endsWith(".md")
+      ) {
+        return@runBlocking mapOf(
+          "action" to "write_workspace_text_file",
+          "status" to "failed",
+          "error" to "Only .txt and .md files are supported.",
+          "recovery_hint" to "Retry with a workspace-relative .txt or .md file path.",
+        )
+      }
+      if (content.contains("__ASSISTANT_RESPONSE__")) {
+        return@runBlocking mapOf(
+          "action" to "write_workspace_text_file",
+          "status" to "failed",
+          "error" to "Do not use __ASSISTANT_RESPONSE__.",
+          "recovery_hint" to "Put the full final text directly into content.",
+        )
+      }
+
+      val skill =
+        skillManagerViewModel.getSelectedSkills().find { it.name == skillName.trim() }
+      if (skill == null) {
+        return@runBlocking mapOf(
+          "action" to "write_workspace_text_file",
+          "status" to "failed",
+          "error" to "Skill \"$skillName\" not found.",
+        )
+      }
+
+      val parameters =
+        JSONObject()
+          .put("operation", "write_text")
+          .put("path", trimmedPath)
+          .put("content", content)
+          .toString()
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "tool.write_workspace_text.start",
+        message = "Writing workspace text file for $skillName",
+        detail = parameters.take(2000),
+      )
+      _actionChannel.send(
+        SkillProgressAgentAction(
+          label = "Executing long text write",
+          inProgress = true,
+          addItemTitle = "Write workspace text file",
+          addItemDescription = "Skill: $skillName\nParameters: $parameters",
+          customData = skill,
+        )
+      )
+      val config =
+        skillManagerViewModel.dataStoreRepository.readSecret(
+          key = getSkillConfigKey(skillName = skillName)
+        ) ?: ""
+      val res =
+        IntentHandler.handleConfiguredAction(
+          context = context,
+          skillName = skillName,
+          action = IntentAction.FILE_WORKSPACE.action,
+          parameters = parameters,
+          config = config,
+        )
+      val flattened =
+        buildConfiguredIntentResult(
+          intent = IntentAction.FILE_WORKSPACE.action,
+          parameters = parameters,
+          result = res,
+        )
+      val summary = (flattened["summary"] as? String) ?: (flattened["error"] as? String).orEmpty()
+      _actionChannel.send(
+        SkillProgressAgentAction(
+          label =
+            if ((flattened["status"] as? String) == "succeeded") {
+              "Executed long text write"
+            } else {
+              "Failed long text write"
+            },
+          inProgress = false,
+          addItemTitle = if ((flattened["status"] as? String) == "succeeded") "Intent result" else "Intent error",
+          addItemDescription = summary,
+        )
+      )
+      AgentDiagnosticsLogger.logJson(
+        context = context,
+        category = "tool.write_workspace_text.raw",
+        message = "Long text writer raw result",
+        rawJson = res,
+      )
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "tool.write_workspace_text.flattened",
+        message = "Long text writer flattened result",
+        detail = flattened.toString(),
+      )
+      return@runBlocking flattened
+    }
+  }
+
   fun sendAgentAction(action: AgentAction) {
     runBlocking(Dispatchers.Default) { _actionChannel.send(action) }
   }
