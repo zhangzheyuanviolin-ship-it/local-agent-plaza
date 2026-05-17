@@ -313,7 +313,7 @@ constructor(
   }
 
   fun selectModel(model: Model) {
-    if (_uiState.value.selectedModel.name != model.name) {
+    if (_uiState.value.selectedModel !== model) {
       _uiState.update { _uiState.value.copy(selectedModel = model) }
     }
   }
@@ -429,10 +429,17 @@ constructor(
       dataStoreRepository.saveImportedModels(importedModels = importedModels)
       dataStoreRepository.deleteSecret(getModelConfigSecretKey(model.name))
     }
+    val replacementSelectedModel =
+      if (uiState.value.selectedModel.name == model.name) {
+        resolveSelectedModelReference(uiState.value.tasks)
+      } else {
+        uiState.value.selectedModel
+      }
     val newUiState =
       uiState.value.copy(
         modelDownloadStatus = curModelDownloadStatus,
         tasks = uiState.value.tasks.toList(),
+        selectedModel = replacementSelectedModel,
         modelImportingUpdateTrigger = System.currentTimeMillis(),
       )
     _uiState.update { newUiState }
@@ -720,6 +727,12 @@ constructor(
         tasks = uiState.value.tasks.toList(),
         modelDownloadStatus = modelDownloadStatus,
         modelInitializationStatus = modelInstances,
+        selectedModel =
+          if (uiState.value.selectedModel.name == info.fileName || uiState.value.selectedModel == EMPTY_MODEL) {
+            model
+          } else {
+            uiState.value.selectedModel
+          },
         modelImportingUpdateTrigger = System.currentTimeMillis(),
       )
     }
@@ -1168,6 +1181,7 @@ constructor(
       tasks[task.id] = task
     }
     addImportedModelsToTasks(tasks = tasks, modelDownloadStatus = modelDownloadStatus)
+    val selectedModel = resolveSelectedModelReference(activeTasks)
     for (task in activeTasks) {
       for (model in task.models) {
         modelInstances[model.name] =
@@ -1180,6 +1194,7 @@ constructor(
       tasksByCategory = groupTasksByCategory(),
       modelDownloadStatus = modelDownloadStatus,
       modelInitializationStatus = modelInstances,
+      selectedModel = selectedModel,
       textInputHistory = textInputHistory,
       loadingModelAllowlist = true,
     )
@@ -1207,6 +1222,7 @@ constructor(
     addImportedModelsToTasks(tasks = tasks, modelDownloadStatus = modelDownloadStatus)
 
     applyPersistedConfigValues(tasks.values)
+    val selectedModel = resolveSelectedModelReference(tasks.values, uiState.value.selectedModel)
 
     val textInputHistory = dataStoreRepository.readTextInputHistory()
     Log.d(TAG, "text input history: $textInputHistory")
@@ -1217,8 +1233,27 @@ constructor(
       tasksByCategory = mapOf(),
       modelDownloadStatus = modelDownloadStatus,
       modelInitializationStatus = modelInstances,
+      selectedModel = selectedModel,
       textInputHistory = textInputHistory,
     )
+  }
+
+  private fun resolveSelectedModelReference(
+    tasks: Collection<Task>,
+    preferred: Model = uiState.value.selectedModel,
+  ): Model {
+    val liveModels = tasks.asSequence().flatMap { it.models.asSequence() }.toList()
+    if (liveModels.isEmpty()) {
+      return EMPTY_MODEL
+    }
+    val matched =
+      liveModels.firstOrNull { candidate ->
+        candidate === preferred ||
+          (preferred != EMPTY_MODEL &&
+            candidate.name == preferred.name &&
+            candidate.imported == preferred.imported)
+      }
+    return matched ?: liveModels.first()
   }
 
   private fun applyPersistedConfigValues(tasks: Collection<Task>) {

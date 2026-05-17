@@ -773,10 +773,11 @@ private fun resetSessionWithCurrentSkills(
     model = model,
     systemInstruction = skillManagerViewModel.injectSkills(curSystemPrompt),
     tools = listOf(tool(agentTools)),
-    supportImage = model.llmSupportImage,
-    supportAudio = model.llmSupportAudio,
+    supportImage = false,
+    supportAudio = false,
     onDone = { onDone(model) },
-    enableConversationConstrainedDecoding = true,
+    enableConversationConstrainedDecoding =
+      shouldEnableNativeAgentConstrainedDecoding(model),
     initialMessages = litertMessages,
   )
 }

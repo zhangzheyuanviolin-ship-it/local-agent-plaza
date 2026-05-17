@@ -36,6 +36,8 @@ import dagger.multibindings.IntoSet
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 
+internal fun shouldEnableNativeAgentConstrainedDecoding(model: Model): Boolean = !model.imported
+
 class AgentChatTask @Inject constructor() : CustomTask {
   private val agentTools = AgentTools()
 
@@ -85,12 +87,13 @@ class AgentChatTask @Inject constructor() : CustomTask {
         context = context,
         model = model,
         taskId = task.id,
-        supportImage = model.llmSupportImage,
-        supportAudio = model.llmSupportAudio,
+        supportImage = false,
+        supportAudio = false,
         onDone = onDone,
         systemInstruction = agentTools.skillManagerViewModel.injectSkills(systemPrompt),
         tools = listOf(tool(agentTools)),
-        enableConversationConstrainedDecoding = true,
+        enableConversationConstrainedDecoding =
+          shouldEnableNativeAgentConstrainedDecoding(model),
       )
     }
   }
