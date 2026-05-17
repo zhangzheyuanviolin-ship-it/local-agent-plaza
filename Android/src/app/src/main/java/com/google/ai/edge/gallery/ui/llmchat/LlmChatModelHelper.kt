@@ -71,8 +71,11 @@ object LlmChatModelHelper : LlmModelHelper {
     coroutineScope: CoroutineScope?,
   ) {
     // Prepare options.
+    val configuredContextWindow = model.getConfiguredContextWindow()
     val maxTokens =
-      model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = DEFAULT_MAX_TOKEN)
+      model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = DEFAULT_MAX_TOKEN).let {
+        if (configuredContextWindow > 0) it.coerceAtMost(configuredContextWindow) else it
+      }
     val topK = model.getIntConfigValue(key = ConfigKeys.TOPK, defaultValue = DEFAULT_TOPK)
     val topP = model.getFloatConfigValue(key = ConfigKeys.TOPP, defaultValue = DEFAULT_TOPP)
     val temperature =

@@ -71,8 +71,11 @@ import com.google.ai.edge.gallery.data.DEFAULT_MAX_TOKEN
 import com.google.ai.edge.gallery.data.DEFAULT_TEMPERATURE
 import com.google.ai.edge.gallery.data.DEFAULT_TOPK
 import com.google.ai.edge.gallery.data.DEFAULT_TOPP
+import com.google.ai.edge.gallery.data.DEFAULT_CONTEXT_WINDOW
 import com.google.ai.edge.gallery.data.IMPORTS_DIR
 import com.google.ai.edge.gallery.data.LabelConfig
+import com.google.ai.edge.gallery.data.MAX_CONTEXT_WINDOW_SLIDER_LIMIT
+import com.google.ai.edge.gallery.data.MIN_CONTEXT_WINDOW
 import com.google.ai.edge.gallery.data.NumberSliderConfig
 import com.google.ai.edge.gallery.data.SegmentedButtonConfig
 import com.google.ai.edge.gallery.data.ValueType
@@ -104,9 +107,17 @@ private val IMPORT_CONFIGS_LLM: List<Config> =
     LabelConfig(key = ConfigKeys.NAME),
     LabelConfig(key = ConfigKeys.MODEL_TYPE),
     NumberSliderConfig(
+      key = ConfigKeys.MAX_CONTEXT_LENGTH,
+      sliderMin = MIN_CONTEXT_WINDOW.toFloat(),
+      sliderMax = MAX_CONTEXT_WINDOW_SLIDER_LIMIT.toFloat(),
+      defaultValue = DEFAULT_CONTEXT_WINDOW.toFloat(),
+      valueType = ValueType.INT,
+      needReinitialization = false,
+    ),
+    NumberSliderConfig(
       key = ConfigKeys.DEFAULT_MAX_TOKENS,
       sliderMin = 100f,
-      sliderMax = 4096f,
+      sliderMax = MAX_CONTEXT_WINDOW_SLIDER_LIMIT.toFloat(),
       defaultValue = DEFAULT_MAX_TOKEN.toFloat(),
       valueType = ValueType.INT,
     ),
@@ -231,6 +242,12 @@ fun ModelImportDialog(
                   valueType = ValueType.INT,
                 )
                   as Int
+              val declaredMaxContextLength =
+                convertValueToTargetType(
+                  value = values.get(ConfigKeys.MAX_CONTEXT_LENGTH.label)!!,
+                  valueType = ValueType.INT,
+                )
+                  as Int
               val defaultTopk =
                 convertValueToTargetType(
                   value = values.get(ConfigKeys.DEFAULT_TOPK.label)!!,
@@ -285,6 +302,10 @@ fun ModelImportDialog(
                   valueType = ValueType.BOOLEAN,
                 )
                   as Boolean
+              val normalizedMaxContextLength =
+                maxOf(declaredMaxContextLength, MIN_CONTEXT_WINDOW)
+              val normalizedDefaultMaxTokens =
+                defaultMaxTokens.coerceAtMost(normalizedMaxContextLength)
               val importedModel: ImportedModel =
                 ImportedModel.newBuilder()
                   .setFileName(fileName)
@@ -292,7 +313,8 @@ fun ModelImportDialog(
                   .setLlmConfig(
                     LlmConfig.newBuilder()
                       .addAllCompatibleAccelerators(supportedAccelerators)
-                      .setDefaultMaxTokens(defaultMaxTokens)
+                      .setMaxContextLength(normalizedMaxContextLength)
+                      .setDefaultMaxTokens(normalizedDefaultMaxTokens)
                       .setDefaultTopk(defaultTopk)
                       .setDefaultTopp(defaultTopp)
                       .setDefaultTemperature(defaultTemperature)

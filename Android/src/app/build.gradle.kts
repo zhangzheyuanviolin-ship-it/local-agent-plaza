@@ -36,8 +36,8 @@ android {
     applicationId = "com.zhanglaoshi.androidlocalagent.gallery"
     minSdk = 31
     targetSdk = 35
-    versionCode = 2026051415
-    versionName = "1.0.13-ala.15"
+    versionCode = 2026051716
+    versionName = "1.0.13-ala.16"
 
     // Needed for HuggingFace auth workflows.
     // Use the scheme of the "Redirect URLs" in HuggingFace app.

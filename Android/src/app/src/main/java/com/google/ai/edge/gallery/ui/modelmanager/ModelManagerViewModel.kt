@@ -37,6 +37,7 @@ import com.google.ai.edge.gallery.data.CategoryInfo
 import com.google.ai.edge.gallery.data.Config
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.DataStoreRepository
+import com.google.ai.edge.gallery.data.DEFAULT_CONTEXT_WINDOW
 import com.google.ai.edge.gallery.data.DownloadRepository
 import com.google.ai.edge.gallery.data.EMPTY_MODEL
 import com.google.ai.edge.gallery.data.IMPORTS_DIR
@@ -54,6 +55,7 @@ import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.ValueType
 import com.google.ai.edge.gallery.data.createLlmChatConfigs
 import com.google.ai.edge.gallery.data.convertValueToTargetType
+import com.google.ai.edge.gallery.data.normalizeContextWindowAndMaxTokens
 import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.ai.edge.gallery.proto.Theme
@@ -1251,7 +1253,15 @@ constructor(
       }
       mergedValues[key] = normalizedValue
     }
-    model.configValues = mergedValues
+    model.configValues =
+      if (model.isLlm) {
+        normalizeContextWindowAndMaxTokens(
+          values = mergedValues,
+          defaultContextWindow = model.llmMaxContextLength,
+        )
+      } else {
+        mergedValues
+      }
     if (changed) {
       persistModelConfigValues(model)
     }
@@ -1327,6 +1337,12 @@ constructor(
         }
         .toMutableList()
     val llmMaxToken = info.llmConfig.defaultMaxTokens
+    val llmMaxContextLength =
+      if (info.llmConfig.maxContextLength > 0) {
+        info.llmConfig.maxContextLength
+      } else {
+        maxOf(llmMaxToken, 4096)
+      }
     val llmSupportImage = info.llmConfig.supportImage
     val llmSupportAudio = info.llmConfig.supportAudio
     val llmSupportTinyGarden = info.llmConfig.supportTinyGarden
@@ -1336,12 +1352,14 @@ constructor(
     val configs: MutableList<Config> =
       createLlmChatConfigs(
           defaultMaxToken = llmMaxToken,
+          defaultMaxContextLength = llmMaxContextLength,
           defaultTopK = info.llmConfig.defaultTopk,
           defaultTopP = info.llmConfig.defaultTopp,
           defaultTemperature = info.llmConfig.defaultTemperature,
           accelerators = accelerators,
           supportThinking = llmSupportThinking,
           supportSpeculativeDecoding = llmSupportSpeculativeDecoding,
+          contextWindowEditable = true,
         )
         .toMutableList()
     val capabilities: MutableList<ModelCapability> = mutableListOf()
@@ -1382,12 +1400,18 @@ constructor(
         capabilities = capabilities.toList(),
         capabilityToTaskTypes = capabilityToTaskTypes.toMap(),
         llmMaxToken = llmMaxToken,
+        llmMaxContextLength = llmMaxContextLength,
         accelerators = accelerators,
         // We assume all imported models are LLM for now.
         isLlm = true,
         runtimeType = RuntimeType.LITERT_LM,
       )
     model.preProcess()
+    model.configValues =
+      normalizeContextWindowAndMaxTokens(
+        values = model.configValues,
+        defaultContextWindow = llmMaxContextLength.takeIf { it > 0 } ?: DEFAULT_CONTEXT_WINDOW,
+      )
 
     return model
   }

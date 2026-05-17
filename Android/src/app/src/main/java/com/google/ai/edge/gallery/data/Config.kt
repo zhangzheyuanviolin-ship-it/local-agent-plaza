@@ -45,6 +45,7 @@ enum class ValueType {
 data class ConfigKey(val id: String, val label: String)
 
 object ConfigKeys {
+  val MAX_CONTEXT_LENGTH = ConfigKey("max_context_length", "总上下文长度")
   val MAX_TOKENS = ConfigKey("max_tokens", "Max tokens")
   val TOPK = ConfigKey("topk", "TopK")
   val TOPP = ConfigKey("topp", "TopP")
@@ -80,6 +81,51 @@ object ConfigKeys {
   val PREFILL_TOKENS = ConfigKey("prefill_tokens", "Prefill tokens")
   val DECODE_TOKENS = ConfigKey("decode_tokens", "Decode tokens")
   val NUMBER_OF_RUNS = ConfigKey("number_of_runs", "Number of runs")
+}
+
+const val DEFAULT_CONTEXT_WINDOW = 32000
+const val MAX_CONTEXT_WINDOW_SLIDER_LIMIT = 262144
+const val MIN_CONTEXT_WINDOW = 1024
+
+fun normalizeContextWindowAndMaxTokens(
+  values: Map<String, Any>,
+  defaultContextWindow: Int? = null,
+): Map<String, Any> {
+  val normalized = values.toMutableMap()
+  val currentContext =
+    convertValueToTargetType(
+      value = normalized.getOrDefault(ConfigKeys.MAX_CONTEXT_LENGTH.label, defaultContextWindow ?: 0),
+      valueType = ValueType.INT,
+    ) as Int
+  val currentMaxTokens =
+    convertValueToTargetType(
+      value = normalized.getOrDefault(ConfigKeys.MAX_TOKENS.label, 0),
+      valueType = ValueType.INT,
+    ) as Int
+
+  var finalContext = currentContext
+  var finalMaxTokens = currentMaxTokens
+
+  if (finalContext <= 0 && defaultContextWindow != null) {
+    finalContext = defaultContextWindow
+  }
+  if (finalContext > 0) {
+    finalContext = finalContext.coerceAtLeast(MIN_CONTEXT_WINDOW)
+  }
+  if (finalMaxTokens > 0 && finalContext > 0) {
+    finalMaxTokens = finalMaxTokens.coerceAtMost(finalContext)
+  }
+  if (finalContext > 0 && finalMaxTokens > finalContext) {
+    finalContext = finalMaxTokens
+  }
+
+  if (normalized.containsKey(ConfigKeys.MAX_CONTEXT_LENGTH.label) || finalContext > 0) {
+    normalized[ConfigKeys.MAX_CONTEXT_LENGTH.label] = finalContext
+  }
+  if (normalized.containsKey(ConfigKeys.MAX_TOKENS.label)) {
+    normalized[ConfigKeys.MAX_TOKENS.label] = finalMaxTokens
+  }
+  return normalized
 }
 
 /**
@@ -130,6 +176,7 @@ class NumberSliderConfig(
     key = key,
     defaultValue = defaultValue,
     valueType = valueType,
+    needReinitialization = needReinitialization,
   )
 
 /** Configuration setting for a boolean switch. */
@@ -231,20 +278,47 @@ fun createLlmChatConfigs(
   accelerators: List<Accelerator> = DEFAULT_ACCELERATORS,
   supportThinking: Boolean = false,
   supportSpeculativeDecoding: Boolean = false,
+  contextWindowEditable: Boolean = false,
+  contextWindowSliderMax: Int = MAX_CONTEXT_WINDOW_SLIDER_LIMIT,
 ): List<Config> {
+  val resolvedContextWindow = defaultMaxContextLength ?: maxOf(defaultMaxToken, 4096)
+  val resolvedMaxTokens = if (defaultMaxContextLength != null) {
+    defaultMaxToken.coerceAtMost(defaultMaxContextLength)
+  } else {
+    defaultMaxToken
+  }
   var maxTokensConfig: Config =
-    LabelConfig(key = ConfigKeys.MAX_TOKENS, defaultValue = "$defaultMaxToken")
-  if (defaultMaxContextLength != null) {
+    LabelConfig(key = ConfigKeys.MAX_TOKENS, defaultValue = "$resolvedMaxTokens")
+  if (defaultMaxContextLength != null || contextWindowEditable) {
+    val sliderMax =
+      if (contextWindowEditable) {
+        maxOf(resolvedContextWindow, contextWindowSliderMax).toFloat()
+      } else {
+        defaultMaxContextLength!!.toFloat()
+      }
     maxTokensConfig =
       NumberSliderConfig(
         key = ConfigKeys.MAX_TOKENS,
-        sliderMin = 2000f,
-        sliderMax = defaultMaxContextLength.toFloat(),
-        defaultValue = defaultMaxToken.toFloat(),
+        sliderMin = 512f,
+        sliderMax = sliderMax,
+        defaultValue = resolvedMaxTokens.toFloat(),
         valueType = ValueType.INT,
       )
   }
-  val configs =
+  val configs = mutableListOf<Config>()
+  if (contextWindowEditable) {
+    configs.add(
+      NumberSliderConfig(
+        key = ConfigKeys.MAX_CONTEXT_LENGTH,
+        sliderMin = MIN_CONTEXT_WINDOW.toFloat(),
+        sliderMax = maxOf(resolvedContextWindow, contextWindowSliderMax).toFloat(),
+        defaultValue = resolvedContextWindow.toFloat(),
+        valueType = ValueType.INT,
+        needReinitialization = false,
+      )
+    )
+  }
+  configs.addAll(
     listOf(
         maxTokensConfig,
         NumberSliderConfig(
@@ -275,6 +349,7 @@ fun createLlmChatConfigs(
         ),
       )
       .toMutableList()
+  )
 
   if (supportThinking) {
     configs.add(BooleanSwitchConfig(key = ConfigKeys.ENABLE_THINKING, defaultValue = false))

@@ -53,6 +53,7 @@ import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.RuntimeType
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.convertValueToTargetType
+import com.google.ai.edge.gallery.data.normalizeContextWindowAndMaxTokens
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 
@@ -89,7 +90,7 @@ fun ModelPageAppBar(
     modelInitializationStatus?.status == ModelInitializationStatusType.INITIALIZED
   val configSubtitle =
     buildList {
-        model.llmMaxContextLength?.let {
+        model.getConfiguredContextWindow().takeIf { it > 0 }?.let {
           add(context.getString(R.string.model_config_context_limit, it))
         }
         val currentMaxTokens =
@@ -261,9 +262,18 @@ fun ModelPageAppBar(
         }
 
         // Save the config values to Model.
+        val normalizedConfigValues =
+          if (model.isLlm) {
+            normalizeContextWindowAndMaxTokens(
+              values = curConfigValues,
+              defaultContextWindow = model.llmMaxContextLength,
+            )
+          } else {
+            curConfigValues
+          }
         val oldConfigValues = model.configValues
         model.prevConfigValues = oldConfigValues
-        model.configValues = curConfigValues
+        model.configValues = normalizedConfigValues
         modelManagerViewModel.persistModelConfigValues(model)
         modelManagerViewModel.updateConfigValuesUpdateTrigger()
 

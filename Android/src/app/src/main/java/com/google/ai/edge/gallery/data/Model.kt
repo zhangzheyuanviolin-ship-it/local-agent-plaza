@@ -402,6 +402,11 @@ data class Model(
       as String
   }
 
+  fun getConfiguredContextWindow(): Int {
+    val defaultContextWindow = llmMaxContextLength ?: 0
+    return getIntConfigValue(key = ConfigKeys.MAX_CONTEXT_LENGTH, defaultValue = defaultContextWindow)
+  }
+
   fun getExtraDataFile(name: String): ModelDataFile? {
     return extraDataFiles.find { it.name == name }
   }

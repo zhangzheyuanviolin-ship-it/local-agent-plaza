@@ -151,7 +151,7 @@ fun ChatView(
     remember(
       currentMessages,
       selectedModel.name,
-      selectedModel.llmMaxContextLength,
+      selectedModel.getConfiguredContextWindow(),
       curSystemPrompt,
       modelManagerUiState.configValuesUpdateTrigger,
     ) {
@@ -576,8 +576,10 @@ private fun buildContextUsageSummary(
   messages: List<ChatMessage>,
   systemPrompt: String,
 ): ContextUsageSummary {
-  val maxContext =
-    model.llmMaxContextLength ?: return ContextUsageSummary(label = "", warning = false)
+  val maxContext = model.getConfiguredContextWindow()
+  if (maxContext <= 0) {
+    return ContextUsageSummary(label = "", warning = false)
+  }
   val reservedOutputTokens =
     model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = model.llmMaxToken)
 
