@@ -427,6 +427,7 @@ constructor(
         importedModels.removeAt(importedModelIndex)
       }
       dataStoreRepository.saveImportedModels(importedModels = importedModels)
+      dataStoreRepository.deleteSecret(getModelConfigSecretKey(model.name))
     }
     val newUiState =
       uiState.value.copy(
@@ -730,8 +731,10 @@ constructor(
       Log.d(TAG, "duplicated imported model found in data store. Removing it first")
       importedModels.removeAt(importedModelIndex)
     }
+    dataStoreRepository.deleteSecret(getModelConfigSecretKey(info.fileName))
     importedModels.add(info)
     dataStoreRepository.saveImportedModels(importedModels = importedModels)
+    persistModelConfigValues(model)
   }
 
   fun getTokenStatusAndData(): TokenStatusAndData {

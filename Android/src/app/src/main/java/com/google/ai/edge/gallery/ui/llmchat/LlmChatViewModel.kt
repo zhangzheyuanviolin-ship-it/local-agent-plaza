@@ -114,8 +114,8 @@ open class LlmChatViewModelBase(
         task = task,
         model = model,
         systemInstruction = Contents.of(newPrompt),
-        supportImage = true,
-        supportAudio = true,
+        supportImage = model.llmSupportImage,
+        supportAudio = model.llmSupportAudio,
         onDone = { addMessage(model, ChatMessageInfo(content = systemPromptUpdatedMessage)) },
       )
     }
