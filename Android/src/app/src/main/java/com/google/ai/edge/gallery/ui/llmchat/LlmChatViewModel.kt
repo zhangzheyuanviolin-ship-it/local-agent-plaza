@@ -121,6 +121,13 @@ open class LlmChatViewModelBase(
     }
   }
 
+  fun persistSystemPrompt(task: Task, newPrompt: String) {
+    _uiSystemPrompt.value = newPrompt
+    viewModelScope.launch {
+      systemPromptRepository?.updateSystemPrompt(task.id, newPrompt)
+    }
+  }
+
   fun generateResponse(
     model: Model,
     input: String,
