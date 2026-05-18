@@ -1181,7 +1181,7 @@ constructor(
       tasks[task.id] = task
     }
     addImportedModelsToTasks(tasks = tasks, modelDownloadStatus = modelDownloadStatus)
-    val selectedModel = resolveSelectedModelReference(activeTasks)
+    val selectedModel = resolveSelectedModelReference(activeTasks, EMPTY_MODEL)
     for (task in activeTasks) {
       for (model in task.models) {
         modelInstances[model.name] =
@@ -1238,10 +1238,7 @@ constructor(
     )
   }
 
-  private fun resolveSelectedModelReference(
-    tasks: Collection<Task>,
-    preferred: Model = uiState.value.selectedModel,
-  ): Model {
+  private fun resolveSelectedModelReference(tasks: Collection<Task>, preferred: Model): Model {
     val liveModels = tasks.asSequence().flatMap { it.models.asSequence() }.toList()
     if (liveModels.isEmpty()) {
       return EMPTY_MODEL
