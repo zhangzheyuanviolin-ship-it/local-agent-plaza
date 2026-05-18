@@ -748,6 +748,7 @@ constructor(
     importedModels.add(info)
     dataStoreRepository.saveImportedModels(importedModels = importedModels)
     persistModelConfigValues(model)
+    updateConfigValuesUpdateTrigger()
   }
 
   fun getTokenStatusAndData(): TokenStatusAndData {

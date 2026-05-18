@@ -17,6 +17,8 @@
 package com.google.ai.edge.gallery.data
 
 import androidx.annotation.StringRes
+import com.google.ai.edge.gallery.customtasks.agentchat.AgentConfigKeys
+import com.google.ai.edge.gallery.customtasks.agentchat.AgentToolModeValues
 import kotlin.math.abs
 
 /**
@@ -314,7 +316,7 @@ fun createLlmChatConfigs(
         sliderMax = maxOf(resolvedContextWindow, contextWindowSliderMax).toFloat(),
         defaultValue = resolvedContextWindow.toFloat(),
         valueType = ValueType.INT,
-        needReinitialization = false,
+        needReinitialization = true,
       )
     )
   }
@@ -359,6 +361,13 @@ fun createLlmChatConfigs(
       BooleanSwitchConfig(key = ConfigKeys.ENABLE_SPECULATIVE_DECODING, defaultValue = false)
     )
   }
+  configs.add(
+    SegmentedButtonConfig(
+      key = AgentConfigKeys.TOOL_MODE,
+      defaultValue = AgentToolModeValues.AUTO,
+      options = AgentToolModeValues.options,
+    )
+  )
   return configs
 }
 

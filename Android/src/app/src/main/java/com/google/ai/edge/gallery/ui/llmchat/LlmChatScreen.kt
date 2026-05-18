@@ -67,6 +67,7 @@ fun LlmChatScreen(
   taskId: String = BuiltInTaskId.LLM_CHAT,
   onFirstToken: (Model) -> Unit = {},
   onGenerateResponseDone: (Model) -> Unit = {},
+  onBeforeSendMessage: (Model, List<ChatMessage>) -> Unit = { _, _ -> },
   onStopButtonClickedOverride: ((Model) -> Unit)? = null,
   onInterceptPartialResult: (Model, String, Boolean, String?) -> Boolean = { _, _, _, _ -> false },
   onSkillClicked: () -> Unit = {},
@@ -91,6 +92,7 @@ fun LlmChatScreen(
     onSkillClicked = onSkillClicked,
     onFirstToken = onFirstToken,
     onGenerateResponseDone = onGenerateResponseDone,
+    onBeforeSendMessage = onBeforeSendMessage,
     onStopButtonClickedOverride = onStopButtonClickedOverride,
     onInterceptPartialResult = onInterceptPartialResult,
     onResetSessionClickedOverride = onResetSessionClickedOverride,
@@ -206,6 +208,7 @@ fun ChatViewWrapper(
   onSkillClicked: () -> Unit = {},
   onFirstToken: (Model) -> Unit = {},
   onGenerateResponseDone: (Model) -> Unit = {},
+  onBeforeSendMessage: (Model, List<ChatMessage>) -> Unit = { _, _ -> },
   onStopButtonClickedOverride: ((Model) -> Unit)? = null,
   onInterceptPartialResult: (Model, String, Boolean, String?) -> Boolean = { _, _, _, _ -> false },
   onResetSessionClickedOverride: ((Task, Model, List<ChatMessage>) -> Unit)? = null,
@@ -227,6 +230,7 @@ fun ChatViewWrapper(
     viewModel = viewModel,
     modelManagerViewModel = modelManagerViewModel,
     onSendMessage = { model, messages ->
+      onBeforeSendMessage(model, messages)
       for (message in messages) {
         viewModel.addMessage(model = model, message = message)
       }

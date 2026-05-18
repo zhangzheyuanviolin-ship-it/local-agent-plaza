@@ -49,6 +49,11 @@ open class AgentTools() : ToolSet {
   var resultImageToShow: CallJsSkillResultImage? = null
   var resultWebviewToShow: CallJsSkillResultWebview? = null
 
+  data class CompatToolExecutionResult(
+    val toolName: String,
+    val result: Map<String, Any?>,
+  )
+
   /** Loads skill. */
   @Tool(description = "Loads a skill.")
   fun loadSkill(
@@ -590,9 +595,130 @@ open class AgentTools() : ToolSet {
     }
   }
 
+  fun executeCompatToolCall(
+    toolName: String,
+    arguments: JSONObject,
+  ): CompatToolExecutionResult {
+    val normalizedToolName = toolName.trim().lowercase()
+    val result: Map<String, Any?> =
+      when (normalizedToolName) {
+        "load_skill" ->
+          loadSkill(
+              skillName =
+                getRequiredStringArgument(
+                  arguments = arguments,
+                  names = listOf("skill_name", "skillName"),
+                )
+            )
+            .mapValues { it.value }
+        "run_js" ->
+          runJs(
+              skillName =
+                getRequiredStringArgument(
+                  arguments = arguments,
+                  names = listOf("skill_name", "skillName"),
+                ),
+              scriptName =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("script_name", "scriptName"),
+                  defaultValue = "index.html",
+                ),
+              data =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("data"),
+                  defaultValue = "",
+                ),
+            )
+            .mapValues { it.value }
+        "run_intent" ->
+          runIntent(
+              intent =
+                getRequiredStringArgument(
+                  arguments = arguments,
+                  names = listOf("intent"),
+                ),
+              parameters =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("parameters"),
+                  defaultValue = "{}",
+                ),
+            )
+            .mapValues { it.value }
+        "run_configured_intent" ->
+          runConfiguredIntent(
+              skillName =
+                getRequiredStringArgument(
+                  arguments = arguments,
+                  names = listOf("skill_name", "skillName"),
+                ),
+              intent =
+                getRequiredStringArgument(
+                  arguments = arguments,
+                  names = listOf("intent"),
+                ),
+              parameters =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("parameters"),
+                  defaultValue = "{}",
+                ),
+            )
+            .mapValues { it.value }
+        "write_workspace_text_file" ->
+          writeWorkspaceTextFile(
+              path =
+                getRequiredStringArgument(
+                  arguments = arguments,
+                  names = listOf("path"),
+                ),
+              content =
+                getRequiredStringArgument(
+                  arguments = arguments,
+                  names = listOf("content"),
+                ),
+            )
+            .mapValues { it.value }
+        else ->
+          mapOf(
+            "status" to "failed",
+            "error" to "Unknown compatibility tool \"$toolName\".",
+            "recovery_hint" to "Retry with one of: load_skill, run_js, run_intent, run_configured_intent, write_workspace_text_file.",
+          )
+      }
+    return CompatToolExecutionResult(toolName = normalizedToolName, result = result)
+  }
+
   fun sendAgentAction(action: AgentAction) {
     runBlocking(Dispatchers.Default) { _actionChannel.send(action) }
   }
+}
+
+private fun getRequiredStringArgument(arguments: JSONObject, names: List<String>): String {
+  for (name in names) {
+    val value = arguments.optString(name).trim()
+    if (value.isNotEmpty()) {
+      return value
+    }
+  }
+  throw IllegalArgumentException("Missing required argument: ${names.first()}")
+}
+
+private fun getOptionalStringArgument(
+  arguments: JSONObject,
+  names: List<String>,
+  defaultValue: String,
+): String {
+  for (name in names) {
+    val rawValue = arguments.opt(name) ?: continue
+    val value = rawValue.toString().trim()
+    if (value.isNotEmpty()) {
+      return value
+    }
+  }
+  return defaultValue
 }
 
 private fun buildConfiguredIntentResult(

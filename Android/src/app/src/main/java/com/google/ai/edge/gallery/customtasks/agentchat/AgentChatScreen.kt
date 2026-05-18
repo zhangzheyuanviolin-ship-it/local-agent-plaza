@@ -51,8 +51,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +81,7 @@ import com.google.ai.edge.gallery.common.LOCAL_URL_BASE
 import com.google.ai.edge.gallery.common.SkillProgressAgentAction
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.ModelCapability
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.ui.common.BaseGalleryWebViewClient
@@ -100,11 +103,12 @@ import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 import com.google.ai.edge.litertlm.Message
-import com.google.ai.edge.litertlm.tool
 import java.lang.Exception
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.coroutines.resume
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
 
@@ -138,15 +142,173 @@ fun AgentChatScreen(
   var sendMessageTrigger by remember { mutableStateOf<SendMessageTrigger?>(null) }
   var showAlertForDisabledSkill by remember { mutableStateOf(false) }
   var disabledSkillName by remember { mutableStateOf("") }
+  val coroutineScope = rememberCoroutineScope()
+  val compatToolStepsByModel = remember { mutableStateMapOf<String, Int>() }
   LaunchedEffect(task) { viewModel.loadSystemPrompt(task) }
   val uiSystemPrompt by viewModel.uiSystemPrompt.collectAsState()
   LaunchedEffect(uiSystemPrompt) { curSystemPrompt = uiSystemPrompt }
+
+  val interceptPartialResult: (Model, String, Boolean, String?) -> Boolean =
+    { _, partialResult, _, partialThinkingResult ->
+      if (!partialThinkingResult.isNullOrEmpty()) {
+        false
+      } else if (!IntentHandler.hasPendingAssistantWrite()) {
+        false
+      } else {
+        IntentHandler.appendPendingAssistantWrite(context = context, contentChunk = partialResult)
+      }
+    }
+  val handleFirstToken: (Model) -> Unit = { model ->
+    AgentDiagnosticsLogger.log(
+      context = context,
+      category = "chat.first_token",
+      message = "First token received for model ${model.name}",
+    )
+    updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
+  }
+  val handleCompatError: (Model, String) -> Unit = { model, errorMessage ->
+    AgentDiagnosticsLogger.log(
+      context = context,
+      category = "chat.error",
+      message = "Inference error for model ${model.name}",
+      detail = errorMessage,
+    )
+    compatToolStepsByModel.remove(model.name)
+    viewModel.handleError(
+      context = context,
+      task = task,
+      model = model,
+      errorMessage = errorMessage,
+      modelManagerViewModel = modelManagerViewModel,
+    )
+  }
+  var continueCompatConversation: ((Model, String) -> Unit)? = null
+  val handleGenerationDone: (Model) -> Unit = handleGenerationDone@ { model ->
+    val lastAgentText =
+      viewModel.getLastMessageWithTypeAndSide(
+        model = model,
+        type = ChatMessageType.TEXT,
+        side = ChatSide.AGENT,
+      ) as? ChatMessageText
+    val pendingWriteResult =
+      IntentHandler.commitPendingAssistantWrite(context = context, content = lastAgentText?.content)
+    if (pendingWriteResult != null) {
+      if (lastAgentText != null) {
+        viewModel.removeLastMessage(model = model)
+      }
+      val savedMessage =
+        "已将上一条回复写入 ${pendingWriteResult.path}，共 ${pendingWriteResult.bytesWritten} 字节。"
+      viewModel.addMessage(model = model, message = ChatMessageInfo(content = savedMessage))
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "chat.pending_write_committed",
+        message = "Saved assistant reply to ${pendingWriteResult.path}",
+        detail = "bytes=${pendingWriteResult.bytesWritten}",
+      )
+    }
+    AgentDiagnosticsLogger.log(
+      context = context,
+      category = "chat.generation_done",
+      message = "Generation finished for model ${model.name}",
+    )
+    flushAgentToolArtifacts(
+      viewModel = viewModel,
+      model = model,
+      agentTools = agentTools,
+      screenWidthDp = screenWidthDp.value,
+    )
+
+    if (resolveAgentToolMode(model) == ResolvedAgentToolMode.COMPAT && lastAgentText != null) {
+      val parsedToolCall = parseCompatToolCall(lastAgentText.content)
+      if (parsedToolCall != null) {
+        val currentSteps = compatToolStepsByModel[model.name] ?: 0
+        if (currentSteps >= MAX_COMPAT_TOOL_STEPS) {
+          viewModel.removeLastMessage(model = model)
+          viewModel.addMessage(
+            model = model,
+            message =
+              ChatMessageInfo(
+                content = "兼容工具调用已停止：连续工具调用超过 $MAX_COMPAT_TOOL_STEPS 步。请调整提示词或改用原生模式。"
+              ),
+          )
+          compatToolStepsByModel.remove(model.name)
+          updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
+          return@handleGenerationDone
+        }
+        compatToolStepsByModel[model.name] = currentSteps + 1
+        viewModel.removeLastMessage(model = model)
+        viewModel.addMessage(
+          model = model,
+          message = ChatMessageInfo(content = "兼容工具调用：正在执行 ${parsedToolCall.toolName}。"),
+        )
+        coroutineScope.launch(Dispatchers.Default) {
+          val executionResult =
+            runCatching { agentTools.executeCompatToolCall(parsedToolCall.toolName, parsedToolCall.arguments) }
+              .getOrElse { throwable ->
+                AgentTools.CompatToolExecutionResult(
+                  toolName = parsedToolCall.toolName,
+                  result =
+                    mapOf(
+                      "status" to "failed",
+                      "error" to (throwable.message ?: "Compatibility tool execution failed."),
+                      "recovery_hint" to "检查工具参数后重试，或切换到原生模式。",
+                    ),
+                )
+              }
+          val summary = summarizeCompatToolResult(executionResult.result)
+          viewModel.addMessage(
+            model = model,
+            message =
+              ChatMessageInfo(
+                content =
+                  if (summary.isBlank()) {
+                    "兼容工具调用已完成：${executionResult.toolName}。"
+                  } else {
+                    "兼容工具调用已完成：${executionResult.toolName}，$summary"
+                  },
+              ),
+          )
+          flushAgentToolArtifacts(
+            viewModel = viewModel,
+            model = model,
+            agentTools = agentTools,
+            screenWidthDp = screenWidthDp.value,
+          )
+          updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
+          continueCompatConversation?.invoke(
+            model,
+            buildCompatToolResultPrompt(
+              toolName = executionResult.toolName,
+              result = executionResult.result,
+            ),
+          )
+        }
+        return@handleGenerationDone
+      }
+    }
+
+    compatToolStepsByModel.remove(model.name)
+    updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
+  }
+  continueCompatConversation = { model, input ->
+    viewModel.generateResponse(
+      model = model,
+      input = input,
+      onFirstToken = handleFirstToken,
+      onDone = { handleGenerationDone(model) },
+      onError = { errorMessage -> handleCompatError(model, errorMessage) },
+      allowThinking = task.allowCapability(ModelCapability.LLM_THINKING, model),
+      onInterceptPartialResult = interceptPartialResult,
+    )
+  }
 
   LlmChatScreen(
     modelManagerViewModel = modelManagerViewModel,
     taskId = BuiltInTaskId.LLM_AGENT_CHAT,
     navigateUp = navigateUp,
+    onBeforeSendMessage = { model, _ -> compatToolStepsByModel.remove(model.name) },
     onStopButtonClickedOverride = { model ->
+      compatToolStepsByModel.remove(model.name)
       viewModel.stopResponse(model = model)
       val pendingWriteResult = IntentHandler.commitPendingAssistantWrite(context = context)
       IntentHandler.clearPendingAssistantWrite()
@@ -168,94 +330,9 @@ fun AgentChatScreen(
         message = "User stopped the current task for model ${model.name}",
       )
     },
-    onInterceptPartialResult = { _, partialResult, _, partialThinkingResult ->
-      if (!partialThinkingResult.isNullOrEmpty()) {
-        false
-      } else if (!IntentHandler.hasPendingAssistantWrite()) {
-        false
-      } else {
-        IntentHandler.appendPendingAssistantWrite(context = context, contentChunk = partialResult)
-      }
-    },
-    onFirstToken = { model ->
-      AgentDiagnosticsLogger.log(
-        context = context,
-        category = "chat.first_token",
-        message = "First token received for model ${model.name}",
-      )
-      updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
-    },
-    onGenerateResponseDone = { model ->
-      val lastAgentText =
-        viewModel.getLastMessageWithTypeAndSide(
-          model = model,
-          type = ChatMessageType.TEXT,
-          side = ChatSide.AGENT,
-        ) as? ChatMessageText
-      val pendingWriteResult =
-        IntentHandler.commitPendingAssistantWrite(context = context, content = lastAgentText?.content)
-      if (pendingWriteResult != null) {
-        if (lastAgentText != null) {
-          viewModel.removeLastMessage(model = model)
-        }
-        val savedMessage =
-          "已将上一条回复写入 ${pendingWriteResult.path}，共 ${pendingWriteResult.bytesWritten} 字节。"
-        viewModel.addMessage(model = model, message = ChatMessageInfo(content = savedMessage))
-        AgentDiagnosticsLogger.log(
-          context = context,
-          category = "chat.pending_write_committed",
-          message = "Saved assistant reply to ${pendingWriteResult.path}",
-          detail = "bytes=${pendingWriteResult.bytesWritten}",
-        )
-      }
-      AgentDiagnosticsLogger.log(
-        context = context,
-        category = "chat.generation_done",
-        message = "Generation finished for model ${model.name}",
-      )
-      // Show any image produced by tools.
-      agentTools.resultImageToShow?.let { resultImage ->
-        resultImage.base64?.let { base64 ->
-          decodeBase64ToBitmap(base64String = base64)?.let { bitmap ->
-            viewModel.addMessage(
-              model = model,
-              message =
-                ChatMessageImage(
-                  bitmaps = listOf(bitmap),
-                  imageBitMaps = listOf(bitmap.asImageBitmap()),
-                  side = ChatSide.AGENT,
-                  maxSize = (screenWidthDp.value * 0.8).toInt(),
-                  latencyMs = -1.0f,
-                  hideSenderLabel = true,
-                ),
-            )
-          }
-        }
-        // Clean up.
-        agentTools.resultImageToShow = null
-      }
-
-      // Show any webview produced by tools.
-      agentTools.resultWebviewToShow?.let { webview ->
-        val url = webview.url ?: ""
-        val iframe = webview.iframe == true
-        val aspectRatio = webview.aspectRatio ?: 1.333f
-        viewModel.addMessage(
-          model = model,
-          message =
-            ChatMessageWebView(
-              url = url,
-              iframe = iframe,
-              aspectRatio = aspectRatio,
-              hideSenderLabel = true,
-            ),
-        )
-        // Clean up.
-        agentTools.resultWebviewToShow = null
-      }
-
-      updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
-    },
+    onInterceptPartialResult = interceptPartialResult,
+    onFirstToken = handleFirstToken,
+    onGenerateResponseDone = handleGenerationDone,
     onResetSessionClickedOverride = { task, _, initialMessages ->
       resetSessionWithCurrentSkills(
         viewModel,
@@ -768,18 +845,67 @@ private fun resetSessionWithCurrentSkills(
       }
     } else null
   }
+  val sessionConfig =
+    createAgentSessionConfig(
+      model = model,
+      baseSystemPrompt = curSystemPrompt,
+      skillManagerViewModel = skillManagerViewModel,
+    )
   viewModel.resetSession(
     task = task,
     model = model,
-    systemInstruction = skillManagerViewModel.injectSkills(curSystemPrompt),
-    tools = listOf(tool(agentTools)),
+    systemInstruction = sessionConfig.systemInstruction,
+    tools = if (sessionConfig.useNativeTools) listOf(com.google.ai.edge.litertlm.tool(agentTools)) else listOf(),
     supportImage = false,
     supportAudio = false,
     onDone = { onDone(model) },
-    enableConversationConstrainedDecoding =
-      shouldEnableNativeAgentConstrainedDecoding(model),
+    enableConversationConstrainedDecoding = sessionConfig.enableConversationConstrainedDecoding,
     initialMessages = litertMessages,
   )
+}
+
+private fun flushAgentToolArtifacts(
+  viewModel: LlmChatViewModel,
+  model: Model,
+  agentTools: AgentTools,
+  screenWidthDp: Float,
+) {
+  agentTools.resultImageToShow?.let { resultImage ->
+    resultImage.base64?.let { base64 ->
+      decodeBase64ToBitmap(base64String = base64)?.let { bitmap ->
+        viewModel.addMessage(
+          model = model,
+          message =
+            ChatMessageImage(
+              bitmaps = listOf(bitmap),
+              imageBitMaps = listOf(bitmap.asImageBitmap()),
+              side = ChatSide.AGENT,
+              maxSize = (screenWidthDp * 0.8f).toInt(),
+              latencyMs = -1.0f,
+              hideSenderLabel = true,
+            ),
+        )
+      }
+    }
+    agentTools.resultImageToShow = null
+  }
+
+  agentTools.resultWebviewToShow?.let { webview ->
+    val url = webview.url ?: ""
+    val iframe = webview.iframe == true
+    val aspectRatio = webview.aspectRatio ?: 1.333f
+    viewModel.addMessage(
+      model = model,
+      message =
+        ChatMessageWebView(
+          url = url,
+          iframe = iframe,
+          aspectRatio = aspectRatio,
+          hideSenderLabel = true,
+        ),
+    )
+    agentTools.resultWebviewToShow = null
+  }
 }
 
 class ChatWebViewJavascriptInterface {

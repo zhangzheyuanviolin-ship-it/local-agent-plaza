@@ -27,7 +27,6 @@ import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.litertlm.Contents
-import com.google.ai.edge.litertlm.tool
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -35,8 +34,6 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
-
-internal fun shouldEnableNativeAgentConstrainedDecoding(model: Model): Boolean = !model.imported
 
 class AgentChatTask @Inject constructor() : CustomTask {
   private val agentTools = AgentTools()
@@ -83,6 +80,12 @@ class AgentChatTask @Inject constructor() : CustomTask {
   ) {
     val systemPrompt = systemInstruction?.toString() ?: task.defaultSystemPrompt
     agentTools.skillManagerViewModel.loadSkills {
+      val sessionConfig =
+        createAgentSessionConfig(
+          model = model,
+          baseSystemPrompt = systemPrompt,
+          skillManagerViewModel = agentTools.skillManagerViewModel,
+        )
       LlmChatModelHelper.initialize(
         context = context,
         model = model,
@@ -90,10 +93,9 @@ class AgentChatTask @Inject constructor() : CustomTask {
         supportImage = false,
         supportAudio = false,
         onDone = onDone,
-        systemInstruction = agentTools.skillManagerViewModel.injectSkills(systemPrompt),
-        tools = listOf(tool(agentTools)),
-        enableConversationConstrainedDecoding =
-          shouldEnableNativeAgentConstrainedDecoding(model),
+        systemInstruction = sessionConfig.systemInstruction,
+        tools = if (sessionConfig.useNativeTools) listOf(com.google.ai.edge.litertlm.tool(agentTools)) else listOf(),
+        enableConversationConstrainedDecoding = sessionConfig.enableConversationConstrainedDecoding,
       )
     }
   }
