@@ -82,6 +82,7 @@ fun LlmChatScreen(
   showImagePicker: Boolean = false,
   showAudioPicker: Boolean = false,
   getActiveSkills: () -> List<String> = { emptyList() },
+  transformOutgoingText: (Model, String) -> String = { _, text -> text },
 ) {
   ChatViewWrapper(
     viewModel = viewModel,
@@ -105,6 +106,7 @@ fun LlmChatScreen(
     showImagePicker = showImagePicker,
     showAudioPicker = showAudioPicker,
     getActiveSkills = getActiveSkills,
+    transformOutgoingText = transformOutgoingText,
   )
 }
 
@@ -221,6 +223,7 @@ fun ChatViewWrapper(
   showImagePicker: Boolean = false,
   showAudioPicker: Boolean = false,
   getActiveSkills: () -> List<String> = { emptyList() },
+  transformOutgoingText: (Model, String) -> String = { _, text -> text },
 ) {
   val context = LocalContext.current
   val task = modelManagerViewModel.getTaskById(id = taskId)!!
@@ -250,19 +253,20 @@ fun ChatViewWrapper(
         }
       }
       if ((text.isNotEmpty() && chatMessageText != null) || audioMessages.isNotEmpty()) {
+        val runtimeText = if (text.isNotEmpty()) transformOutgoingText(model, text) else text
         AgentDiagnosticsLogger.log(
           context = context,
           category = "chat.send_message",
           message = "Submitting message to model ${model.name}",
           detail =
-            "text=${text.take(1000)} | images=${images.size} | audio=${audioMessages.size} | skills=${getActiveSkills().joinToString(",")}",
+            "text=${text.take(1000)} | runtime_text=${runtimeText.take(1000)} | images=${images.size} | audio=${audioMessages.size} | skills=${getActiveSkills().joinToString(",")}",
         )
         if (text.isNotEmpty()) {
           modelManagerViewModel.addTextInputHistory(text)
         }
         viewModel.generateResponse(
           model = model,
-          input = text,
+          input = runtimeText,
           images = images,
           audioMessages = audioMessages,
           onFirstToken = onFirstToken,
@@ -310,7 +314,18 @@ fun ChatViewWrapper(
       if (message is ChatMessageText) {
         viewModel.runAgain(
           model = model,
-          message = message,
+          message =
+            if (message.side == ChatSide.USER) {
+              ChatMessageText(
+                content = transformOutgoingText(model, message.content),
+                side = message.side,
+                latencyMs = message.latencyMs,
+                accelerator = message.accelerator,
+                hideSenderLabel = message.hideSenderLabel,
+              )
+            } else {
+              message
+            },
           onError = { errorMessage ->
             viewModel.handleError(
               context = context,

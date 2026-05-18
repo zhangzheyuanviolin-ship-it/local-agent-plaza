@@ -147,6 +147,15 @@ fun AgentChatScreen(
   LaunchedEffect(task) { viewModel.loadSystemPrompt(task) }
   val uiSystemPrompt by viewModel.uiSystemPrompt.collectAsState()
   LaunchedEffect(uiSystemPrompt) { curSystemPrompt = uiSystemPrompt }
+  val buildCompatInstructionPayload = { model: Model ->
+    createAgentSessionConfig(
+      model = model,
+      baseSystemPrompt = curSystemPrompt,
+      skillManagerViewModel = skillManagerViewModel,
+    )
+      .compatInstructionPayload
+      .orEmpty()
+  }
 
   val interceptPartialResult: (Model, String, Boolean, String?) -> Boolean =
     { _, partialResult, _, partialThinkingResult ->
@@ -291,9 +300,20 @@ fun AgentChatScreen(
     updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
   }
   continueCompatConversation = { model, input ->
+    val compatInstructionPayload = buildCompatInstructionPayload(model)
     viewModel.generateResponse(
       model = model,
-      input = input,
+      input =
+        if (resolveAgentToolMode(model) == ResolvedAgentToolMode.COMPAT &&
+          compatInstructionPayload.isNotBlank()
+        ) {
+          buildCompatContinuationInput(
+            continuationPayload = input,
+            compatInstructionPayload = compatInstructionPayload,
+          )
+        } else {
+          input
+        },
       onFirstToken = handleFirstToken,
       onDone = { handleGenerationDone(model) },
       onError = { errorMessage -> handleCompatError(model, errorMessage) },
@@ -307,6 +327,17 @@ fun AgentChatScreen(
     taskId = BuiltInTaskId.LLM_AGENT_CHAT,
     navigateUp = navigateUp,
     onBeforeSendMessage = { model, _ -> compatToolStepsByModel.remove(model.name) },
+    transformOutgoingText = { model, text ->
+      val compatInstructionPayload = buildCompatInstructionPayload(model)
+      if (
+        resolveAgentToolMode(model) == ResolvedAgentToolMode.COMPAT &&
+          compatInstructionPayload.isNotBlank()
+      ) {
+        buildCompatUserInput(userInput = text, compatInstructionPayload = compatInstructionPayload)
+      } else {
+        text
+      }
+    },
     onStopButtonClickedOverride = { model ->
       compatToolStepsByModel.remove(model.name)
       viewModel.stopResponse(model = model)

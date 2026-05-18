@@ -44,9 +44,10 @@ data class ParsedCompatToolCall(
 
 data class AgentSessionConfig(
   val resolvedMode: ResolvedAgentToolMode,
-  val systemInstruction: com.google.ai.edge.litertlm.Contents,
+  val systemInstruction: com.google.ai.edge.litertlm.Contents?,
   val enableConversationConstrainedDecoding: Boolean,
   val useNativeTools: Boolean,
+  val compatInstructionPayload: String?,
 )
 
 object AgentConfigKeys {
@@ -102,21 +103,48 @@ fun createAgentSessionConfig(
         systemInstruction = skillManagerViewModel.injectSkills(baseSystemPrompt),
         enableConversationConstrainedDecoding = shouldEnableNativeAgentConstrainedDecoding(model),
         useNativeTools = true,
+        compatInstructionPayload = null,
       )
     ResolvedAgentToolMode.COMPAT ->
       AgentSessionConfig(
         resolvedMode = resolvedMode,
-        systemInstruction =
-          com.google.ai.edge.litertlm.Contents.of(
-            buildCompatAgentSystemPrompt(
-              baseSystemPrompt = baseSystemPrompt,
-              selectedSkills = skillManagerViewModel.getSelectedSkills(),
-            )
-          ),
+        systemInstruction = null,
         enableConversationConstrainedDecoding = false,
         useNativeTools = false,
+        compatInstructionPayload =
+          buildCompatAgentInstructionPayload(
+            baseSystemPrompt = baseSystemPrompt,
+            selectedSkills = skillManagerViewModel.getSelectedSkills(),
+          ),
       )
   }
+}
+
+fun buildCompatUserInput(
+  userInput: String,
+  compatInstructionPayload: String,
+): String {
+  return """
+COMPAT_AGENT_INSTRUCTIONS
+$compatInstructionPayload
+
+USER_REQUEST
+$userInput
+"""
+    .trimIndent()
+}
+
+fun buildCompatContinuationInput(
+  continuationPayload: String,
+  compatInstructionPayload: String,
+): String {
+  return """
+COMPAT_AGENT_INSTRUCTIONS
+$compatInstructionPayload
+
+$continuationPayload
+"""
+    .trimIndent()
 }
 
 fun buildCompatToolResultPrompt(toolName: String, result: Map<String, Any?>): String {
@@ -184,7 +212,10 @@ fun parseCompatToolCall(rawText: String): ParsedCompatToolCall? {
   return ParsedCompatToolCall(toolName = toolName.trim(), arguments = arguments)
 }
 
-private fun buildCompatAgentSystemPrompt(baseSystemPrompt: String, selectedSkills: List<Skill>): String {
+private fun buildCompatAgentInstructionPayload(
+  baseSystemPrompt: String,
+  selectedSkills: List<Skill>,
+): String {
   val selectedSkillsList =
     selectedSkills.joinToString(separator = "\n") { "- ${it.name}: ${it.description}" }
       .ifBlank { "- 暂无已启用技能。" }
