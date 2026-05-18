@@ -431,7 +431,7 @@ constructor(
     }
     val replacementSelectedModel =
       if (uiState.value.selectedModel.name == model.name) {
-        resolveSelectedModelReference(uiState.value.tasks)
+        resolveSelectedModelReference(uiState.value.tasks, uiState.value.selectedModel)
       } else {
         uiState.value.selectedModel
       }
