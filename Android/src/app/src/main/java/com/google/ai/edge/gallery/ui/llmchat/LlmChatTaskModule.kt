@@ -39,9 +39,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.google.ai.edge.gallery.R
-import com.google.ai.edge.gallery.customtasks.agentchat.AgentTools
-import com.google.ai.edge.gallery.customtasks.agentchat.rememberCompatToolChatBindings
-import com.google.ai.edge.gallery.customtasks.agentchat.shouldEnableCompatToolsForChat
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
 import com.google.ai.edge.gallery.data.BuiltInTaskId
@@ -64,8 +61,6 @@ import kotlinx.coroutines.CoroutineScope
 // AI Chat.
 
 class LlmChatTask @Inject constructor() : CustomTask {
-  private val compatAgentTools = AgentTools()
-
   override val task: Task =
     Task(
       id = BuiltInTaskId.LLM_CHAT,
@@ -88,38 +83,16 @@ class LlmChatTask @Inject constructor() : CustomTask {
     systemInstruction: Contents?,
     onDone: (String) -> Unit,
   ) {
-    val skillManagerViewModel =
-      runCatching { compatAgentTools.skillManagerViewModel }.getOrNull()
-    if (skillManagerViewModel != null) {
-      skillManagerViewModel.loadSkills {
-        model.runtimeHelper.initialize(
-          context = context,
-          model = model,
-          taskId = task.id,
-          supportImage = false,
-          supportAudio = false,
-          onDone = onDone,
-          coroutineScope = coroutineScope,
-          systemInstruction =
-            if (shouldEnableCompatToolsForChat(model = model, skillManagerViewModel = skillManagerViewModel)) {
-              null
-            } else {
-              systemInstruction
-            },
-        )
-      }
-    } else {
-      model.runtimeHelper.initialize(
-        context = context,
-        model = model,
-        taskId = task.id,
-        supportImage = false,
-        supportAudio = false,
-        onDone = onDone,
-        coroutineScope = coroutineScope,
-        systemInstruction = systemInstruction,
-      )
-    }
+    model.runtimeHelper.initialize(
+      context = context,
+      model = model,
+      taskId = task.id,
+      supportImage = false,
+      supportAudio = false,
+      onDone = onDone,
+      coroutineScope = coroutineScope,
+      systemInstruction = systemInstruction,
+    )
   }
 
   override fun cleanUpModelFn(
@@ -138,14 +111,6 @@ class LlmChatTask @Inject constructor() : CustomTask {
     LaunchedEffect(task) { viewModel.loadSystemPrompt(task) }
     val uiSystemPrompt by viewModel.uiSystemPrompt.collectAsState()
     val systemPromptUpdatedMessage = stringResource(R.string.system_prompt_updated)
-    val compatBindings =
-      rememberCompatToolChatBindings(
-        task = task,
-        curSystemPrompt = uiSystemPrompt,
-        viewModel = viewModel,
-        modelManagerViewModel = myData.modelManagerViewModel,
-        agentTools = compatAgentTools,
-      )
     LlmChatScreen(
       modelManagerViewModel = myData.modelManagerViewModel,
       navigateUp = myData.onNavUp,
@@ -154,22 +119,13 @@ class LlmChatTask @Inject constructor() : CustomTask {
       curSystemPrompt = uiSystemPrompt,
       onSystemPromptChanged = { newPrompt ->
         val selectedModel = myData.modelManagerViewModel.uiState.value.selectedModel
-        compatBindings.handleSystemPromptChanged(
-          task,
-          selectedModel,
-          newPrompt,
-          systemPromptUpdatedMessage,
+        viewModel.applySystemPromptChange(
+          task = task,
+          model = selectedModel,
+          newPrompt = newPrompt,
+          systemPromptUpdatedMessage = systemPromptUpdatedMessage,
         )
       },
-      onBeforeSendMessage = compatBindings.onBeforeSendMessage,
-      onGenerateResponseDone = compatBindings.onGenerateResponseDone,
-      onStopButtonClickedOverride = compatBindings.onStopButtonClickedOverride,
-      onSkillClicked = compatBindings.onSkillClicked,
-      onResetSessionClickedOverride = compatBindings.onResetSessionClickedOverride,
-      composableBelowMessageList = compatBindings.composableBelowMessageList,
-      getActiveSkills = compatBindings.getActiveSkills,
-      transformOutgoingText = compatBindings.transformOutgoingText,
-      showSkillsPicker = compatBindings.showSkillsPicker,
       emptyStateComposable = {
         Box(modifier = Modifier.fillMaxSize()) {
           Column(

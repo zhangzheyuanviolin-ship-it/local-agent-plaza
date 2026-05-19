@@ -81,7 +81,6 @@ fun LlmChatScreen(
   sendMessageTrigger: SendMessageTrigger? = null,
   showImagePicker: Boolean = false,
   showAudioPicker: Boolean = false,
-  showSkillsPicker: Boolean = false,
   getActiveSkills: () -> List<String> = { emptyList() },
   transformOutgoingText: (Model, String) -> String = { _, text -> text },
 ) {
@@ -106,7 +105,6 @@ fun LlmChatScreen(
     sendMessageTrigger = sendMessageTrigger,
     showImagePicker = showImagePicker,
     showAudioPicker = showAudioPicker,
-    showSkillsPicker = showSkillsPicker,
     getActiveSkills = getActiveSkills,
     transformOutgoingText = transformOutgoingText,
   )
@@ -224,7 +222,6 @@ fun ChatViewWrapper(
   sendMessageTrigger: SendMessageTrigger? = null,
   showImagePicker: Boolean = false,
   showAudioPicker: Boolean = false,
-  showSkillsPicker: Boolean = false,
   getActiveSkills: () -> List<String> = { emptyList() },
   transformOutgoingText: (Model, String) -> String = { _, text -> text },
 ) {
@@ -385,7 +382,6 @@ fun ChatViewWrapper(
     onSystemPromptChanged = onSystemPromptChanged,
     sendMessageTrigger = sendMessageTrigger,
     showAudioPicker = showAudioPicker,
-    showSkillsPicker = showSkillsPicker,
   )
 }
 

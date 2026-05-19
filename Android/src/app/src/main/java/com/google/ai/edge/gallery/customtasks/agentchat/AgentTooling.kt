@@ -112,37 +112,12 @@ fun createAgentSessionConfig(
         enableConversationConstrainedDecoding = false,
         useNativeTools = false,
         compatInstructionPayload =
-          buildCompatInstructionPayload(
+          buildCompatAgentInstructionPayload(
             baseSystemPrompt = baseSystemPrompt,
             selectedSkills = skillManagerViewModel.getSelectedSkills(),
-            modeDescription =
-              "You are currently running in compatibility tool mode because this model is not using Google native tool calling for this session.",
           ),
       )
   }
-}
-
-fun shouldEnableCompatToolsForChat(
-  model: Model,
-  skillManagerViewModel: SkillManagerViewModel,
-): Boolean {
-  return skillManagerViewModel.getSelectedSkills().isNotEmpty()
-}
-
-fun buildCompatChatInstructionPayload(
-  model: Model,
-  baseSystemPrompt: String,
-  skillManagerViewModel: SkillManagerViewModel,
-): String {
-  if (!shouldEnableCompatToolsForChat(model = model, skillManagerViewModel = skillManagerViewModel)) {
-    return ""
-  }
-  return buildCompatInstructionPayload(
-    baseSystemPrompt = baseSystemPrompt,
-    selectedSkills = skillManagerViewModel.getSelectedSkills(),
-    modeDescription =
-      "You are running inside the standard AI chat screen with app-managed compatibility tools instead of Google native tool calling.",
-  )
 }
 
 fun buildCompatUserInput(
@@ -237,10 +212,9 @@ fun parseCompatToolCall(rawText: String): ParsedCompatToolCall? {
   return ParsedCompatToolCall(toolName = toolName.trim(), arguments = arguments)
 }
 
-private fun buildCompatInstructionPayload(
+private fun buildCompatAgentInstructionPayload(
   baseSystemPrompt: String,
   selectedSkills: List<Skill>,
-  modeDescription: String,
 ): String {
   val selectedSkillsList =
     selectedSkills.joinToString(separator = "\n") { "- ${it.name}: ${it.description}" }
@@ -249,7 +223,7 @@ private fun buildCompatInstructionPayload(
   return """
 $basePromptWithSkills
 
-$modeDescription
+You are currently running in compatibility tool mode because this model is not using Google native tool calling for this session.
 
 When you need to use a tool, reply with exactly one tool call block and nothing else:
 $TOOL_CALL_OPEN_TAG
