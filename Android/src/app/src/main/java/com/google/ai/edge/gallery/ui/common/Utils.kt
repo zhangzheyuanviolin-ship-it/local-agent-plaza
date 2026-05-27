@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.google.ai.edge.gallery.BuildConfig
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
@@ -159,7 +160,7 @@ fun Context.createTempPictureUri(
 
   return FileProvider.getUriForFile(
     applicationContext,
-    "com.google.ai.edge.gallery.provider" /* {applicationId}.provider */,
+    "${BuildConfig.APPLICATION_ID}.provider",
     tempFile,
   )
 }

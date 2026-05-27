@@ -86,7 +86,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data android:scheme="com.zhanglaoshi.androidlocalagent.gallery" />
+                <data android:scheme="${appDeepLinkScheme}" />
             </intent-filter>
         </activity>
 

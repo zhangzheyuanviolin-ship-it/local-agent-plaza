@@ -29,6 +29,7 @@ import com.google.ai.edge.gallery.common.ProjectConfig
 import com.google.ai.edge.gallery.common.SystemPromptHelper
 import com.google.ai.edge.gallery.common.getJsonResponse
 import com.google.ai.edge.gallery.common.isAICoreSupported
+import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NARRATION
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.BuiltInTaskId
@@ -178,6 +179,7 @@ private val RESET_CONVERSATION_TURN_COUNT_CONFIG =
 private val PREDEFINED_LLM_TASK_ORDER =
   listOf(
     BuiltInTaskId.LLM_ASK_IMAGE,
+    TASK_ID_VISION_NARRATION,
     BuiltInTaskId.LLM_ASK_AUDIO,
     BuiltInTaskId.LLM_CHAT,
     BuiltInTaskId.LLM_AGENT_CHAT,
@@ -675,6 +677,7 @@ constructor(
       mutableSetOf(
         BuiltInTaskId.LLM_CHAT,
         BuiltInTaskId.LLM_ASK_IMAGE,
+        TASK_ID_VISION_NARRATION,
         BuiltInTaskId.LLM_ASK_AUDIO,
         BuiltInTaskId.LLM_PROMPT_LAB,
         BuiltInTaskId.LLM_TINY_GARDEN,
@@ -690,10 +693,12 @@ constructor(
       }
       if (
         (task.id == BuiltInTaskId.LLM_ASK_IMAGE && model.llmSupportImage) ||
+          (task.id == TASK_ID_VISION_NARRATION && model.llmSupportImage) ||
           (task.id == BuiltInTaskId.LLM_ASK_AUDIO && model.llmSupportAudio) ||
           (task.id == BuiltInTaskId.LLM_TINY_GARDEN && model.llmSupportTinyGarden) ||
           (task.id == BuiltInTaskId.LLM_MOBILE_ACTIONS && model.llmSupportMobileActions) ||
           (task.id != BuiltInTaskId.LLM_ASK_IMAGE &&
+            task.id != TASK_ID_VISION_NARRATION &&
             task.id != BuiltInTaskId.LLM_ASK_AUDIO &&
             task.id != BuiltInTaskId.LLM_TINY_GARDEN &&
             task.id != BuiltInTaskId.LLM_MOBILE_ACTIONS)
@@ -1052,6 +1057,9 @@ constructor(
               model.configs = newConfigs
             }
           }
+          if (allowedModel.taskTypes.contains(BuiltInTaskId.LLM_ASK_IMAGE)) {
+            curTasks.find { it.id == TASK_ID_VISION_NARRATION }?.models?.add(model)
+          }
         }
 
         // Find models from allowlist if a task's `modelNames` field is not empty.
@@ -1328,6 +1336,7 @@ constructor(
       addModelIfMissing(BuiltInTaskId.LLM_AGENT_CHAT)
       if (model.llmSupportImage) {
         addModelIfMissing(BuiltInTaskId.LLM_ASK_IMAGE)
+        addModelIfMissing(TASK_ID_VISION_NARRATION)
       }
       if (model.llmSupportAudio) {
         addModelIfMissing(BuiltInTaskId.LLM_ASK_AUDIO)

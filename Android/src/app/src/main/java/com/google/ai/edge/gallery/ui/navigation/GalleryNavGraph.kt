@@ -69,6 +69,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.google.ai.edge.gallery.BuildConfig
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskData
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
@@ -445,7 +446,7 @@ fun GalleryNavHost(
   if (data != null) {
     intent.data = null
     Log.d(TAG, "navigation link clicked: $data")
-    if (data.toString().startsWith("com.google.ai.edge.gallery://model/")) {
+    if (data.toString().startsWith("${BuildConfig.APPLICATION_ID}://model/")) {
       if (data.pathSegments.size >= 2) {
         val taskId = data.pathSegments.get(data.pathSegments.size - 2)
         val modelName = data.pathSegments.last()
@@ -455,7 +456,7 @@ fun GalleryNavHost(
       } else {
         Log.e(TAG, "Malformed deep link URI received: $data")
       }
-    } else if (data.toString() == "com.google.ai.edge.gallery://global_model_manager") {
+    } else if (data.toString() == "${BuildConfig.APPLICATION_ID}://global_model_manager") {
       navController.navigate(ROUTE_MODEL_MANAGER)
     }
   }
