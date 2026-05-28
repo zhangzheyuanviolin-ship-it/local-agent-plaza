@@ -233,7 +233,16 @@
   <string name="aichat_emptystate_title" translatable="false">AI Chat</string>
   <string name="aichat_emptystate_content" translatable="false">Chat with on-device large language models.</string>
   <string name="vision_narration_page_intro" translatable="false">Continuously capture the current camera scene and ask a local vision model to describe the environment. Each request is reset before inference so image history and old context do not accumulate.</string>
-  <string name="vision_narration_default_prompt" translatable="false">Please describe the current camera scene in concise natural Chinese, focusing on the surroundings, major objects, people, obstacles, and the information most important to a blind or low-vision user. If the image is unclear or incomplete, say so directly.</string>
+  <string name="vision_narration_default_prompt" translatable="false">Please describe the current camera scene in concise natural Chinese, focusing on the surroundings, major objects, people, and possible obstacles. If the image is unclear or incomplete, say so directly.</string>
+  <string name="vision_narration_default_prompt_name" translatable="false">Default prompt</string>
+  <string name="vision_narration_prompt_section_title" translatable="false">Visual prompt</string>
+  <string name="vision_narration_prompt_selected_summary" translatable="false">Current prompt: %1$s</string>
+  <string name="vision_narration_prompt_manage_button" translatable="false">Manage visual prompts</string>
+  <string name="vision_narration_tts_title" translatable="false">Automatic read aloud</string>
+  <string name="vision_narration_tts_helper" translatable="false">Use Android system speech to read each visual description aloud.</string>
+  <string name="vision_narration_tts_toggle" translatable="false">Automatic read aloud switch</string>
+  <string name="vision_narration_tts_mode_after_complete" translatable="false">Speak after full response</string>
+  <string name="vision_narration_tts_mode_during_generation" translatable="false">Speak during generation</string>
   <string name="vision_narration_prompt_label" translatable="false">Description prompt</string>
   <string name="vision_narration_prompt_placeholder" translatable="false">Leave blank to use the default accessibility prompt</string>
   <string name="vision_narration_prompt_helper" translatable="false">When left blank, the app will use this default prompt: %1$s</string>
@@ -247,19 +256,50 @@
   <string name="vision_narration_status_ready" translatable="false">Ready</string>
   <string name="vision_narration_status_waiting_for_frame" translatable="false">Waiting for the next frame</string>
   <string name="vision_narration_status_describing" translatable="false">Describing the current scene</string>
+  <string name="vision_narration_status_speaking" translatable="false">Reading the latest description aloud</string>
   <string name="vision_narration_status_stopped" translatable="false">Stopped</string>
   <string name="vision_narration_status_no_model" translatable="false">Please select and initialize a downloaded vision model first</string>
   <string name="vision_narration_status_countdown" translatable="false">The next frame will be captured in %1$d seconds</string>
   <string name="vision_narration_status_content_description" translatable="false">Status: %1$s</string>
+  <string name="vision_narration_status_tts_unavailable" translatable="false">System text-to-speech is unavailable, so descriptions will only be shown as text.</string>
   <string name="vision_narration_latest_title" translatable="false">Latest description</string>
   <string name="vision_narration_latest_placeholder" translatable="false">No description yet</string>
   <string name="vision_narration_latest_content_description" translatable="false">Latest description: %1$s</string>
   <string name="vision_narration_history_title" translatable="false">Recent history</string>
   <string name="vision_narration_history_empty" translatable="false">No results yet</string>
+  <string name="vision_narration_export_button" translatable="false">Export history</string>
+  <string name="vision_narration_export_subject" translatable="false">Vision narration history</string>
+  <string name="vision_narration_export_chooser" translatable="false">Export narration history</string>
+  <string name="vision_narration_export_error" translatable="false">Unable to export the current narration history.</string>
+  <string name="vision_narration_export_title" translatable="false">Vision narration history</string>
+  <string name="vision_narration_export_generated_at" translatable="false">Generated at: %1$s</string>
+  <string name="vision_narration_export_model_prompt" translatable="false">Prompt: %1$s</string>
+  <string name="vision_narration_export_record_time" translatable="false">Time: %1$s</string>
+  <string name="vision_narration_export_record_mode" translatable="false">Mode: %1$s</string>
   <string name="vision_narration_capture_mode_auto" translatable="false">Auto</string>
   <string name="vision_narration_capture_mode_manual" translatable="false">Manual</string>
   <string name="vision_narration_history_content_description" translatable="false">Time %1$s, mode %2$s, description %3$s</string>
+  <string name="vision_narration_prompt_back" translatable="false">Back</string>
+  <string name="vision_narration_prompt_manager_title" translatable="false">Visual prompt manager</string>
+  <string name="vision_narration_prompt_current_title" translatable="false">Current selection</string>
+  <string name="vision_narration_prompt_use_default" translatable="false">Use default prompt</string>
+  <string name="vision_narration_prompt_add_button" translatable="false">Create a new prompt</string>
+  <string name="vision_narration_prompt_empty" translatable="false">No custom prompts yet. You can create one, or keep using the default prompt.</string>
+  <string name="vision_narration_prompt_selected" translatable="false">Selected</string>
+  <string name="vision_narration_prompt_select" translatable="false">Select</string>
+  <string name="vision_narration_prompt_delete_title" translatable="false">Delete visual prompt</string>
+  <string name="vision_narration_prompt_delete_message" translatable="false">Delete this saved visual prompt?</string>
+  <string name="vision_narration_prompt_create_title" translatable="false">Create visual prompt</string>
+  <string name="vision_narration_prompt_edit_title" translatable="false">Edit visual prompt</string>
+  <string name="vision_narration_prompt_name_label" translatable="false">Prompt name</string>
+  <string name="vision_narration_prompt_content_label" translatable="false">Prompt content</string>
+  <string name="vision_narration_prompt_save" translatable="false">Save</string>
+  <string name="vision_narration_prompt_create" translatable="false">Create</string>
+  <string name="vision_narration_migrated_prompt_name" translatable="false">Migrated prompt</string>
   <string name="vision_narration_error_prefix" translatable="false">Error: %1$s</string>
+  <string name="common_cancel" translatable="false">Cancel</string>
+  <string name="common_delete" translatable="false">Delete</string>
+  <string name="common_edit" translatable="false">Edit</string>
   <string name="add_script" translatable="false">Add script</string>
   <string name="add_default_script" translatable="false">Add default script</string>
   <string name="add_skill" translatable="false">Add skill</string>
