@@ -238,6 +238,8 @@
   <string name="vision_narration_prompt_section_title" translatable="false">Visual prompt</string>
   <string name="vision_narration_prompt_selected_summary" translatable="false">Current prompt: %1$s</string>
   <string name="vision_narration_prompt_manage_button" translatable="false">Manage visual prompts</string>
+  <string name="vision_narration_advanced_settings_button" translatable="false">Advanced settings</string>
+  <string name="vision_narration_advanced_settings_title" translatable="false">Advanced settings</string>
   <string name="vision_narration_tts_title" translatable="false">Automatic read aloud</string>
   <string name="vision_narration_tts_helper" translatable="false">Use Android system speech to read each visual description aloud.</string>
   <string name="vision_narration_tts_toggle" translatable="false">Automatic read aloud switch</string>

@@ -59,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -89,10 +90,8 @@ fun VisionNarrationScreen(
       model.llmSupportImage &&
       modelManagerUiState.isModelInitialized(model = model)
   val previewLabel = stringResource(R.string.vision_narration_preview_label)
-  val statusLabel = stringResource(R.string.vision_narration_status_label)
   val noModelStatus = stringResource(R.string.vision_narration_status_no_model)
   val latestPlaceholder = stringResource(R.string.vision_narration_latest_placeholder)
-  val latestTitle = stringResource(R.string.vision_narration_latest_title)
   val historyTitle = stringResource(R.string.vision_narration_history_title)
   val historyEmpty = stringResource(R.string.vision_narration_history_empty)
   val latestDescriptionText =
@@ -100,14 +99,13 @@ fun VisionNarrationScreen(
       uiState.latestCompletedDescription.ifBlank { latestPlaceholder }
     }
   val statusText = if (canUseModel) uiState.statusText else noModelStatus
-  val statusContentDescription =
-    stringResource(R.string.vision_narration_status_content_description, statusText)
-  val latestContentDescription =
-    stringResource(R.string.vision_narration_latest_content_description, latestDescriptionText)
+  val hasLatestNarration =
+    uiState.latestStreamingDescription.isNotBlank() || uiState.latestCompletedDescription.isNotBlank()
   val ttsToggleContentDescription = stringResource(R.string.vision_narration_tts_toggle)
   val settingsLocked = uiState.autoRunning || uiState.inProgress || uiState.isSpeaking
 
   var showPromptManager by rememberSaveable { mutableStateOf(false) }
+  var showAdvancedSettings by rememberSaveable { mutableStateOf(false) }
   var promptDialogVisible by rememberSaveable { mutableStateOf(false) }
   var promptDialogEditingId by rememberSaveable { mutableStateOf<String?>(null) }
   var draftPromptTitle by rememberSaveable { mutableStateOf("") }
@@ -249,6 +247,21 @@ fun VisionNarrationScreen(
     return
   }
 
+  if (showAdvancedSettings) {
+    VisionAdvancedSettingsPage(
+      bottomPadding = bottomPadding,
+      uiState = uiState,
+      statusText = statusText,
+      settingsLocked = settingsLocked,
+      ttsToggleContentDescription = ttsToggleContentDescription,
+      onBack = { showAdvancedSettings = false },
+      onUpdateInterval = viewModel::updateIntervalSeconds,
+      onToggleAutoSpeak = viewModel::updateAutoSpeakEnabled,
+      onUpdateSpeechMode = viewModel::updateSpeechMode,
+    )
+    return
+  }
+
   Column(
     modifier =
       Modifier.fillMaxSize()
@@ -287,31 +300,6 @@ fun VisionNarrationScreen(
         renderPreview = true,
         cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
       )
-    }
-
-    Card(
-      modifier =
-        Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
-          liveRegion = LiveRegionMode.Polite
-          contentDescription = statusContentDescription
-        },
-      shape = RoundedCornerShape(20.dp),
-    ) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        Text(
-          text = statusLabel,
-          style = MaterialTheme.typography.labelLarge,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-          text = statusText,
-          style = MaterialTheme.typography.bodyLarge,
-          fontWeight = FontWeight.Medium,
-        )
-      }
     }
 
     Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
@@ -353,83 +341,16 @@ fun VisionNarrationScreen(
       }
     }
 
-    Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Column(modifier = Modifier.weight(1f)) {
-            Text(
-              text = stringResource(R.string.vision_narration_tts_title),
-              style = MaterialTheme.typography.labelLarge,
-            )
-            Text(
-              text = stringResource(R.string.vision_narration_tts_helper),
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-          }
-          Switch(
-            checked = uiState.autoSpeakEnabled,
-            onCheckedChange = viewModel::updateAutoSpeakEnabled,
-            enabled = !settingsLocked,
-            modifier =
-              Modifier.semantics {
-                contentDescription = ttsToggleContentDescription
-              },
-          )
-        }
-        if (uiState.autoSpeakEnabled) {
-          FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            VisionSpeechMode.entries.forEach { speechMode ->
-              FilterChip(
-                selected = uiState.speechMode == speechMode,
-                onClick = { viewModel.updateSpeechMode(speechMode) },
-                enabled = !settingsLocked,
-                label = {
-                  Text(
-                    text =
-                      if (speechMode == VisionSpeechMode.AFTER_COMPLETE) {
-                        stringResource(R.string.vision_narration_tts_mode_after_complete)
-                      } else {
-                        stringResource(R.string.vision_narration_tts_mode_during_generation)
-                      }
-                  )
-                },
-              )
-            }
-          }
-        }
-      }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    FilledTonalButton(
+      onClick = { showAdvancedSettings = true },
+      enabled = !settingsLocked,
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      Icon(Icons.Outlined.Settings, contentDescription = null)
       Text(
-        text = stringResource(R.string.vision_narration_interval_label),
-        style = MaterialTheme.typography.labelLarge,
+        text = stringResource(R.string.vision_narration_advanced_settings_button),
+        modifier = Modifier.padding(start = 8.dp),
       )
-      FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        for (seconds in VISION_INTERVALS) {
-          FilterChip(
-            selected = uiState.intervalSeconds == seconds,
-            onClick = { viewModel.updateIntervalSeconds(seconds) },
-            label = {
-              Text(stringResource(R.string.vision_narration_interval_seconds, seconds))
-            },
-          )
-        }
-      }
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
@@ -478,21 +399,18 @@ fun VisionNarrationScreen(
 
     Card(
       modifier =
-        Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
-          liveRegion = LiveRegionMode.Polite
-          contentDescription = latestContentDescription
+        Modifier.fillMaxWidth().clearAndSetSemantics {
+          if (hasLatestNarration) {
+            liveRegion = LiveRegionMode.Polite
+            contentDescription = latestDescriptionText
+          }
         },
       shape = RoundedCornerShape(20.dp),
     ) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp),
       ) {
-        Text(
-          text = latestTitle,
-          style = MaterialTheme.typography.labelLarge,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         SelectionContainer {
           Text(
             text = latestDescriptionText,
@@ -551,6 +469,152 @@ fun VisionNarrationScreen(
             }
           }
         }
+      }
+    }
+  }
+}
+
+@Composable
+private fun VisionAdvancedSettingsPage(
+  bottomPadding: Dp,
+  uiState: VisionNarrationUiState,
+  statusText: String,
+  settingsLocked: Boolean,
+  ttsToggleContentDescription: String,
+  onBack: () -> Unit,
+  onUpdateInterval: (Int) -> Unit,
+  onToggleAutoSpeak: (Boolean) -> Unit,
+  onUpdateSpeechMode: (VisionSpeechMode) -> Unit,
+) {
+  Column(
+    modifier =
+      Modifier.fillMaxSize()
+        .verticalScroll(rememberScrollState())
+        .padding(horizontal = 16.dp)
+        .padding(top = 12.dp, bottom = bottomPadding + 24.dp),
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      OutlinedButton(onClick = onBack) {
+        Icon(Icons.Outlined.ArrowBack, contentDescription = null)
+        Text(
+          text = stringResource(R.string.vision_narration_prompt_back),
+          modifier = Modifier.padding(start = 8.dp),
+        )
+      }
+      Text(
+        text = stringResource(R.string.vision_narration_advanced_settings_title),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+      )
+    }
+
+    Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        Text(
+          text = stringResource(R.string.vision_narration_tts_title),
+          style = MaterialTheme.typography.labelLarge,
+        )
+        Text(
+          text = stringResource(R.string.vision_narration_tts_helper),
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = stringResource(R.string.vision_narration_tts_toggle),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+          )
+          Switch(
+            checked = uiState.autoSpeakEnabled,
+            onCheckedChange = onToggleAutoSpeak,
+            enabled = !settingsLocked,
+            modifier =
+              Modifier.semantics {
+                contentDescription = ttsToggleContentDescription
+              },
+          )
+        }
+        if (uiState.autoSpeakEnabled) {
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            VisionSpeechMode.entries.forEach { speechMode ->
+              FilterChip(
+                selected = uiState.speechMode == speechMode,
+                onClick = { onUpdateSpeechMode(speechMode) },
+                enabled = !settingsLocked,
+                label = {
+                  Text(
+                    text =
+                      if (speechMode == VisionSpeechMode.AFTER_COMPLETE) {
+                        stringResource(R.string.vision_narration_tts_mode_after_complete)
+                      } else {
+                        stringResource(R.string.vision_narration_tts_mode_during_generation)
+                      }
+                  )
+                },
+              )
+            }
+          }
+        }
+      }
+    }
+
+    Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Text(
+          text = stringResource(R.string.vision_narration_interval_label),
+          style = MaterialTheme.typography.labelLarge,
+        )
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          for (seconds in VISION_INTERVALS) {
+            FilterChip(
+              selected = uiState.intervalSeconds == seconds,
+              onClick = { onUpdateInterval(seconds) },
+              enabled = !settingsLocked,
+              label = {
+                Text(stringResource(R.string.vision_narration_interval_seconds, seconds))
+              },
+            )
+          }
+        }
+      }
+    }
+
+    Card(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Text(
+          text = stringResource(R.string.vision_narration_status_label),
+          style = MaterialTheme.typography.labelLarge,
+        )
+        Text(
+          text = statusText,
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
       }
     }
   }

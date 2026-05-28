@@ -214,6 +214,8 @@
   <string name="vision_narration_prompt_section_title">视觉提示词</string>
   <string name="vision_narration_prompt_selected_summary">当前提示词：%1$s</string>
   <string name="vision_narration_prompt_manage_button">管理视觉提示词</string>
+  <string name="vision_narration_advanced_settings_button">高级设置</string>
+  <string name="vision_narration_advanced_settings_title">高级设置</string>
   <string name="vision_narration_tts_title">自动语音播报</string>
   <string name="vision_narration_tts_helper">使用安卓系统语音引擎自动朗读每一轮视觉描述结果。</string>
   <string name="vision_narration_tts_toggle">自动语音播报开关</string>

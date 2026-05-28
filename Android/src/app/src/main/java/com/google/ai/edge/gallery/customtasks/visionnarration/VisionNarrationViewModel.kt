@@ -61,6 +61,7 @@ private const val INTERVAL_SECRET_KEY = "vision_narration_interval_seconds"
 private const val AUTO_SPEAK_SECRET_KEY = "vision_narration_auto_speak_enabled"
 private const val SPEECH_MODE_SECRET_KEY = "vision_narration_speech_mode"
 private const val MAX_HISTORY_SIZE = 20
+private const val STREAMING_SPEECH_FALLBACK_CHARS = 24
 private val INTERVAL_OPTIONS = setOf(1, 2, 3, 5, 10)
 private val STREAMING_SPEECH_BOUNDARIES = charArrayOf('。', '！', '？', '.', '!', '?', ';', '；', ':', '：', '\n')
 
@@ -122,6 +123,7 @@ constructor(
   private var pendingSpeechRequestId: Long? = null
   private var pendingSpeechMode: VisionCaptureMode? = null
   private var pendingSpeechDescription: String? = null
+  private var completedInferenceRequestId: Long? = null
   private var streamingSpeechConsumedLength = 0
   private var streamingSpeechRemainder = ""
 
@@ -142,6 +144,17 @@ constructor(
   }
 
   fun updateAutoSpeakEnabled(enabled: Boolean) {
+    if (enabled && !ttsReady.get()) {
+      dataStoreRepository.saveSecret(AUTO_SPEAK_SECRET_KEY, false.toString())
+      _uiState.update {
+        it.copy(
+          autoSpeakEnabled = false,
+          isSpeaking = false,
+          statusText = context.getString(R.string.vision_narration_status_tts_unavailable),
+        )
+      }
+      return
+    }
     _uiState.update { it.copy(autoSpeakEnabled = enabled) }
     dataStoreRepository.saveSecret(AUTO_SPEAK_SECRET_KEY, enabled.toString())
     if (!enabled) {
@@ -248,6 +261,7 @@ constructor(
     pendingCaptureMode = null
     nextCaptureAllowedAtMs = 0L
     captureGate.set(false)
+    clearCompletedInferenceRequest()
     clearPendingSpeechState()
     stopSpeechPlayback()
     if (model != null && model.name.isNotEmpty()) {
@@ -327,10 +341,13 @@ constructor(
                       context.getString(R.string.vision_narration_status_ready)
                     } else {
                       context.getString(R.string.vision_narration_status_describing)
-                    },
+                  },
                 )
               }
 
+              if (done) {
+                completedInferenceRequestId = requestId
+              }
               if (uiState.value.autoSpeakEnabled) {
                 handleSpeechUpdate(
                   requestId = requestId,
@@ -344,7 +361,11 @@ constructor(
             }
           },
           cleanUpListener = {
-            if (activeRequestId == requestId && (_uiState.value.inProgress || _uiState.value.isSpeaking)) {
+            if (
+              activeRequestId == requestId &&
+                completedInferenceRequestId != requestId &&
+                (_uiState.value.inProgress || _uiState.value.isSpeaking)
+            ) {
               finalizeStoppedRequest(requestId)
             }
           },
@@ -416,8 +437,11 @@ constructor(
     textToSpeech =
       TextToSpeech(context) { status ->
         if (status == TextToSpeech.SUCCESS) {
-          ttsReady.set(true)
-          textToSpeech?.language = Locale.getDefault()
+          val languageStatus = textToSpeech?.setLanguage(Locale.getDefault())
+          val languageReady =
+            languageStatus != TextToSpeech.LANG_MISSING_DATA &&
+              languageStatus != TextToSpeech.LANG_NOT_SUPPORTED
+          ttsReady.set(languageReady)
           textToSpeech?.setOnUtteranceProgressListener(
             object : UtteranceProgressListener() {
               override fun onStart(utteranceId: String?) {
@@ -449,8 +473,26 @@ constructor(
               }
             }
           )
+          if (!languageReady) {
+            dataStoreRepository.saveSecret(AUTO_SPEAK_SECRET_KEY, false.toString())
+            _uiState.update {
+              it.copy(
+                autoSpeakEnabled = false,
+                isSpeaking = false,
+                statusText = context.getString(R.string.vision_narration_status_tts_unavailable),
+              )
+            }
+          }
         } else {
           ttsReady.set(false)
+          dataStoreRepository.saveSecret(AUTO_SPEAK_SECRET_KEY, false.toString())
+          _uiState.update {
+            it.copy(
+              autoSpeakEnabled = false,
+              isSpeaking = false,
+              statusText = context.getString(R.string.vision_narration_status_tts_unavailable),
+            )
+          }
         }
       }
   }
@@ -532,7 +574,7 @@ constructor(
         streamingSpeechConsumedLength = cleanedResponse.length
         if (appendedText.isNotEmpty()) {
           streamingSpeechRemainder += appendedText
-          val splitIndex = findLastSpeakableBoundary(streamingSpeechRemainder)
+          val splitIndex = resolveStreamingSpeakableSplitIndex(streamingSpeechRemainder)
           if (splitIndex > 0) {
             val speakable = streamingSpeechRemainder.substring(0, splitIndex)
             streamingSpeechRemainder = streamingSpeechRemainder.substring(splitIndex)
@@ -607,6 +649,7 @@ constructor(
     stopSpeechPlayback()
     activeSpeechSessionId = requestId
     speechQueuedCount = 0
+    clearCompletedInferenceRequest()
     clearPendingSpeechState()
   }
 
@@ -626,12 +669,25 @@ constructor(
     return 0
   }
 
+  private fun resolveStreamingSpeakableSplitIndex(text: String): Int {
+    val boundaryIndex = findLastSpeakableBoundary(text)
+    if (boundaryIndex > 0) {
+      return boundaryIndex
+    }
+    return if (text.length >= STREAMING_SPEECH_FALLBACK_CHARS) {
+      STREAMING_SPEECH_FALLBACK_CHARS
+    } else {
+      0
+    }
+  }
+
   private fun finalizeRequest(requestId: Long, mode: VisionCaptureMode, description: String) {
     if (activeRequestId != requestId) {
       return
     }
     val now = System.currentTimeMillis()
     captureGate.set(false)
+    clearCompletedInferenceRequest()
     val newEntry = VisionNarrationEntry(timestampMs = now, mode = mode, description = description)
     _uiState.update { current ->
       current.copy(
@@ -657,6 +713,7 @@ constructor(
       return
     }
     captureGate.set(false)
+    clearCompletedInferenceRequest()
     stopSpeechPlayback()
     clearPendingSpeechState()
     _uiState.update {
@@ -678,6 +735,7 @@ constructor(
       return
     }
     captureGate.set(false)
+    clearCompletedInferenceRequest()
     stopSpeechPlayback()
     clearPendingSpeechState()
     _uiState.update {
@@ -691,12 +749,18 @@ constructor(
   }
 
   private fun reportTtsUnavailable() {
+    dataStoreRepository.saveSecret(AUTO_SPEAK_SECRET_KEY, false.toString())
     _uiState.update {
       it.copy(
+        autoSpeakEnabled = false,
         isSpeaking = false,
         statusText = context.getString(R.string.vision_narration_status_tts_unavailable),
       )
     }
+  }
+
+  private fun clearCompletedInferenceRequest() {
+    completedInferenceRequestId = null
   }
 
   private fun buildHistoryExportText(): String {
