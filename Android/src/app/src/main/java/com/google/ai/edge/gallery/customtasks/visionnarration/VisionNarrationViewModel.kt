@@ -118,6 +118,7 @@ constructor(
 
   private var textToSpeech: TextToSpeech? = null
   private val ttsReady = AtomicBoolean(false)
+  private val ttsInitializationInFlight = AtomicBoolean(false)
   private var activeSpeechSessionId: Long = 0L
   private var speechQueuedCount = 0
   private var pendingSpeechRequestId: Long? = null
@@ -144,23 +145,14 @@ constructor(
   }
 
   fun updateAutoSpeakEnabled(enabled: Boolean) {
-    if (enabled && !ttsReady.get()) {
-      dataStoreRepository.saveSecret(AUTO_SPEAK_SECRET_KEY, false.toString())
-      _uiState.update {
-        it.copy(
-          autoSpeakEnabled = false,
-          isSpeaking = false,
-          statusText = context.getString(R.string.vision_narration_status_tts_unavailable),
-        )
-      }
-      return
-    }
     _uiState.update { it.copy(autoSpeakEnabled = enabled) }
     dataStoreRepository.saveSecret(AUTO_SPEAK_SECRET_KEY, enabled.toString())
-    if (!enabled) {
-      stopSpeechPlayback()
-      finalizePendingSpeechIfNeeded()
+    if (enabled) {
+      initializeTextToSpeech(forceRecreate = textToSpeech == null || !ttsReady.get())
+      return
     }
+    stopSpeechPlayback()
+    finalizePendingSpeechIfNeeded()
   }
 
   fun updateSpeechMode(mode: VisionSpeechMode) {
@@ -433,15 +425,25 @@ constructor(
     textToSpeech = null
   }
 
-  private fun initializeTextToSpeech() {
+  private fun initializeTextToSpeech(forceRecreate: Boolean = false) {
+    if (forceRecreate) {
+      textToSpeech?.stop()
+      textToSpeech?.shutdown()
+      textToSpeech = null
+      ttsReady.set(false)
+    } else if (textToSpeech != null && (ttsReady.get() || ttsInitializationInFlight.get())) {
+      return
+    }
+    if (!ttsInitializationInFlight.compareAndSet(false, true)) {
+      return
+    }
     textToSpeech =
       TextToSpeech(context) { status ->
+        ttsInitializationInFlight.set(false)
         if (status == TextToSpeech.SUCCESS) {
-          val languageStatus = textToSpeech?.setLanguage(Locale.getDefault())
-          val languageReady =
-            languageStatus != TextToSpeech.LANG_MISSING_DATA &&
-              languageStatus != TextToSpeech.LANG_NOT_SUPPORTED
-          ttsReady.set(languageReady)
+          val tts = textToSpeech
+          val languageConfigured = configurePreferredTtsLanguage(tts)
+          ttsReady.set(tts != null)
           textToSpeech?.setOnUtteranceProgressListener(
             object : UtteranceProgressListener() {
               override fun onStart(utteranceId: String?) {
@@ -473,28 +475,65 @@ constructor(
               }
             }
           )
-          if (!languageReady) {
-            dataStoreRepository.saveSecret(AUTO_SPEAK_SECRET_KEY, false.toString())
+          Log.i(
+            TAG,
+            "TextToSpeech initialized. languageConfigured=$languageConfigured locale=${Locale.getDefault()}",
+          )
+          if (uiState.value.autoSpeakEnabled) {
             _uiState.update {
               it.copy(
-                autoSpeakEnabled = false,
+                statusText =
+                  when {
+                    it.isSpeaking -> context.getString(R.string.vision_narration_status_speaking)
+                    it.inProgress -> context.getString(R.string.vision_narration_status_describing)
+                    else -> context.getString(R.string.vision_narration_status_ready)
+                  },
+              )
+            }
+          }
+          maybeSpeakPendingDescriptionAfterInitialization()
+        } else {
+          ttsReady.set(false)
+          Log.w(TAG, "TextToSpeech initialization failed with status=$status")
+          if (uiState.value.autoSpeakEnabled) {
+            _uiState.update {
+              it.copy(
                 isSpeaking = false,
                 statusText = context.getString(R.string.vision_narration_status_tts_unavailable),
               )
             }
           }
-        } else {
-          ttsReady.set(false)
-          dataStoreRepository.saveSecret(AUTO_SPEAK_SECRET_KEY, false.toString())
-          _uiState.update {
-            it.copy(
-              autoSpeakEnabled = false,
-              isSpeaking = false,
-              statusText = context.getString(R.string.vision_narration_status_tts_unavailable),
-            )
-          }
+          finalizePendingSpeechIfNeeded()
         }
       }
+  }
+
+  private fun configurePreferredTtsLanguage(tts: TextToSpeech?): Boolean {
+    if (tts == null) {
+      return false
+    }
+    val localeCandidates =
+      linkedSetOf(
+        Locale.getDefault(),
+        Locale.SIMPLIFIED_CHINESE,
+        Locale.CHINESE,
+        Locale.US,
+      )
+    localeCandidates.forEach { locale ->
+      runCatching {
+          val status = tts.setLanguage(locale)
+          Log.d(TAG, "TextToSpeech setLanguage($locale) -> $status")
+          if (status != TextToSpeech.LANG_MISSING_DATA &&
+            status != TextToSpeech.LANG_NOT_SUPPORTED
+          ) {
+            return true
+          }
+        }
+        .onFailure { error ->
+          Log.w(TAG, "TextToSpeech setLanguage($locale) failed", error)
+        }
+    }
+    return false
   }
 
   private fun handleSpeechUtteranceFinished(utteranceId: String?) {
@@ -605,6 +644,7 @@ constructor(
     }
     val tts = textToSpeech
     if (tts == null || !ttsReady.get()) {
+      initializeTextToSpeech(forceRecreate = tts == null)
       return false
     }
     val queueMode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
@@ -623,7 +663,23 @@ constructor(
       }
       return true
     }
+    Log.w(TAG, "TextToSpeech speak returned non-success result=$result")
+    initializeTextToSpeech(forceRecreate = true)
     return false
+  }
+
+  private fun maybeSpeakPendingDescriptionAfterInitialization() {
+    if (!uiState.value.autoSpeakEnabled || !ttsReady.get()) {
+      return
+    }
+    if (speechQueuedCount > 0 || uiState.value.isSpeaking) {
+      return
+    }
+    val pendingDescription = pendingSpeechDescription ?: return
+    if (!enqueueSpeech(pendingDescription, flush = true)) {
+      reportTtsUnavailable()
+      finalizePendingSpeechIfNeeded()
+    }
   }
 
   private fun finalizePendingSpeechIfNeeded() {
@@ -749,10 +805,9 @@ constructor(
   }
 
   private fun reportTtsUnavailable() {
-    dataStoreRepository.saveSecret(AUTO_SPEAK_SECRET_KEY, false.toString())
+    ttsReady.set(false)
     _uiState.update {
       it.copy(
-        autoSpeakEnabled = false,
         isSpeaking = false,
         statusText = context.getString(R.string.vision_narration_status_tts_unavailable),
       )
