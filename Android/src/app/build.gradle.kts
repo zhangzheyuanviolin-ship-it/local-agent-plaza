@@ -38,8 +38,8 @@ android {
     applicationId = testApplicationId
     minSdk = 31
     targetSdk = 35
-    versionCode = 2026060404
-    versionName = "1.0.13-ala.31-visiontest"
+    versionCode = 2026060405
+    versionName = "1.0.13-ala.32-visiontest"
 
     // Needed for HuggingFace auth workflows.
     // Use the scheme of the "Redirect URLs" in HuggingFace app.
