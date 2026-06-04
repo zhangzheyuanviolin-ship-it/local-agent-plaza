@@ -16,10 +16,13 @@
 
 package com.google.ai.edge.gallery.customtasks.visionnarration
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -64,6 +67,12 @@ private const val MAX_HISTORY_SIZE = 20
 private const val STREAMING_SPEECH_FALLBACK_CHARS = 24
 private val INTERVAL_OPTIONS = setOf(1, 2, 3, 5, 10)
 private val STREAMING_SPEECH_BOUNDARIES = charArrayOf('。', '！', '？', '.', '!', '?', ';', '；', ':', '：', '\n')
+
+private enum class SpeechEnqueueResult {
+  QUEUED,
+  WAITING_FOR_INITIALIZATION,
+  FAILED,
+}
 
 enum class VisionCaptureMode {
   AUTO,
@@ -124,6 +133,9 @@ constructor(
   private var pendingSpeechRequestId: Long? = null
   private var pendingSpeechMode: VisionCaptureMode? = null
   private var pendingSpeechDescription: String? = null
+  private var pendingSpeechAwaitingInitialization = false
+  private var pendingManualSpeechText: String? = null
+  private var pendingManualSpeechAwaitingInitialization = false
   private var completedInferenceRequestId: Long? = null
   private var streamingSpeechConsumedLength = 0
   private var streamingSpeechRemainder = ""
@@ -414,6 +426,42 @@ constructor(
     return context.getString(R.string.vision_narration_default_prompt)
   }
 
+  fun copyDescription(text: String) {
+    val description = text.trim()
+    if (description.isBlank()) {
+      return
+    }
+    val clipboardManager = context.getSystemService(ClipboardManager::class.java) ?: return
+    clipboardManager.setPrimaryClip(
+      ClipData.newPlainText(context.getString(R.string.vision_narration_export_subject), description)
+    )
+  }
+
+  fun readDescriptionAloud(text: String) {
+    val description = sanitizeNarrationText(text)
+    if (description.isBlank()) {
+      return
+    }
+    pendingManualSpeechText = description
+    pendingManualSpeechAwaitingInitialization = false
+    stopSpeechPlayback()
+    activeSpeechSessionId = requestIdGenerator.incrementAndGet()
+    when (enqueueSpeech(description, flush = true)) {
+      SpeechEnqueueResult.QUEUED -> {
+        pendingManualSpeechText = null
+        pendingManualSpeechAwaitingInitialization = false
+      }
+      SpeechEnqueueResult.WAITING_FOR_INITIALIZATION -> {
+        pendingManualSpeechAwaitingInitialization = true
+      }
+      SpeechEnqueueResult.FAILED -> {
+        pendingManualSpeechText = null
+        pendingManualSpeechAwaitingInitialization = false
+        reportTtsUnavailable()
+      }
+    }
+  }
+
   fun formatTimestamp(timestampMs: Long): String {
     return formatter.format(Instant.ofEpochMilli(timestampMs))
   }
@@ -437,8 +485,11 @@ constructor(
     if (!ttsInitializationInFlight.compareAndSet(false, true)) {
       return
     }
-    textToSpeech =
-      TextToSpeech(context) { status ->
+    val defaultEngine =
+      Settings.Secure.getString(context.contentResolver, Settings.Secure.TTS_DEFAULT_SYNTH)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+    val listener: (Int) -> Unit = { status ->
         ttsInitializationInFlight.set(false)
         if (status == TextToSpeech.SUCCESS) {
           val tts = textToSpeech
@@ -477,7 +528,7 @@ constructor(
           )
           Log.i(
             TAG,
-            "TextToSpeech initialized. languageConfigured=$languageConfigured locale=${Locale.getDefault()}",
+            "TextToSpeech initialized. engine=$defaultEngine languageConfigured=$languageConfigured locale=${Locale.getDefault()}",
           )
           if (uiState.value.autoSpeakEnabled) {
             _uiState.update {
@@ -488,24 +539,29 @@ constructor(
                     it.inProgress -> context.getString(R.string.vision_narration_status_describing)
                     else -> context.getString(R.string.vision_narration_status_ready)
                   },
-              )
+                )
             }
           }
-          maybeSpeakPendingDescriptionAfterInitialization()
+          maybeSpeakPendingTextAfterInitialization()
         } else {
           ttsReady.set(false)
-          Log.w(TAG, "TextToSpeech initialization failed with status=$status")
-          if (uiState.value.autoSpeakEnabled) {
-            _uiState.update {
-              it.copy(
-                isSpeaking = false,
-                statusText = context.getString(R.string.vision_narration_status_tts_unavailable),
-              )
-            }
-          }
-          finalizePendingSpeechIfNeeded()
+          Log.w(TAG, "TextToSpeech initialization failed with status=$status engine=$defaultEngine")
+          handlePendingSpeechInitializationFailure()
         }
       }
+    try {
+      textToSpeech =
+        if (defaultEngine != null) {
+          TextToSpeech(context, listener, defaultEngine)
+        } else {
+          TextToSpeech(context, listener)
+        }
+    } catch (e: Exception) {
+      ttsInitializationInFlight.set(false)
+      ttsReady.set(false)
+      Log.e(TAG, "Failed to create TextToSpeech instance", e)
+      handlePendingSpeechInitializationFailure()
+    }
   }
 
   private fun configurePreferredTtsLanguage(tts: TextToSpeech?): Boolean {
@@ -599,9 +655,18 @@ constructor(
           pendingSpeechRequestId = requestId
           pendingSpeechMode = mode
           pendingSpeechDescription = cleanedResponse
-          if (!enqueueSpeech(cleanedResponse, flush = true)) {
-            reportTtsUnavailable()
-            finalizePendingSpeechIfNeeded()
+          when (enqueueSpeech(cleanedResponse, flush = true)) {
+            SpeechEnqueueResult.QUEUED -> {
+              pendingSpeechAwaitingInitialization = false
+            }
+            SpeechEnqueueResult.WAITING_FOR_INITIALIZATION -> {
+              pendingSpeechAwaitingInitialization = true
+            }
+            SpeechEnqueueResult.FAILED -> {
+              pendingSpeechAwaitingInitialization = false
+              reportTtsUnavailable()
+              finalizePendingSpeechIfNeeded()
+            }
           }
         }
       }
@@ -616,8 +681,17 @@ constructor(
           val splitIndex = resolveStreamingSpeakableSplitIndex(streamingSpeechRemainder)
           if (splitIndex > 0) {
             val speakable = streamingSpeechRemainder.substring(0, splitIndex)
-            streamingSpeechRemainder = streamingSpeechRemainder.substring(splitIndex)
-            enqueueSpeech(speakable, flush = false)
+            when (enqueueSpeech(speakable, flush = false)) {
+              SpeechEnqueueResult.QUEUED -> {
+                streamingSpeechRemainder = streamingSpeechRemainder.substring(splitIndex)
+              }
+              SpeechEnqueueResult.WAITING_FOR_INITIALIZATION -> {
+                pendingSpeechAwaitingInitialization = true
+              }
+              SpeechEnqueueResult.FAILED -> {
+                reportTtsUnavailable()
+              }
+            }
           }
         }
         if (done) {
@@ -625,10 +699,17 @@ constructor(
           pendingSpeechMode = mode
           pendingSpeechDescription = cleanedResponse
           if (streamingSpeechRemainder.isNotBlank()) {
-            val didQueue = enqueueSpeech(streamingSpeechRemainder, flush = false)
-            streamingSpeechRemainder = ""
-            if (!didQueue) {
-              reportTtsUnavailable()
+            when (enqueueSpeech(streamingSpeechRemainder, flush = false)) {
+              SpeechEnqueueResult.QUEUED -> {
+                streamingSpeechRemainder = ""
+                pendingSpeechAwaitingInitialization = false
+              }
+              SpeechEnqueueResult.WAITING_FOR_INITIALIZATION -> {
+                pendingSpeechAwaitingInitialization = true
+              }
+              SpeechEnqueueResult.FAILED -> {
+                reportTtsUnavailable()
+              }
             }
           }
           finalizePendingSpeechIfNeeded()
@@ -637,15 +718,15 @@ constructor(
     }
   }
 
-  private fun enqueueSpeech(text: String, flush: Boolean): Boolean {
+  private fun enqueueSpeech(text: String, flush: Boolean): SpeechEnqueueResult {
     val normalized = text.trim()
     if (normalized.isEmpty()) {
-      return false
+      return SpeechEnqueueResult.FAILED
     }
     val tts = textToSpeech
     if (tts == null || !ttsReady.get()) {
       initializeTextToSpeech(forceRecreate = tts == null)
-      return false
+      return SpeechEnqueueResult.WAITING_FOR_INITIALIZATION
     }
     val queueMode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
     if (flush) {
@@ -661,24 +742,54 @@ constructor(
           statusText = context.getString(R.string.vision_narration_status_speaking),
         )
       }
-      return true
+      return SpeechEnqueueResult.QUEUED
     }
     Log.w(TAG, "TextToSpeech speak returned non-success result=$result")
     initializeTextToSpeech(forceRecreate = true)
-    return false
+    return SpeechEnqueueResult.WAITING_FOR_INITIALIZATION
   }
 
-  private fun maybeSpeakPendingDescriptionAfterInitialization() {
-    if (!uiState.value.autoSpeakEnabled || !ttsReady.get()) {
+  private fun maybeSpeakPendingTextAfterInitialization() {
+    if (!ttsReady.get()) {
       return
     }
     if (speechQueuedCount > 0 || uiState.value.isSpeaking) {
       return
     }
+    val manualText = pendingManualSpeechText
+    if (manualText != null) {
+      when (enqueueSpeech(manualText, flush = true)) {
+        SpeechEnqueueResult.QUEUED -> {
+          pendingManualSpeechText = null
+          pendingManualSpeechAwaitingInitialization = false
+        }
+        SpeechEnqueueResult.WAITING_FOR_INITIALIZATION -> {
+          pendingManualSpeechAwaitingInitialization = true
+          return
+        }
+        SpeechEnqueueResult.FAILED -> {
+          pendingManualSpeechText = null
+          pendingManualSpeechAwaitingInitialization = false
+          reportTtsUnavailable()
+        }
+      }
+    }
+    if (!uiState.value.autoSpeakEnabled) {
+      return
+    }
     val pendingDescription = pendingSpeechDescription ?: return
-    if (!enqueueSpeech(pendingDescription, flush = true)) {
-      reportTtsUnavailable()
-      finalizePendingSpeechIfNeeded()
+    when (enqueueSpeech(pendingDescription, flush = true)) {
+      SpeechEnqueueResult.QUEUED -> {
+        pendingSpeechAwaitingInitialization = false
+      }
+      SpeechEnqueueResult.WAITING_FOR_INITIALIZATION -> {
+        pendingSpeechAwaitingInitialization = true
+      }
+      SpeechEnqueueResult.FAILED -> {
+        pendingSpeechAwaitingInitialization = false
+        reportTtsUnavailable()
+        finalizePendingSpeechIfNeeded()
+      }
     }
   }
 
@@ -686,6 +797,9 @@ constructor(
     val requestId = pendingSpeechRequestId ?: return
     val mode = pendingSpeechMode ?: return
     val description = pendingSpeechDescription ?: return
+    if (pendingSpeechAwaitingInitialization || ttsInitializationInFlight.get()) {
+      return
+    }
     if (speechQueuedCount > 0 || uiState.value.isSpeaking) {
       return
     }
@@ -697,6 +811,7 @@ constructor(
     pendingSpeechRequestId = null
     pendingSpeechMode = null
     pendingSpeechDescription = null
+    pendingSpeechAwaitingInitialization = false
     streamingSpeechConsumedLength = 0
     streamingSpeechRemainder = ""
   }
@@ -714,6 +829,13 @@ constructor(
     speechQueuedCount = 0
     textToSpeech?.stop()
     _uiState.update { it.copy(isSpeaking = false) }
+  }
+
+  private fun handlePendingSpeechInitializationFailure() {
+    pendingManualSpeechText = null
+    pendingManualSpeechAwaitingInitialization = false
+    reportTtsUnavailable()
+    finalizePendingSpeechIfNeeded()
   }
 
   private fun findLastSpeakableBoundary(text: String): Int {

@@ -19,6 +19,8 @@ package com.google.ai.edge.gallery.customtasks.visionnarration
 import android.graphics.Bitmap
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -29,7 +31,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -40,6 +41,8 @@ import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -63,6 +66,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -103,6 +107,7 @@ fun VisionNarrationScreen(
     uiState.latestStreamingDescription.isNotBlank() || uiState.latestCompletedDescription.isNotBlank()
   val ttsToggleContentDescription = stringResource(R.string.vision_narration_tts_toggle)
   val settingsLocked = uiState.autoRunning || uiState.inProgress || uiState.isSpeaking
+  val longPressActionLabel = stringResource(R.string.vision_narration_long_press_actions)
 
   var showPromptManager by rememberSaveable { mutableStateOf(false) }
   var showAdvancedSettings by rememberSaveable { mutableStateOf(false) }
@@ -397,28 +402,15 @@ fun VisionNarrationScreen(
       }
     }
 
-    Card(
-      modifier =
-        Modifier.fillMaxWidth().clearAndSetSemantics {
-          if (hasLatestNarration) {
-            liveRegion = LiveRegionMode.Polite
-            contentDescription = latestDescriptionText
-          }
-        },
-      shape = RoundedCornerShape(20.dp),
-    ) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(0.dp),
-      ) {
-        SelectionContainer {
-          Text(
-            text = latestDescriptionText,
-            style = MaterialTheme.typography.bodyLarge,
-          )
-        }
-      }
-    }
+    NarrationDescriptionCard(
+      text = latestDescriptionText,
+      contentDescription = latestDescriptionText,
+      modifier = Modifier.fillMaxWidth(),
+      liveRegionMode = if (hasLatestNarration) LiveRegionMode.Polite else null,
+      longPressActionLabel = longPressActionLabel,
+      onCopy = { viewModel.copyDescription(latestDescriptionText) },
+      onReadAloud = { viewModel.readDescriptionAloud(latestDescriptionText) },
+    )
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
       Text(
@@ -447,28 +439,81 @@ fun VisionNarrationScreen(
               modeText,
               entry.description,
             )
-          Card(
-            modifier =
-              Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
-                contentDescription = historyContentDescription
-              },
-            shape = RoundedCornerShape(18.dp),
-          ) {
-            Column(
-              modifier = Modifier.fillMaxWidth().padding(16.dp),
-              verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+          NarrationDescriptionCard(
+            text = entry.description,
+            contentDescription = historyContentDescription,
+            modifier = Modifier.fillMaxWidth(),
+            longPressActionLabel = longPressActionLabel,
+            onCopy = { viewModel.copyDescription(entry.description) },
+            onReadAloud = { viewModel.readDescriptionAloud(entry.description) },
+            header = {
               Text(
                 text = "$timeText  $modeText",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
-              SelectionContainer {
-                Text(text = entry.description, style = MaterialTheme.typography.bodyLarge)
-              }
-            }
-          }
+            },
+          )
         }
+      }
+    }
+  }
+}
+
+@Composable
+private fun NarrationDescriptionCard(
+  text: String,
+  contentDescription: String,
+  modifier: Modifier = Modifier,
+  liveRegionMode: LiveRegionMode? = null,
+  longPressActionLabel: String,
+  onCopy: () -> Unit,
+  onReadAloud: () -> Unit,
+  header: (@Composable () -> Unit)? = null,
+) {
+  var menuExpanded by rememberSaveable(text) { mutableStateOf(false) }
+  Card(
+    modifier =
+      modifier
+        .combinedClickable(onClick = {}, onLongClick = { menuExpanded = true })
+        .clearAndSetSemantics {
+          if (liveRegionMode != null) {
+            liveRegion = liveRegionMode
+          }
+          this.contentDescription = contentDescription
+          onLongClick(label = longPressActionLabel) {
+            menuExpanded = true
+            true
+          }
+        },
+    shape = RoundedCornerShape(20.dp),
+  ) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(if (header == null) 0.dp else 8.dp),
+      ) {
+        header?.invoke()
+        Text(text = text, style = MaterialTheme.typography.bodyLarge)
+      }
+      DropdownMenu(
+        expanded = menuExpanded,
+        onDismissRequest = { menuExpanded = false },
+      ) {
+        DropdownMenuItem(
+          text = { Text(stringResource(R.string.copy)) },
+          onClick = {
+            menuExpanded = false
+            onCopy()
+          },
+        )
+        DropdownMenuItem(
+          text = { Text(stringResource(R.string.vision_narration_read_aloud)) },
+          onClick = {
+            menuExpanded = false
+            onReadAloud()
+          },
+        )
       }
     }
   }

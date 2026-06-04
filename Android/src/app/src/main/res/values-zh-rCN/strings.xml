@@ -23,9 +23,10 @@
   <string name="aichat_initializing_title">正在初始化模型</string>
   <string name="aichat_initializing_content">请稍候，这可能需要最多 1 分钟</string>
   <string name="app_intro">探索精彩的端侧模型世界</string>
-  <string name="app_name">Android Local Agent Gallery Vision Test</string>
-  <string name="app_name_first_part">Android Local</string>
-  <string name="app_name_second_part">Vision Test</string>
+  <string name="app_name">视觉旁白测试</string>
+  <string name="app_name_first_part"></string>
+  <string name="app_name_second_part"></string>
+  <string name="vision_narration_home_title"></string>
   <string name="askimage_emptystate_title">图像问答</string>
   <string name="askimage_emptystate_content">点击下方 + 按钮添加图片（每次最多 10 张），然后输入提示词提问！</string>
   <string name="askaudio_emptystate_title">音频问答</string>
@@ -162,7 +163,7 @@
   <string name="test">测试</string>
   <string name="text_image_generation_text_field_placeholder">输入提示词…</string>
   <string name="text_input_placeholder_llm_chat">输入提示词…</string>
-  <string name="tos_dialog_title_app">欢迎使用 Android Local Agent Gallery</string>
+  <string name="tos_dialog_title_app">欢迎使用视觉旁白测试</string>
   <string name="tos_dialog_title_gemma">Gemma 使用条款</string>
   <string name="tos_dialog_accept_and_continue_button_label">接受并继续</string>
   <string name="tos_dialog_agree_and_continue_button_label">同意并继续</string>
@@ -258,6 +259,8 @@
   <string name="vision_narration_capture_mode_manual">手动</string>
   <string name="vision_narration_history_content_description">时间 %1$s，模式 %2$s，描述内容 %3$s</string>
   <string name="vision_narration_prompt_back">返回</string>
+  <string name="vision_narration_read_aloud">朗读</string>
+  <string name="vision_narration_long_press_actions">显示描述操作菜单</string>
   <string name="vision_narration_prompt_manager_title">视觉提示词管理</string>
   <string name="vision_narration_prompt_current_title">当前选择</string>
   <string name="vision_narration_prompt_use_default">使用默认提示词</string>

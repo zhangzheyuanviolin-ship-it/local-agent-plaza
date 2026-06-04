@@ -150,7 +150,7 @@ private const val CONTENT_COMPOSABLES_OFFSET_Y = 16
 
 /** Navigation destination data */
 private object HomeScreenDestination {
-  @StringRes val titleRes = R.string.app_name
+  @StringRes val titleRes = R.string.vision_narration_home_title
 }
 
 private val PREDEFINED_CATEGORY_ORDER = listOf(Category.LLM.id, Category.EXPERIMENTAL.id)
@@ -573,6 +573,9 @@ fun HomeScreen(
 private fun AppTitle(enableAnimation: Boolean) {
   val firstLineText = stringResource(R.string.app_name_first_part)
   val secondLineText = stringResource(R.string.app_name_second_part)
+  if (firstLineText.isBlank() && secondLineText.isBlank()) {
+    return
+  }
   val titleColor = MaterialTheme.customColors.appTitleGradientColors[1]
   val screenWidthInDp = LocalConfiguration.current.screenWidthDp.dp
   val fontSize = with(LocalDensity.current) { (screenWidthInDp.toPx() * 0.12f).toSp() }
@@ -586,62 +589,66 @@ private fun AppTitle(enableAnimation: Boolean) {
   // animation. This second animation is positioned directly on top of the first, appearing just as
   // the initial reveal is finishing or has just completed, creating a layered and dynamic visual
   // effect.
-  Box(modifier = Modifier.clearAndSetSemantics {}) {
-    var delay = ANIMATION_INIT_DELAY
-    if (enableAnimation) {
+  if (firstLineText.isNotBlank()) {
+    Box(modifier = Modifier.clearAndSetSemantics {}) {
+      var delay = ANIMATION_INIT_DELAY
+      if (enableAnimation) {
+        SwipingText(
+          text = firstLineText,
+          style = titleStyle,
+          color = titleColor,
+          animationDelay = delay,
+          animationDurationMs = TITLE_FIRST_LINE_ANIMATION_DURATION,
+        )
+        delay += (TITLE_FIRST_LINE_ANIMATION_DURATION * 0.3).toLong()
+      }
       SwipingText(
         text = firstLineText,
         style = titleStyle,
-        color = titleColor,
-        animationDelay = delay,
-        animationDurationMs = TITLE_FIRST_LINE_ANIMATION_DURATION,
+        color = MaterialTheme.colorScheme.onSurface,
+        animationDelay = if (enableAnimation) delay else 0,
+        animationDurationMs = if (enableAnimation) TITLE_FIRST_LINE_ANIMATION_DURATION else 0,
       )
-      delay += (TITLE_FIRST_LINE_ANIMATION_DURATION * 0.3).toLong()
     }
-    SwipingText(
-      text = firstLineText,
-      style = titleStyle,
-      color = MaterialTheme.colorScheme.onSurface,
-      animationDelay = if (enableAnimation) delay else 0,
-      animationDurationMs = if (enableAnimation) TITLE_FIRST_LINE_ANIMATION_DURATION else 0,
-    )
   }
   // Second line text "Edge Gallery" and its animation.
   //
   // The initial animation is the same as the first line text. Right before it is done, the final
   // text with a gradient is revealed.
-  Box(modifier = Modifier.clearAndSetSemantics {}) {
-    var delay = TITLE_SECOND_LINE_ANIMATION_START
-    if (enableAnimation) {
-      SwipingText(
+  if (secondLineText.isNotBlank()) {
+    Box(modifier = Modifier.clearAndSetSemantics {}) {
+      var delay = TITLE_SECOND_LINE_ANIMATION_START
+      if (enableAnimation) {
+        SwipingText(
+          text = secondLineText,
+          style = titleStyle,
+          color = titleColor,
+          modifier = Modifier.offset(y = (-16).dp),
+          animationDelay = delay,
+          animationDurationMs = TITLE_SECOND_LINE_ANIMATION_DURATION,
+        )
+        delay += (TITLE_SECOND_LINE_ANIMATION_DURATION * 0.3).toInt()
+        SwipingText(
+          text = secondLineText,
+          style = titleStyle,
+          color = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.offset(y = (-16).dp),
+          animationDelay = delay,
+          animationDurationMs = TITLE_SECOND_LINE_ANIMATION_DURATION,
+        )
+        delay += (TITLE_SECOND_LINE_ANIMATION_DURATION * 0.6).toInt()
+      }
+      RevealingText(
         text = secondLineText,
-        style = titleStyle,
-        color = titleColor,
-        modifier = Modifier.offset(y = (-16).dp),
-        animationDelay = delay,
-        animationDurationMs = TITLE_SECOND_LINE_ANIMATION_DURATION,
+        style =
+          titleStyle.copy(
+            brush = linearGradient(colors = MaterialTheme.customColors.appTitleGradientColors)
+          ),
+        modifier = Modifier.offset(x = (-16).dp, y = (-16).dp),
+        animationDelay = if (enableAnimation) delay else 0,
+        animationDurationMs = if (enableAnimation) TITLE_SECOND_LINE_ANIMATION_DURATION2 else 0,
       )
-      delay += (TITLE_SECOND_LINE_ANIMATION_DURATION * 0.3).toInt()
-      SwipingText(
-        text = secondLineText,
-        style = titleStyle,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.offset(y = (-16).dp),
-        animationDelay = delay,
-        animationDurationMs = TITLE_SECOND_LINE_ANIMATION_DURATION,
-      )
-      delay += (TITLE_SECOND_LINE_ANIMATION_DURATION * 0.6).toInt()
     }
-    RevealingText(
-      text = secondLineText,
-      style =
-        titleStyle.copy(
-          brush = linearGradient(colors = MaterialTheme.customColors.appTitleGradientColors)
-        ),
-      modifier = Modifier.offset(x = (-16).dp, y = (-16).dp),
-      animationDelay = if (enableAnimation) delay else 0,
-      animationDurationMs = if (enableAnimation) TITLE_SECOND_LINE_ANIMATION_DURATION2 else 0,
-    )
   }
 }
 
