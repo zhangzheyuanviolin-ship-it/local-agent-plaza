@@ -425,22 +425,22 @@ fun HomeScreen(
                 var selectedCategoryIndex by remember { mutableIntStateOf(0) }
 
                 // App title and intro text.
-                Column(
-                  modifier =
-                    Modifier.padding(
-                        horizontal = if (gm4) 24.dp else 40.dp,
-                        vertical = if (gm4) 0.dp else 48.dp,
-                      )
-                      .padding(top = 24.dp, bottom = 16.dp)
-                      .semantics(mergeDescendants = true) {},
-                  verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                  if (gm4) {
-                    AppTitleGm4(enableAnimation = enableAnimation)
-                  } else {
-                    AppTitle(enableAnimation = enableAnimation)
-                  }
-                  if (!suppressHomeIntro) {
+                if (!suppressHomeIntro) {
+                  Column(
+                    modifier =
+                      Modifier.padding(
+                          horizontal = if (gm4) 24.dp else 40.dp,
+                          vertical = if (gm4) 0.dp else 48.dp,
+                        )
+                        .padding(top = 24.dp, bottom = 16.dp)
+                        .semantics(mergeDescendants = true) {},
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                  ) {
+                    if (gm4) {
+                      AppTitleGm4(enableAnimation = enableAnimation)
+                    } else {
+                      AppTitle(enableAnimation = enableAnimation)
+                    }
                     IntroText(enableAnimation = enableAnimation, gm4 = gm4)
                     if (gm4) {
                       TryGm4IntroText(enableAnimation = enableAnimation)
@@ -657,8 +657,8 @@ private fun AppTitle(enableAnimation: Boolean) {
 
 @Composable
 fun AppTitleGm4(enableAnimation: Boolean) {
-  val text1 = "Google"
-  val text2 = "AI Edge Gallery"
+  val text1 = "本地智能体"
+  val text2 = "广场"
   val annotatedText = buildAnnotatedString {
     withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.onSurface)) { append(text1) }
     append(" ")
@@ -703,9 +703,7 @@ private fun IntroText(enableAnimation: Boolean, gm4: Boolean) {
     if (gm4) {
       append("探索来自 ")
       append(buildTrackableUrlAnnotatedString(url = litertUrl, linkText = "LiteRT 社区"))
-      append(" 的端侧 AI 模型能力，其中包括全新的 ")
-      append(buildTrackableUrlAnnotatedString(url = gemma4Url, linkText = "Gemma 4"))
-      append("。")
+      append(" 的端侧 AI 模型能力，并体验本地智能体广场中的多种任务。")
     } else {
       append("${stringResource(R.string.app_intro)} ")
       append(
@@ -756,7 +754,7 @@ private fun TryGm4IntroText(enableAnimation: Boolean) {
       tint = MaterialTheme.colorScheme.primary,
     )
     Text(
-      text = "立即体验 Gemma 4",
+      text = "立即体验本地智能体广场",
       style =
         MaterialTheme.typography.headlineSmall.copy(
           fontWeight = FontWeight.Medium,
@@ -768,7 +766,7 @@ private fun TryGm4IntroText(enableAnimation: Boolean) {
   }
 
   Text(
-    "Gemma 4 E2B 和 E4B 已经上线，您可以在 AI 对话、智能体技能或下方场景中体验它们。",
+    "您可以在 AI 对话、智能体技能或下方场景中体验本地模型与多模态任务。",
     style = MaterialTheme.typography.bodyMedium,
     modifier =
       Modifier.graphicsLayer {
@@ -864,6 +862,7 @@ private fun TaskList(
   gm4: Boolean = false,
   grid: Boolean = false,
 ) {
+  val suppressBranding = LocalContext.current.packageName.endsWith(".visiontest")
   // Model list animation:
   //
   // 1.  Slide Up: The entire column of task cards translates upwards,
@@ -887,7 +886,7 @@ private fun TaskList(
   }
 
   // The highlighted tiles at the top.
-  if (gm4) {
+  if (gm4 && !suppressBranding) {
     Column(
       verticalArrangement = Arrangement.spacedBy(10.dp),
       modifier =
@@ -898,10 +897,8 @@ private fun TaskList(
     ) {
       val chatToDescription =
         mapOf(
-          BuiltInTaskId.LLM_CHAT to "立即体验最新的 Gemma 4 对话模型",
-          // use "\u00a0" to make sure the word before and after it should always be together when
-          // wrapping lines.
-          BuiltInTaskId.LLM_AGENT_CHAT to "让 Gemma 4 为您完成智能体任务",
+          BuiltInTaskId.LLM_CHAT to "立即体验本地对话模型",
+          BuiltInTaskId.LLM_AGENT_CHAT to "让本地模型为您完成智能体任务",
         )
       for (task in
         listOf(

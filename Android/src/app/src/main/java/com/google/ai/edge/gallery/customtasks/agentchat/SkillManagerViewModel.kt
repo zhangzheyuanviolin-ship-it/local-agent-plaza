@@ -69,7 +69,7 @@ val TRYOUT_CHIPS: List<SkillTryOutChip> =
     SkillTryOutChip(
       icon = Icons.Outlined.Map,
       label = "互动地图",
-      prompt = "在互动地图上展示 Googleplex。",
+      prompt = "在互动地图上展示天安门广场。",
       skillName = "interactive-map",
     ),
     SkillTryOutChip(
@@ -87,7 +87,7 @@ val TRYOUT_CHIPS: List<SkillTryOutChip> =
     SkillTryOutChip(
       icon = Icons.Outlined.ScreenRotation,
       label = "文字旋转器",
-      prompt = "把“Gemma”放到我头上旋转。",
+      prompt = "把“星星”放到我头上旋转。",
       skillName = "text-spinner",
     ),
     SkillTryOutChip(
@@ -112,13 +112,13 @@ val TRYOUT_CHIPS: List<SkillTryOutChip> =
     SkillTryOutChip(
       icon = Icons.Outlined.QrCode,
       label = "生成二维码",
-      prompt = "为 https://deepmind.google/models/gemma/ 生成二维码。",
+      prompt = "为 https://example.com 生成二维码。",
       skillName = "qr-code",
     ),
     SkillTryOutChip(
       icon = Icons.Outlined.LocalLibrary,
       label = "Tavily 搜索",
-      prompt = "在实时网络上搜索 Google AI Edge Gallery 的最新更新，并总结关键变化。",
+      prompt = "在实时网络上搜索近期端侧 AI 应用的最新更新，并总结关键变化。",
       skillName = "tavily-search",
     ),
     SkillTryOutChip(

@@ -92,9 +92,9 @@ fun PromoBannerGm4(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
           .padding(horizontal = 16.dp)
           .padding(top = 16.dp, bottom = 8.dp)
     ) {
-      Text(text = "Gemma 4 现已可用", style = MaterialTheme.typography.titleMedium)
+      Text(text = "本地智能体广场已可用", style = MaterialTheme.typography.titleMedium)
       Text(
-        "Gemma 4 基于与 Gemini 3 同源的先进技术打造，把前沿智能能力带到您的手机和边缘设备上。",
+        "本地智能体广场聚合了可在手机和边缘设备上运行的本地模型与任务能力，方便您直接体验不同场景。",
         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 15.sp),
         modifier = Modifier.padding(top = 4.dp),
       )
@@ -105,7 +105,7 @@ fun PromoBannerGm4(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
       ) {
         TextButton(onClick = onDismiss, contentPadding = BUTTON_PADDING) { Text("关闭") }
         Button(
-          onClick = { uriHandler.openUri("https://ai.google.dev/gemma") },
+          onClick = { uriHandler.openUri("https://huggingface.co/litert-community") },
           modifier = Modifier.padding(start = 8.dp).height(32.dp),
           contentPadding = BUTTON_PADDING,
         ) {

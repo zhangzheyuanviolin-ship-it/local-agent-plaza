@@ -193,7 +193,7 @@ enum class PromptTemplateType(
     examplePrompts =
       listOf(
         "Create an alert box that says \"Hello, World!\"",
-        "Declare an immutable variable named 'appName' with the value \"AI Gallery\"",
+        "Declare an immutable variable named 'appName' with the value \"本地智能体广场\"",
         "Print the numbers from 1 to 5 using a for loop.",
         "Write a function that returns the square of an integer input.",
       ),

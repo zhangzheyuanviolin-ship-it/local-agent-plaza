@@ -94,12 +94,12 @@ fun PromoScreenGm4(onDismiss: () -> Unit) {
         color = Color.White,
       )
       Text(
-        "Gemma 4",
+        "本地智能体广场",
         style = MaterialTheme.typography.headlineSmall.copy(fontSize = 38.sp),
         color = Color.White,
       )
       Text(
-        "Experience the world’s most capable open models, designed to run frontier-level intelligence directly on your hardware.",
+        "Experience local multimodal and agent capabilities designed to run directly on your own hardware.",
         style = MaterialTheme.typography.headlineSmall.copy(fontSize = 16.sp, lineHeight = 21.sp),
         textAlign = TextAlign.Center,
         color = Color(0xfff2f2f2),

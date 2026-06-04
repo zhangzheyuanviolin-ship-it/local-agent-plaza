@@ -23,15 +23,15 @@
   <string name="aichat_initializing_title">正在初始化模型</string>
   <string name="aichat_initializing_content">请稍候，这可能需要最多 1 分钟</string>
   <string name="app_intro">探索精彩的端侧模型世界</string>
-  <string name="app_name">视觉旁白测试</string>
+  <string name="app_name">本地智能体广场</string>
   <string name="app_name_first_part"></string>
   <string name="app_name_second_part"></string>
-  <string name="vision_narration_home_title"></string>
+  <string name="vision_narration_home_title">本地智能体广场</string>
   <string name="askimage_emptystate_title">图像问答</string>
   <string name="askimage_emptystate_content">点击下方 + 按钮添加图片（每次最多 10 张），然后输入提示词提问！</string>
   <string name="askaudio_emptystate_title">音频问答</string>
   <string name="askaudio_emptystate_content">点击下方 + 按钮添加音频片段（最多 30 秒），然后输入提示词进行转写或翻译！</string>
-  <string name="gallery_news_notification_title">Gallery 动态</string>
+  <string name="gallery_news_notification_title">应用动态</string>
   <string name="baseline">基线</string>
   <string name="basic_info">基本信息</string>
   <string name="benchmark">基准测试</string>
@@ -153,7 +153,7 @@
   <string name="selected_count">已选择 %d 项</string>
   <string name="settings_dialog_tos_title">服务条款</string>
   <string name="settings_dialog_view_app_terms_of_service">查看应用服务条款</string>
-  <string name="settings_dialog_gemma_prohibited_use_policy">Gemma 禁止使用政策</string>
+  <string name="settings_dialog_gemma_prohibited_use_policy">模型禁止使用政策</string>
   <string name="share">分享</string>
   <string name="slide_up_to_cancel">上滑取消</string>
   <string name="system_prompt_updated">系统提示词已更新</string>
@@ -163,8 +163,8 @@
   <string name="test">测试</string>
   <string name="text_image_generation_text_field_placeholder">输入提示词…</string>
   <string name="text_input_placeholder_llm_chat">输入提示词…</string>
-  <string name="tos_dialog_title_app">欢迎使用视觉旁白测试</string>
-  <string name="tos_dialog_title_gemma">Gemma 使用条款</string>
+  <string name="tos_dialog_title_app">欢迎使用本地智能体广场</string>
+  <string name="tos_dialog_title_gemma">模型使用条款</string>
   <string name="tos_dialog_accept_and_continue_button_label">接受并继续</string>
   <string name="tos_dialog_agree_and_continue_button_label">同意并继续</string>
   <string name="try_it">试试看</string>
@@ -226,7 +226,7 @@
   <string name="vision_narration_prompt_placeholder">留空时将使用默认无障碍描述提示词</string>
   <string name="vision_narration_prompt_helper">留空时应用会自动使用这条默认提示词：%1$s</string>
   <string name="vision_narration_interval_label">拍照间隔</string>
-  <string name="vision_narration_interval_seconds">%1$d 秒</string>
+  <string name="vision_narration_interval_seconds">%1$s 秒</string>
   <string name="vision_narration_start">自动描述</string>
   <string name="vision_narration_stop">停止自动描述</string>
   <string name="vision_narration_single_capture">手动描述</string>
@@ -238,7 +238,7 @@
   <string name="vision_narration_status_speaking">正在播报最新描述</string>
   <string name="vision_narration_status_stopped">已停止</string>
   <string name="vision_narration_status_no_model">请先选择并初始化一个已下载的视觉模型</string>
-  <string name="vision_narration_status_countdown">%1$d 秒后拍摄下一帧</string>
+  <string name="vision_narration_status_countdown">%1$s 秒后拍摄下一帧</string>
   <string name="vision_narration_status_content_description">状态：%1$s</string>
   <string name="vision_narration_status_tts_unavailable">系统语音播报暂时不可用，本轮仅显示文字结果。</string>
   <string name="vision_narration_latest_title">最新描述</string>
@@ -298,7 +298,7 @@
   <string name="add_skill_manual_input_sheet_title">创建技能</string>
   <string name="agent_skills">智能体技能</string>
   <string name="agent_skills_description">通过加载不同技能或创建自己的技能，使用专业化、高阶推理能力\n\n点击下方示例提示词体验智能体技能！</string>
-  <string name="disclaimer_dialog_content">第三方技能非 Google 开发或背书。Google 对其内容、安全性或数据处理实践不承担责任。\n\n在提供敏感信息（如个人身份、令牌或 API 密钥）前请谨慎。\n\n使用任何智能体技能均受该技能适用条款约束。</string>
+  <string name="disclaimer_dialog_content">第三方技能并非由本应用开发或背书。本应用不对其内容、安全性或数据处理实践承担责任。\n\n在提供敏感信息（如个人身份、令牌或 API 密钥）前请谨慎。\n\n使用任何智能体技能均受该技能适用条款约束。</string>
   <string name="disclaimer_dialog_title">添加第三方技能</string>
   <string name="disclaimer_dialog_agree">同意</string>
   <string name="delete_script_dialog_title">删除脚本</string>

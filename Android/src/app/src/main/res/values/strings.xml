@@ -27,16 +27,16 @@
   <string name="aichat_initializing_title" translatable="false">Initializing model</string>
   <string name="aichat_initializing_content" translatable="false">Sit tight, this can take up to 1 minute</string>
   <string name="app_intro" translatable="false">Explore a world of amazing on-device models from</string>
-  <string name="app_name" translatable="false">Vision Narration Test</string>
+  <string name="app_name" translatable="false">本地智能体广场</string>
   <string name="app_name_first_part" translatable="false"></string>
   <string name="app_name_second_part" translatable="false"></string>
-  <string name="vision_narration_home_title" translatable="false"></string>
+  <string name="vision_narration_home_title" translatable="false">本地智能体广场</string>
   <string name="askimage_emptystate_title" translatable="false">Ask Image</string>
   <string name="askimage_emptystate_content" translatable="false">To get started, tap the + below to add an image (max 10 images per chat) and type a prompt to ask a question about it!</string>
   <string name="askimage_emptystate_content_aicore" translatable="false">To get started, tap the + below to add an image (max 1 image per chat) and type a prompt to ask a question about it!</string>
   <string name="askaudio_emptystate_title" translatable="false">Ask Audio</string>
   <string name="askaudio_emptystate_content" translatable="false">To get started, tap the + below to add a audio clip (limited to 1 clip up to 30 seconds) and type a prompt to transcribe or translate it!</string>
-  <string name="gallery_news_notification_title" translatable="false">Gallery News</string>
+  <string name="gallery_news_notification_title" translatable="false">App updates</string>
   <string name="baseline" translatable="false">Baseline</string>
   <string name="basic_info" translatable="false">Basic info</string>
   <string name="benchmark" translatable="false">Benchmark</string>
@@ -166,7 +166,7 @@
   <string name="selected_count" translatable="false">%d selected</string>
   <string name="settings_dialog_tos_title" translatable="false">Terms of service</string>
   <string name="settings_dialog_view_app_terms_of_service" translatable="false">View App Terms of Service</string>
-  <string name="settings_dialog_gemma_prohibited_use_policy" translatable="false">Gemma Prohibited Use Policy</string>
+  <string name="settings_dialog_gemma_prohibited_use_policy" translatable="false">Model prohibited use policy</string>
   <string name="share" translatable="false">Share</string>
   <string name="slide_up_to_cancel" translatable="false">Slide up to cancel</string>
   <string name="system_prompt_updated" translatable="false">System prompt updated</string>
@@ -176,8 +176,8 @@
   <string name="test" translatable="false">Test</string>
   <string name="text_image_generation_text_field_placeholder" translatable="false">Type prompt…</string>
   <string name="text_input_placeholder_llm_chat" translatable="false">Type prompt…</string>
-  <string name="tos_dialog_title_app" translatable="false">Welcome to Vision Narration Test</string>
-  <string name="tos_dialog_title_gemma" translatable="false">Gemma Terms of Use</string>
+  <string name="tos_dialog_title_app" translatable="false">Welcome to 本地智能体广场</string>
+  <string name="tos_dialog_title_gemma" translatable="false">Model Terms of Use</string>
   <string name="tos_dialog_accept_and_continue_button_label" translatable="false">Accept &amp; continue</string>
   <string name="tos_dialog_agree_and_continue_button_label" translatable="false">Agree &amp; continue</string>
   <string name="try_it" translatable="false">Try it</string>
@@ -250,7 +250,7 @@
   <string name="vision_narration_prompt_placeholder" translatable="false">Leave blank to use the default accessibility prompt</string>
   <string name="vision_narration_prompt_helper" translatable="false">When left blank, the app will use this default prompt: %1$s</string>
   <string name="vision_narration_interval_label" translatable="false">Capture interval</string>
-  <string name="vision_narration_interval_seconds" translatable="false">%1$d sec</string>
+  <string name="vision_narration_interval_seconds" translatable="false">%1$s sec</string>
   <string name="vision_narration_start" translatable="false">Automatic narration</string>
   <string name="vision_narration_stop" translatable="false">Stop automatic narration</string>
   <string name="vision_narration_single_capture" translatable="false">Manual narration</string>
@@ -262,7 +262,7 @@
   <string name="vision_narration_status_speaking" translatable="false">Reading the latest description aloud</string>
   <string name="vision_narration_status_stopped" translatable="false">Stopped</string>
   <string name="vision_narration_status_no_model" translatable="false">Please select and initialize a downloaded vision model first</string>
-  <string name="vision_narration_status_countdown" translatable="false">The next frame will be captured in %1$d seconds</string>
+  <string name="vision_narration_status_countdown" translatable="false">The next frame will be captured in %1$s seconds</string>
   <string name="vision_narration_status_content_description" translatable="false">Status: %1$s</string>
   <string name="vision_narration_status_tts_unavailable" translatable="false">System text-to-speech is unavailable, so descriptions will only be shown as text.</string>
   <string name="vision_narration_latest_title" translatable="false">Latest description</string>
@@ -322,7 +322,7 @@
   <string name="add_skill_manual_input_sheet_title" translatable="false">Create a skill</string>
   <string name="agent_skills" translatable="false">Agent Skills</string>
   <string name="agent_skills_description" translatable="false">Use specialized, high-order reasoning by loading different skills or creating your own.\n\nTry tapping a sample prompt below to see Agent Skills in action!</string>
-  <string name="disclaimer_dialog_content" translatable="false">Third-party skills are not authored or endorsed by Google. Google is not responsible for their contents, security, or data handling practices.\n\nPlease exercise caution before providing sensitive information, such as personal identification, tokens, or API keys.\n\nAny use of an Agent Skill is subject to the applicable terms for that Skill.</string>
+  <string name="disclaimer_dialog_content" translatable="false">Third-party skills are not authored or endorsed by this app. This app is not responsible for their contents, security, or data handling practices.\n\nPlease exercise caution before providing sensitive information, such as personal identification, tokens, or API keys.\n\nAny use of an Agent Skill is subject to the applicable terms for that Skill.</string>
   <string name="disclaimer_dialog_title" translatable="false">Add third-party skill</string>
   <string name="disclaimer_dialog_agree" translatable="false">Agree</string>
   <string name="delete_script_dialog_title" translatable="false">Delete script</string>

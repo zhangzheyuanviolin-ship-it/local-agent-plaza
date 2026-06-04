@@ -60,13 +60,15 @@ private const val TAG = "VisionNarrationVM"
 private const val LEGACY_PROMPT_SECRET_KEY = "vision_narration_prompt"
 private const val PROMPTS_SECRET_KEY = "vision_narration_prompts_json"
 private const val SELECTED_PROMPT_SECRET_KEY = "vision_narration_selected_prompt_id"
-private const val INTERVAL_SECRET_KEY = "vision_narration_interval_seconds"
+private const val LEGACY_INTERVAL_SECONDS_SECRET_KEY = "vision_narration_interval_seconds"
+private const val INTERVAL_SECRET_KEY = "vision_narration_interval_ms"
 private const val AUTO_SPEAK_SECRET_KEY = "vision_narration_auto_speak_enabled"
 private const val SPEECH_MODE_SECRET_KEY = "vision_narration_speech_mode"
 private const val MAX_HISTORY_SIZE = 20
 private const val STREAMING_SPEECH_FALLBACK_CHARS = 24
-private val INTERVAL_OPTIONS = setOf(1, 2, 3, 5, 10)
+private val INTERVAL_OPTIONS_MS = setOf(100L, 200L, 300L, 500L, 1_000L, 2_000L, 3_000L, 5_000L, 10_000L)
 private val STREAMING_SPEECH_BOUNDARIES = charArrayOf('。', '！', '？', '.', '!', '?', ';', '；', ':', '：', '\n')
+private const val TTS_SEGMENT_MAX_CHARS = 80
 
 private enum class SpeechEnqueueResult {
   QUEUED,
@@ -99,7 +101,7 @@ data class VisionNarrationEntry(
 data class VisionNarrationUiState(
   val promptPresets: List<VisionPromptPreset> = listOf(),
   val selectedPromptId: String? = null,
-  val intervalSeconds: Int,
+  val intervalMs: Long,
   val autoRunning: Boolean = false,
   val inProgress: Boolean = false,
   val isSpeaking: Boolean = false,
@@ -150,9 +152,9 @@ constructor(
     initializeTextToSpeech()
   }
 
-  fun updateIntervalSeconds(seconds: Int) {
-    val value = if (INTERVAL_OPTIONS.contains(seconds)) seconds else 2
-    _uiState.update { it.copy(intervalSeconds = value) }
+  fun updateIntervalMs(intervalMs: Long) {
+    val value = if (INTERVAL_OPTIONS_MS.contains(intervalMs)) intervalMs else 2_000L
+    _uiState.update { it.copy(intervalMs = value) }
     dataStoreRepository.saveSecret(INTERVAL_SECRET_KEY, value.toString())
   }
 
@@ -632,7 +634,7 @@ constructor(
           if (delayMs > 0L) {
             context.getString(
               R.string.vision_narration_status_countdown,
-              (delayMs / 1000L).toInt(),
+              formatIntervalLabel(delayMs),
             )
           } else {
             context.getString(R.string.vision_narration_status_waiting_for_frame)
@@ -730,10 +732,37 @@ constructor(
     if (flush) {
       speechQueuedCount = 0
     }
-    val utteranceId = "${activeSpeechSessionId}:${speechQueuedCount + 1}"
-    val result = tts.speak(normalized, queueMode, Bundle(), utteranceId)
-    if (result == TextToSpeech.SUCCESS) {
-      speechQueuedCount += 1
+    val segments = splitSpeechSegments(normalized)
+    var queuedAny = false
+    segments.forEachIndexed { index, segment ->
+      val utteranceId = "${activeSpeechSessionId}:${speechQueuedCount + 1}"
+      val segmentQueueMode =
+        if (queuedAny || index > 0) {
+          TextToSpeech.QUEUE_ADD
+        } else {
+          queueMode
+        }
+      val result = tts.speak(segment, segmentQueueMode, Bundle(), utteranceId)
+      if (result == TextToSpeech.SUCCESS) {
+        speechQueuedCount += 1
+        queuedAny = true
+      } else {
+        Log.w(TAG, "TextToSpeech speak returned non-success result=$result")
+        initializeTextToSpeech(forceRecreate = true)
+        return if (queuedAny) {
+          _uiState.update {
+            it.copy(
+              isSpeaking = true,
+              statusText = context.getString(R.string.vision_narration_status_speaking),
+            )
+          }
+          SpeechEnqueueResult.QUEUED
+        } else {
+          SpeechEnqueueResult.WAITING_FOR_INITIALIZATION
+        }
+      }
+    }
+    if (queuedAny) {
       _uiState.update {
         it.copy(
           isSpeaking = true,
@@ -742,9 +771,7 @@ constructor(
       }
       return SpeechEnqueueResult.QUEUED
     }
-    Log.w(TAG, "TextToSpeech speak returned non-success result=$result")
-    initializeTextToSpeech(forceRecreate = true)
-    return SpeechEnqueueResult.WAITING_FOR_INITIALIZATION
+    return SpeechEnqueueResult.FAILED
   }
 
   private fun maybeSpeakPendingTextAfterInitialization() {
@@ -878,7 +905,7 @@ constructor(
     if (uiState.value.autoRunning) {
       scheduleCapture(
         mode = VisionCaptureMode.AUTO,
-        delayMs = uiState.value.intervalSeconds * 1000L,
+        delayMs = uiState.value.intervalMs,
         keepAutoRunning = true,
       )
     }
@@ -983,12 +1010,53 @@ constructor(
       .trim()
   }
 
+  private fun splitSpeechSegments(text: String): List<String> {
+    val normalized = text.trim()
+    if (normalized.isBlank()) {
+      return listOf()
+    }
+    val segments = mutableListOf<String>()
+    val buffer = StringBuilder()
+    fun flushBuffer() {
+      val chunk = buffer.toString().trim()
+      if (chunk.isNotEmpty()) {
+        segments += chunk
+      }
+      buffer.clear()
+    }
+    normalized.forEach { ch ->
+      buffer.append(ch)
+      val shouldFlushAtBoundary =
+        STREAMING_SPEECH_BOUNDARIES.contains(ch) && buffer.length >= 24
+      val shouldFlushAtLength = buffer.length >= TTS_SEGMENT_MAX_CHARS
+      if (shouldFlushAtBoundary || shouldFlushAtLength) {
+        flushBuffer()
+      }
+    }
+    flushBuffer()
+    return segments.ifEmpty { listOf(normalized) }
+  }
+
+  private fun formatIntervalLabel(intervalMs: Long): String {
+    return if (intervalMs < 1_000L) {
+      String.format(Locale.US, "%.1f", intervalMs / 1000.0)
+    } else {
+      (intervalMs / 1000L).toString()
+    }
+  }
+
   private fun createInitialState(): VisionNarrationUiState {
     val migratedData = loadPromptPresetsWithMigration()
     val savedInterval =
-      dataStoreRepository.readSecret(INTERVAL_SECRET_KEY)?.toIntOrNull()?.takeIf {
-        INTERVAL_OPTIONS.contains(it)
-      } ?: 2
+      dataStoreRepository.readSecret(INTERVAL_SECRET_KEY)?.toLongOrNull()?.takeIf {
+        INTERVAL_OPTIONS_MS.contains(it)
+      }
+        ?: dataStoreRepository.readSecret(LEGACY_INTERVAL_SECONDS_SECRET_KEY)
+          ?.toIntOrNull()
+          ?.takeIf { it > 0 }
+          ?.times(1000L)
+          ?.takeIf { INTERVAL_OPTIONS_MS.contains(it) }
+        ?: 2_000L
     val autoSpeakEnabled =
       dataStoreRepository.readSecret(AUTO_SPEAK_SECRET_KEY)?.toBooleanStrictOrNull() ?: false
     val speechMode =
@@ -998,7 +1066,7 @@ constructor(
     return VisionNarrationUiState(
       promptPresets = migratedData.first,
       selectedPromptId = migratedData.second,
-      intervalSeconds = savedInterval,
+      intervalMs = savedInterval,
       autoSpeakEnabled = autoSpeakEnabled,
       speechMode = speechMode,
       statusText = context.getString(R.string.vision_narration_status_ready),

@@ -77,7 +77,7 @@ import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.ui.common.LiveCameraView
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
 
-private val VISION_INTERVALS = listOf(1, 2, 3, 5, 10)
+private val VISION_INTERVALS_MS = listOf(100L, 200L, 300L, 500L, 1_000L, 2_000L, 3_000L, 5_000L, 10_000L)
 
 @Composable
 fun VisionNarrationScreen(
@@ -260,7 +260,7 @@ fun VisionNarrationScreen(
       settingsLocked = settingsLocked,
       ttsToggleContentDescription = ttsToggleContentDescription,
       onBack = { showAdvancedSettings = false },
-      onUpdateInterval = viewModel::updateIntervalSeconds,
+      onUpdateInterval = viewModel::updateIntervalMs,
       onToggleAutoSpeak = viewModel::updateAutoSpeakEnabled,
       onUpdateSpeechMode = viewModel::updateSpeechMode,
     )
@@ -527,7 +527,7 @@ private fun VisionAdvancedSettingsPage(
   settingsLocked: Boolean,
   ttsToggleContentDescription: String,
   onBack: () -> Unit,
-  onUpdateInterval: (Int) -> Unit,
+  onUpdateInterval: (Long) -> Unit,
   onToggleAutoSpeak: (Boolean) -> Unit,
   onUpdateSpeechMode: (VisionSpeechMode) -> Unit,
 ) {
@@ -632,13 +632,13 @@ private fun VisionAdvancedSettingsPage(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          for (seconds in VISION_INTERVALS) {
+          for (intervalMs in VISION_INTERVALS_MS) {
             FilterChip(
-              selected = uiState.intervalSeconds == seconds,
-              onClick = { onUpdateInterval(seconds) },
+              selected = uiState.intervalMs == intervalMs,
+              onClick = { onUpdateInterval(intervalMs) },
               enabled = !settingsLocked,
               label = {
-                Text(stringResource(R.string.vision_narration_interval_seconds, seconds))
+                Text(stringResource(R.string.vision_narration_interval_seconds, formatIntervalOptionLabel(intervalMs)))
               },
             )
           }
@@ -662,6 +662,14 @@ private fun VisionAdvancedSettingsPage(
         )
       }
     }
+  }
+}
+
+private fun formatIntervalOptionLabel(intervalMs: Long): String {
+  return if (intervalMs < 1_000L) {
+    String.format(java.util.Locale.US, "%.1f", intervalMs / 1000.0)
+  } else {
+    (intervalMs / 1000L).toString()
   }
 }
 

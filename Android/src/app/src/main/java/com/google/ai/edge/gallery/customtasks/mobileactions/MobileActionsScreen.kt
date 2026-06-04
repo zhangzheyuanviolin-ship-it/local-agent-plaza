@@ -164,7 +164,7 @@ private val PROMPT_TEMPLATES =
     ),
     PromptTemplate(
       labelResId = R.string.prompt_template_label_show_location_on_map,
-      prompt = "Show Googleplex on map",
+      prompt = "Show the Palace Museum on map",
     ),
     PromptTemplate(
       labelResId = R.string.prompt_template_label_open_wifi_settings,

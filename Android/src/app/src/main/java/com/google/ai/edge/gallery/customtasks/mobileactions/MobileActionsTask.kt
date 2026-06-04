@@ -50,7 +50,7 @@ class MobileActionsTask @Inject constructor() : CustomTask {
     Task(
       id = BuiltInTaskId.LLM_MOBILE_ACTIONS,
       label = "手机操作",
-      description = "通过 Function Gemma 执行多种设备操作",
+      description = "通过本地函数调用模型执行多种设备操作",
       shortDescription = "调用设备操作能力",
       docUrl = "https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md",
       sourceCodeUrl =
