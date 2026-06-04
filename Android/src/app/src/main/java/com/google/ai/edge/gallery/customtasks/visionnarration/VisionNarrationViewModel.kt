@@ -599,9 +599,7 @@ constructor(
     }
     speechQueuedCount = (speechQueuedCount - 1).coerceAtLeast(0)
     if (speechQueuedCount == 0) {
-      viewModelScope.launch {
-        _uiState.update { it.copy(isSpeaking = false) }
-      }
+      _uiState.update { it.copy(isSpeaking = false) }
       finalizePendingSpeechIfNeeded()
     }
   }

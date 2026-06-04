@@ -227,9 +227,9 @@
   <string name="vision_narration_prompt_helper">留空时应用会自动使用这条默认提示词：%1$s</string>
   <string name="vision_narration_interval_label">拍照间隔</string>
   <string name="vision_narration_interval_seconds">%1$d 秒</string>
-  <string name="vision_narration_start">开始描述</string>
-  <string name="vision_narration_stop">停止</string>
-  <string name="vision_narration_single_capture">单次描述</string>
+  <string name="vision_narration_start">自动描述</string>
+  <string name="vision_narration_stop">停止自动描述</string>
+  <string name="vision_narration_single_capture">手动描述</string>
   <string name="vision_narration_preview_label">实时相机预览</string>
   <string name="vision_narration_status_label">当前状态</string>
   <string name="vision_narration_status_ready">准备就绪</string>

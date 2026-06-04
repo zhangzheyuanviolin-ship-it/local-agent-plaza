@@ -251,9 +251,9 @@
   <string name="vision_narration_prompt_helper" translatable="false">When left blank, the app will use this default prompt: %1$s</string>
   <string name="vision_narration_interval_label" translatable="false">Capture interval</string>
   <string name="vision_narration_interval_seconds" translatable="false">%1$d sec</string>
-  <string name="vision_narration_start" translatable="false">Start narration</string>
-  <string name="vision_narration_stop" translatable="false">Stop</string>
-  <string name="vision_narration_single_capture" translatable="false">Describe once</string>
+  <string name="vision_narration_start" translatable="false">Automatic narration</string>
+  <string name="vision_narration_stop" translatable="false">Stop automatic narration</string>
+  <string name="vision_narration_single_capture" translatable="false">Manual narration</string>
   <string name="vision_narration_preview_label" translatable="false">Live camera preview</string>
   <string name="vision_narration_status_label" translatable="false">Status</string>
   <string name="vision_narration_status_ready" translatable="false">Ready</string>

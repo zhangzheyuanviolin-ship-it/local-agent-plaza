@@ -172,6 +172,7 @@ fun HomeScreen(
   val scope = rememberCoroutineScope()
   val context = LocalContext.current
   val isDevBuild = context.packageName.endsWith(".dev")
+  val suppressHomeIntro = context.packageName.endsWith(".visiontest")
 
   var tasks = uiState.tasks
 
@@ -439,9 +440,11 @@ fun HomeScreen(
                   } else {
                     AppTitle(enableAnimation = enableAnimation)
                   }
-                  IntroText(enableAnimation = enableAnimation, gm4 = gm4)
-                  if (gm4) {
-                    TryGm4IntroText(enableAnimation = enableAnimation)
+                  if (!suppressHomeIntro) {
+                    IntroText(enableAnimation = enableAnimation, gm4 = gm4)
+                    if (gm4) {
+                      TryGm4IntroText(enableAnimation = enableAnimation)
+                    }
                   }
                 }
 
