@@ -50,7 +50,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,14 +69,18 @@ private const val STREAMING_SPEECH_FALLBACK_CHARS = 24
 private val INTERVAL_OPTIONS_MS = setOf(100L, 200L, 300L, 500L, 1_000L, 2_000L, 3_000L, 5_000L, 10_000L)
 private val STREAMING_SPEECH_BOUNDARIES = charArrayOf('。', '！', '？', '.', '!', '?', ';', '；', ':', '：', '\n')
 private const val TTS_SEGMENT_MAX_CHARS = 80
-private const val TTS_SILENCE_POLL_INTERVAL_MS = 200L
-private const val TTS_SILENCE_POLL_COUNT = 3
-private const val TTS_SILENCE_GUARD_MS = 500L
+private const val TTS_COMPLETION_SENTINEL_DURATION_MS = 1L
 
 private enum class SpeechEnqueueResult {
   QUEUED,
   WAITING_FOR_INITIALIZATION,
   FAILED,
+}
+
+private enum class ActiveSpeechPurpose {
+  NONE,
+  INFERENCE,
+  MANUAL_READ,
 }
 
 enum class VisionCaptureMode {
@@ -106,6 +109,7 @@ data class VisionNarrationUiState(
   val promptPresets: List<VisionPromptPreset> = listOf(),
   val selectedPromptId: String? = null,
   val intervalMs: Long,
+  val activeMode: VisionCaptureMode? = null,
   val autoRunning: Boolean = false,
   val inProgress: Boolean = false,
   val isSpeaking: Boolean = false,
@@ -135,7 +139,8 @@ constructor(
   private val ttsReady = AtomicBoolean(false)
   private val ttsInitializationInFlight = AtomicBoolean(false)
   private var activeSpeechSessionId: Long = 0L
-  private var speechQueuedCount = 0
+  private var activeSpeechPurpose = ActiveSpeechPurpose.NONE
+  private var activeSpeechCompletionUtteranceId: String? = null
   private var pendingSpeechRequestId: Long? = null
   private var pendingSpeechMode: VisionCaptureMode? = null
   private var pendingSpeechDescription: String? = null
@@ -145,8 +150,6 @@ constructor(
   private var completedInferenceRequestId: Long? = null
   private var streamingSpeechConsumedLength = 0
   private var streamingSpeechRemainder = ""
-  private var speechWatchdogJob: Job? = null
-  private var lastSpeechQueueAtMs: Long = 0L
 
   private val formatter =
     DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault()).withZone(ZoneId.systemDefault())
@@ -281,6 +284,7 @@ constructor(
     }
     _uiState.update {
       it.copy(
+        activeMode = null,
         autoRunning = false,
         inProgress = false,
         isSpeaking = false,
@@ -302,6 +306,7 @@ constructor(
     resetSpeechStateForRequest(requestId)
     _uiState.update {
       it.copy(
+        activeMode = mode,
         inProgress = true,
         isSpeaking = false,
         statusText = context.getString(R.string.vision_narration_status_describing),
@@ -454,7 +459,14 @@ constructor(
     pendingManualSpeechAwaitingInitialization = false
     stopSpeechPlayback()
     activeSpeechSessionId = requestIdGenerator.incrementAndGet()
-    when (enqueueSpeech(description, flush = true)) {
+    when (
+      enqueueSpeech(
+        text = description,
+        flush = true,
+        purpose = ActiveSpeechPurpose.MANUAL_READ,
+        appendCompletionSentinel = true,
+      )
+    ) {
       SpeechEnqueueResult.QUEUED -> {
         pendingManualSpeechText = null
         pendingManualSpeechAwaitingInitialization = false
@@ -510,6 +522,10 @@ constructor(
                 if (sessionId != activeSpeechSessionId) {
                   return
                 }
+                if (utteranceId == activeSpeechCompletionUtteranceId) {
+                  handleSpeechSessionCompleted(utteranceId)
+                  return
+                }
                 viewModelScope.launch {
                   _uiState.update {
                     it.copy(
@@ -521,16 +537,20 @@ constructor(
               }
 
               override fun onDone(utteranceId: String?) {
-                handleSpeechUtteranceFinished(utteranceId)
+                handleSpeechSessionCompleted(utteranceId)
               }
 
               @Deprecated("Deprecated in Java")
               override fun onError(utteranceId: String?) {
-                handleSpeechUtteranceFinished(utteranceId)
+                handleSpeechSessionCompleted(utteranceId)
               }
 
               override fun onError(utteranceId: String?, errorCode: Int) {
-                handleSpeechUtteranceFinished(utteranceId)
+                handleSpeechSessionCompleted(utteranceId)
+              }
+
+              override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                handleSpeechSessionCompleted(utteranceId)
               }
             }
           )
@@ -600,15 +620,23 @@ constructor(
     return false
   }
 
-  private fun handleSpeechUtteranceFinished(utteranceId: String?) {
-    val sessionId = utteranceId?.substringBefore(':')?.toLongOrNull() ?: return
-    if (sessionId != activeSpeechSessionId) {
+  private fun handleSpeechSessionCompleted(utteranceId: String?) {
+    val completionId = activeSpeechCompletionUtteranceId ?: return
+    if (utteranceId != completionId) {
       return
     }
-    speechQueuedCount = (speechQueuedCount - 1).coerceAtLeast(0)
-    if (speechQueuedCount == 0) {
-      _uiState.update { it.copy(isSpeaking = false) }
-      finalizePendingSpeechIfNeeded()
+    val completedPurpose = activeSpeechPurpose
+    clearActiveSpeechState()
+    _uiState.update { it.copy(isSpeaking = false) }
+    when (completedPurpose) {
+      ActiveSpeechPurpose.INFERENCE -> finalizePendingSpeechIfNeeded()
+      ActiveSpeechPurpose.MANUAL_READ, ActiveSpeechPurpose.NONE -> {
+        if (!_uiState.value.inProgress) {
+          _uiState.update {
+            it.copy(statusText = context.getString(R.string.vision_narration_status_ready))
+          }
+        }
+      }
     }
   }
 
@@ -633,6 +661,7 @@ constructor(
     captureGate.set(false)
     _uiState.update {
       it.copy(
+        activeMode = mode,
         autoRunning = keepAutoRunning,
         inProgress = false,
         latestStreamingDescription = "",
@@ -661,7 +690,14 @@ constructor(
           pendingSpeechRequestId = requestId
           pendingSpeechMode = mode
           pendingSpeechDescription = cleanedResponse
-          when (enqueueSpeech(cleanedResponse, flush = true)) {
+          when (
+            enqueueSpeech(
+              text = cleanedResponse,
+              flush = true,
+              purpose = ActiveSpeechPurpose.INFERENCE,
+              appendCompletionSentinel = true,
+            )
+          ) {
             SpeechEnqueueResult.QUEUED -> {
               pendingSpeechAwaitingInitialization = false
             }
@@ -687,7 +723,14 @@ constructor(
           val splitIndex = resolveStreamingSpeakableSplitIndex(streamingSpeechRemainder)
           if (splitIndex > 0) {
             val speakable = streamingSpeechRemainder.substring(0, splitIndex)
-            when (enqueueSpeech(speakable, flush = false)) {
+            when (
+              enqueueSpeech(
+                text = speakable,
+                flush = false,
+                purpose = ActiveSpeechPurpose.INFERENCE,
+                appendCompletionSentinel = false,
+              )
+            ) {
               SpeechEnqueueResult.QUEUED -> {
                 streamingSpeechRemainder = streamingSpeechRemainder.substring(splitIndex)
               }
@@ -705,7 +748,14 @@ constructor(
           pendingSpeechMode = mode
           pendingSpeechDescription = cleanedResponse
           if (streamingSpeechRemainder.isNotBlank()) {
-            when (enqueueSpeech(streamingSpeechRemainder, flush = false)) {
+            when (
+              enqueueSpeech(
+                text = streamingSpeechRemainder,
+                flush = false,
+                purpose = ActiveSpeechPurpose.INFERENCE,
+                appendCompletionSentinel = true,
+              )
+            ) {
               SpeechEnqueueResult.QUEUED -> {
                 streamingSpeechRemainder = ""
                 pendingSpeechAwaitingInitialization = false
@@ -717,16 +767,39 @@ constructor(
                 reportTtsUnavailable()
               }
             }
+          } else {
+            when (
+              enqueueSpeech(
+                text = "",
+                flush = false,
+                purpose = ActiveSpeechPurpose.INFERENCE,
+                appendCompletionSentinel = true,
+              )
+            ) {
+              SpeechEnqueueResult.QUEUED -> {
+                pendingSpeechAwaitingInitialization = false
+              }
+              SpeechEnqueueResult.WAITING_FOR_INITIALIZATION -> {
+                pendingSpeechAwaitingInitialization = true
+              }
+              SpeechEnqueueResult.FAILED -> {
+                reportTtsUnavailable()
+              }
+            }
           }
-          finalizePendingSpeechIfNeeded()
         }
       }
     }
   }
 
-  private fun enqueueSpeech(text: String, flush: Boolean): SpeechEnqueueResult {
+  private fun enqueueSpeech(
+    text: String,
+    flush: Boolean,
+    purpose: ActiveSpeechPurpose,
+    appendCompletionSentinel: Boolean,
+  ): SpeechEnqueueResult {
     val normalized = text.trim()
-    if (normalized.isEmpty()) {
+    if (normalized.isEmpty() && !appendCompletionSentinel) {
       return SpeechEnqueueResult.FAILED
     }
     val tts = textToSpeech
@@ -735,13 +808,11 @@ constructor(
       return SpeechEnqueueResult.WAITING_FOR_INITIALIZATION
     }
     val queueMode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-    if (flush) {
-      speechQueuedCount = 0
-    }
-    val segments = splitSpeechSegments(normalized)
+    val segments = if (normalized.isEmpty()) listOf<String>() else splitSpeechSegments(normalized)
     var queuedAny = false
+    var fallbackCompletionId: String? = null
     segments.forEachIndexed { index, segment ->
-      val utteranceId = "${activeSpeechSessionId}:${speechQueuedCount + 1}"
+      val utteranceId = "${activeSpeechSessionId}:segment:${index + 1}:${UUID.randomUUID()}"
       val segmentQueueMode =
         if (queuedAny || index > 0) {
           TextToSpeech.QUEUE_ADD
@@ -750,12 +821,16 @@ constructor(
         }
       val result = tts.speak(segment, segmentQueueMode, Bundle(), utteranceId)
       if (result == TextToSpeech.SUCCESS) {
-        speechQueuedCount += 1
         queuedAny = true
+        fallbackCompletionId = utteranceId
       } else {
         Log.w(TAG, "TextToSpeech speak returned non-success result=$result")
         initializeTextToSpeech(forceRecreate = true)
         return if (queuedAny) {
+          if (appendCompletionSentinel) {
+            activeSpeechPurpose = purpose
+            activeSpeechCompletionUtteranceId = fallbackCompletionId
+          }
           _uiState.update {
             it.copy(
               isSpeaking = true,
@@ -768,9 +843,27 @@ constructor(
         }
       }
     }
+    var completionUtteranceId: String? = fallbackCompletionId
+    if (appendCompletionSentinel) {
+      val sentinelId = "${activeSpeechSessionId}:completion:${UUID.randomUUID()}"
+      val sentinelResult =
+        tts.playSilentUtterance(
+          TTS_COMPLETION_SENTINEL_DURATION_MS,
+          if (queuedAny) TextToSpeech.QUEUE_ADD else queueMode,
+          sentinelId,
+        )
+      if (sentinelResult == TextToSpeech.SUCCESS) {
+        completionUtteranceId = sentinelId
+        queuedAny = true
+      } else {
+        Log.w(TAG, "TextToSpeech playSilentUtterance returned non-success result=$sentinelResult")
+      }
+    }
     if (queuedAny) {
-      lastSpeechQueueAtMs = System.currentTimeMillis()
-      ensureSpeechWatchdog(activeSpeechSessionId)
+      if (appendCompletionSentinel) {
+        activeSpeechPurpose = purpose
+        activeSpeechCompletionUtteranceId = completionUtteranceId
+      }
       _uiState.update {
         it.copy(
           isSpeaking = true,
@@ -786,12 +879,19 @@ constructor(
     if (!ttsReady.get()) {
       return
     }
-    if (speechQueuedCount > 0 || uiState.value.isSpeaking) {
+    if (activeSpeechPurpose != ActiveSpeechPurpose.NONE || uiState.value.isSpeaking) {
       return
     }
     val manualText = pendingManualSpeechText
     if (manualText != null) {
-      when (enqueueSpeech(manualText, flush = true)) {
+      when (
+        enqueueSpeech(
+          text = manualText,
+          flush = true,
+          purpose = ActiveSpeechPurpose.MANUAL_READ,
+          appendCompletionSentinel = true,
+        )
+      ) {
         SpeechEnqueueResult.QUEUED -> {
           pendingManualSpeechText = null
           pendingManualSpeechAwaitingInitialization = false
@@ -811,7 +911,14 @@ constructor(
       return
     }
     val pendingDescription = pendingSpeechDescription ?: return
-    when (enqueueSpeech(pendingDescription, flush = true)) {
+    when (
+      enqueueSpeech(
+        text = pendingDescription,
+        flush = true,
+        purpose = ActiveSpeechPurpose.INFERENCE,
+        appendCompletionSentinel = true,
+      )
+    ) {
       SpeechEnqueueResult.QUEUED -> {
         pendingSpeechAwaitingInitialization = false
       }
@@ -833,7 +940,7 @@ constructor(
     if (pendingSpeechAwaitingInitialization || ttsInitializationInFlight.get()) {
       return
     }
-    if (speechQueuedCount > 0 || uiState.value.isSpeaking) {
+    if (activeSpeechPurpose == ActiveSpeechPurpose.INFERENCE || uiState.value.isSpeaking) {
       return
     }
     clearPendingSpeechState()
@@ -852,61 +959,21 @@ constructor(
   private fun resetSpeechStateForRequest(requestId: Long) {
     stopSpeechPlayback()
     activeSpeechSessionId = requestId
-    speechQueuedCount = 0
+    clearActiveSpeechState()
     clearCompletedInferenceRequest()
     clearPendingSpeechState()
   }
 
   private fun stopSpeechPlayback() {
-    speechWatchdogJob?.cancel()
-    speechWatchdogJob = null
     activeSpeechSessionId += 1
-    speechQueuedCount = 0
+    clearActiveSpeechState()
     textToSpeech?.stop()
     _uiState.update { it.copy(isSpeaking = false) }
   }
 
-  private fun ensureSpeechWatchdog(sessionId: Long) {
-    if (speechWatchdogJob?.isActive == true) {
-      return
-    }
-    speechWatchdogJob =
-      viewModelScope.launch {
-        var silentPolls = 0
-        while (activeSpeechSessionId == sessionId) {
-          delay(TTS_SILENCE_POLL_INTERVAL_MS)
-          if (activeSpeechSessionId != sessionId) {
-            return@launch
-          }
-          if (speechQueuedCount <= 0 && !uiState.value.isSpeaking) {
-            return@launch
-          }
-          val tts = textToSpeech ?: continue
-          val engineSpeaking =
-            runCatching { tts.isSpeaking }
-              .getOrElse {
-                Log.w(TAG, "Failed to query TextToSpeech.isSpeaking()", it)
-                true
-              }
-          if (engineSpeaking) {
-            silentPolls = 0
-            continue
-          }
-          if (System.currentTimeMillis() - lastSpeechQueueAtMs < TTS_SILENCE_GUARD_MS) {
-            silentPolls = 0
-            continue
-          }
-          silentPolls += 1
-          if (silentPolls < TTS_SILENCE_POLL_COUNT) {
-            continue
-          }
-          Log.w(TAG, "Speech watchdog finalized session=$sessionId after missing completion callback")
-          speechQueuedCount = 0
-          _uiState.update { it.copy(isSpeaking = false) }
-          finalizePendingSpeechIfNeeded()
-          return@launch
-        }
-      }
+  private fun clearActiveSpeechState() {
+    activeSpeechPurpose = ActiveSpeechPurpose.NONE
+    activeSpeechCompletionUtteranceId = null
   }
 
   private fun handlePendingSpeechInitializationFailure() {
@@ -947,6 +1014,7 @@ constructor(
     val newEntry = VisionNarrationEntry(timestampMs = now, mode = mode, description = description)
     _uiState.update { current ->
       current.copy(
+        activeMode = if (current.autoRunning) VisionCaptureMode.AUTO else null,
         inProgress = false,
         isSpeaking = false,
         latestStreamingDescription = "",
@@ -974,6 +1042,7 @@ constructor(
     clearPendingSpeechState()
     _uiState.update {
       it.copy(
+        activeMode = if (it.autoRunning) VisionCaptureMode.AUTO else null,
         inProgress = false,
         latestStreamingDescription = "",
         statusText =
@@ -996,6 +1065,7 @@ constructor(
     clearPendingSpeechState()
     _uiState.update {
       it.copy(
+        activeMode = null,
         autoRunning = false,
         inProgress = false,
         latestStreamingDescription = "",

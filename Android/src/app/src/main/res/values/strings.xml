@@ -254,6 +254,7 @@
   <string name="vision_narration_start" translatable="false">Automatic narration</string>
   <string name="vision_narration_stop" translatable="false">Stop automatic narration</string>
   <string name="vision_narration_single_capture" translatable="false">Manual narration</string>
+  <string name="vision_narration_stop_manual" translatable="false">Stop manual narration</string>
   <string name="vision_narration_preview_label" translatable="false">Live camera preview</string>
   <string name="vision_narration_status_label" translatable="false">Status</string>
   <string name="vision_narration_status_ready" translatable="false">Ready</string>

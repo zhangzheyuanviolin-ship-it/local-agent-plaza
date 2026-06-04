@@ -106,7 +106,9 @@ fun VisionNarrationScreen(
   val hasLatestNarration =
     uiState.latestStreamingDescription.isNotBlank() || uiState.latestCompletedDescription.isNotBlank()
   val ttsToggleContentDescription = stringResource(R.string.vision_narration_tts_toggle)
-  val settingsLocked = uiState.autoRunning || uiState.inProgress || uiState.isSpeaking
+  val autoModeActive = uiState.activeMode == VisionCaptureMode.AUTO
+  val manualModeActive = uiState.activeMode == VisionCaptureMode.MANUAL
+  val settingsLocked = autoModeActive || uiState.inProgress || uiState.isSpeaking
   val longPressActionLabel = stringResource(R.string.vision_narration_long_press_actions)
 
   var showPromptManager by rememberSaveable { mutableStateOf(false) }
@@ -118,7 +120,7 @@ fun VisionNarrationScreen(
   var promptToDelete by rememberSaveable { mutableStateOf<String?>(null) }
 
   LaunchedEffect(uiState.autoRunning, uiState.inProgress, uiState.isSpeaking) {
-    setAppBarControlsDisabled(uiState.autoRunning || uiState.inProgress || uiState.isSpeaking)
+    setAppBarControlsDisabled(autoModeActive || uiState.inProgress || uiState.isSpeaking)
   }
 
   DisposableEffect(model.name) {
@@ -361,17 +363,17 @@ fun VisionNarrationScreen(
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
       FilledTonalButton(
         onClick = {
-          if (uiState.autoRunning) {
+          if (autoModeActive) {
             viewModel.stopNarration(model.takeIf { it.name.isNotEmpty() })
           } else {
             viewModel.startAutoNarration()
           }
         },
-        enabled = canUseModel && (uiState.autoRunning || (!uiState.inProgress && !uiState.isSpeaking)),
+        enabled = canUseModel && (autoModeActive || (!manualModeActive && !uiState.inProgress && !uiState.isSpeaking)),
         modifier = Modifier.weight(1f),
       ) {
         Text(
-          if (uiState.autoRunning) {
+          if (autoModeActive) {
             stringResource(R.string.vision_narration_stop)
           } else {
             stringResource(R.string.vision_narration_start)
@@ -380,11 +382,23 @@ fun VisionNarrationScreen(
       }
 
       OutlinedButton(
-        onClick = viewModel::requestSingleCapture,
-        enabled = canUseModel && !uiState.autoRunning && !uiState.inProgress && !uiState.isSpeaking,
+        onClick = {
+          if (manualModeActive) {
+            viewModel.stopNarration(model.takeIf { it.name.isNotEmpty() })
+          } else {
+            viewModel.requestSingleCapture()
+          }
+        },
+        enabled = canUseModel && (!autoModeActive && (manualModeActive || (!uiState.inProgress && !uiState.isSpeaking))),
         modifier = Modifier.weight(1f),
       ) {
-        Text(stringResource(R.string.vision_narration_single_capture))
+        Text(
+          if (manualModeActive) {
+            stringResource(R.string.vision_narration_stop_manual)
+          } else {
+            stringResource(R.string.vision_narration_single_capture)
+          }
+        )
       }
     }
 
