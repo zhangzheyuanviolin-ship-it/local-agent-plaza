@@ -361,17 +361,17 @@ fun VisionNarrationScreen(
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
       FilledTonalButton(
         onClick = {
-          if (uiState.autoRunning || uiState.inProgress || uiState.isSpeaking) {
+          if (uiState.autoRunning) {
             viewModel.stopNarration(model.takeIf { it.name.isNotEmpty() })
           } else {
             viewModel.startAutoNarration()
           }
         },
-        enabled = canUseModel,
+        enabled = canUseModel && (uiState.autoRunning || (!uiState.inProgress && !uiState.isSpeaking)),
         modifier = Modifier.weight(1f),
       ) {
         Text(
-          if (uiState.autoRunning || uiState.inProgress || uiState.isSpeaking) {
+          if (uiState.autoRunning) {
             stringResource(R.string.vision_narration_stop)
           } else {
             stringResource(R.string.vision_narration_start)
@@ -381,7 +381,7 @@ fun VisionNarrationScreen(
 
       OutlinedButton(
         onClick = viewModel::requestSingleCapture,
-        enabled = canUseModel && !uiState.inProgress && !uiState.isSpeaking,
+        enabled = canUseModel && !uiState.autoRunning && !uiState.inProgress && !uiState.isSpeaking,
         modifier = Modifier.weight(1f),
       ) {
         Text(stringResource(R.string.vision_narration_single_capture))

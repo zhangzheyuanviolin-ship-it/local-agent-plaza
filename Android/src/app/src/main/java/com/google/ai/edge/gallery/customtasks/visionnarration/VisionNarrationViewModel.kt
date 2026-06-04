@@ -50,6 +50,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -69,6 +70,9 @@ private const val STREAMING_SPEECH_FALLBACK_CHARS = 24
 private val INTERVAL_OPTIONS_MS = setOf(100L, 200L, 300L, 500L, 1_000L, 2_000L, 3_000L, 5_000L, 10_000L)
 private val STREAMING_SPEECH_BOUNDARIES = charArrayOf('。', '！', '？', '.', '!', '?', ';', '；', ':', '：', '\n')
 private const val TTS_SEGMENT_MAX_CHARS = 80
+private const val TTS_SILENCE_POLL_INTERVAL_MS = 200L
+private const val TTS_SILENCE_POLL_COUNT = 3
+private const val TTS_SILENCE_GUARD_MS = 500L
 
 private enum class SpeechEnqueueResult {
   QUEUED,
@@ -141,6 +145,8 @@ constructor(
   private var completedInferenceRequestId: Long? = null
   private var streamingSpeechConsumedLength = 0
   private var streamingSpeechRemainder = ""
+  private var speechWatchdogJob: Job? = null
+  private var lastSpeechQueueAtMs: Long = 0L
 
   private val formatter =
     DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault()).withZone(ZoneId.systemDefault())
@@ -763,6 +769,8 @@ constructor(
       }
     }
     if (queuedAny) {
+      lastSpeechQueueAtMs = System.currentTimeMillis()
+      ensureSpeechWatchdog(activeSpeechSessionId)
       _uiState.update {
         it.copy(
           isSpeaking = true,
@@ -850,10 +858,55 @@ constructor(
   }
 
   private fun stopSpeechPlayback() {
+    speechWatchdogJob?.cancel()
+    speechWatchdogJob = null
     activeSpeechSessionId += 1
     speechQueuedCount = 0
     textToSpeech?.stop()
     _uiState.update { it.copy(isSpeaking = false) }
+  }
+
+  private fun ensureSpeechWatchdog(sessionId: Long) {
+    if (speechWatchdogJob?.isActive == true) {
+      return
+    }
+    speechWatchdogJob =
+      viewModelScope.launch {
+        var silentPolls = 0
+        while (activeSpeechSessionId == sessionId) {
+          delay(TTS_SILENCE_POLL_INTERVAL_MS)
+          if (activeSpeechSessionId != sessionId) {
+            return@launch
+          }
+          if (speechQueuedCount <= 0 && !uiState.value.isSpeaking) {
+            return@launch
+          }
+          val tts = textToSpeech ?: continue
+          val engineSpeaking =
+            runCatching { tts.isSpeaking }
+              .getOrElse {
+                Log.w(TAG, "Failed to query TextToSpeech.isSpeaking()", it)
+                true
+              }
+          if (engineSpeaking) {
+            silentPolls = 0
+            continue
+          }
+          if (System.currentTimeMillis() - lastSpeechQueueAtMs < TTS_SILENCE_GUARD_MS) {
+            silentPolls = 0
+            continue
+          }
+          silentPolls += 1
+          if (silentPolls < TTS_SILENCE_POLL_COUNT) {
+            continue
+          }
+          Log.w(TAG, "Speech watchdog finalized session=$sessionId after missing completion callback")
+          speechQueuedCount = 0
+          _uiState.update { it.copy(isSpeaking = false) }
+          finalizePendingSpeechIfNeeded()
+          return@launch
+        }
+      }
   }
 
   private fun handlePendingSpeechInitializationFailure() {
