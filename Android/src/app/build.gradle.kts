@@ -32,20 +32,20 @@ android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
 
-  val testApplicationId = "com.zhanglaoshi.androidlocalagent.gallery.visiontest"
+  val appApplicationId = "com.localagent.plaza"
 
   defaultConfig {
-    applicationId = testApplicationId
+    applicationId = appApplicationId
     minSdk = 31
     targetSdk = 35
-    versionCode = 2026060405
-    versionName = "1.0.13-ala.32-visiontest"
+    versionCode = 100
+    versionName = "1.0.0-plaza.1"
 
     // Needed for HuggingFace auth workflows.
     // Use the scheme of the "Redirect URLs" in HuggingFace app.
     manifestPlaceholders["appAuthRedirectScheme"] =
-        "${testApplicationId}.oauthredirect"
-    manifestPlaceholders["appDeepLinkScheme"] = testApplicationId
+        "${appApplicationId}.oauthredirect"
+    manifestPlaceholders["appDeepLinkScheme"] = appApplicationId
     manifestPlaceholders["applicationName"] = "com.google.ai.edge.gallery.GalleryApplication"
     manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher"
 

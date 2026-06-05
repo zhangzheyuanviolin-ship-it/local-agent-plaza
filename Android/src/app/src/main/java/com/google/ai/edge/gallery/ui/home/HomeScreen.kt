@@ -172,7 +172,6 @@ fun HomeScreen(
   val scope = rememberCoroutineScope()
   val context = LocalContext.current
   val isDevBuild = context.packageName.endsWith(".dev")
-  val suppressHomeIntro = context.packageName.endsWith(".visiontest")
 
   var tasks = uiState.tasks
 
@@ -425,7 +424,7 @@ fun HomeScreen(
                 var selectedCategoryIndex by remember { mutableIntStateOf(0) }
 
                 // App title and intro text.
-                if (!suppressHomeIntro) {
+                if (true) {
                   Column(
                     modifier =
                       Modifier.padding(
@@ -862,7 +861,6 @@ private fun TaskList(
   gm4: Boolean = false,
   grid: Boolean = false,
 ) {
-  val suppressBranding = LocalContext.current.packageName.endsWith(".visiontest")
   // Model list animation:
   //
   // 1.  Slide Up: The entire column of task cards translates upwards,
@@ -886,7 +884,7 @@ private fun TaskList(
   }
 
   // The highlighted tiles at the top.
-  if (gm4 && !suppressBranding) {
+  if (gm4) {
     Column(
       verticalArrangement = Arrangement.spacedBy(10.dp),
       modifier =

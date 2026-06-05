@@ -30,6 +30,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: gallery-app-release
+          name: local-agent-plaza-release
           path: Android/src/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
