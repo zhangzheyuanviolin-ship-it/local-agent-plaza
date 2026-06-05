@@ -39,7 +39,7 @@ android {
     minSdk = 31
     targetSdk = 35
     versionCode = 100
-    versionName = "1.0.0-plaza.1"
+    versionName = "1.0.13-plaza.1"
 
     // Needed for HuggingFace auth workflows.
     // Use the scheme of the "Redirect URLs" in HuggingFace app.
