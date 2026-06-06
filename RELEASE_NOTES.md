@@ -1,8 +1,8 @@
 # Release Notes · 版本历史
 
-## v1.0.0-plaza.1 · 2026-06-06
+## v1.0.13-plaza.1 · 2026-06-06
 
-首个对外正式稳定版。功能与上游 1.0.13-ala.32-visiontest 完全一致，零功能回退。
+首个对外正式稳定版。功能与上游 1.0.13 完全一致，零功能回退。
 
 **版本标识**
 - versionName：`1.0.13-plaza.1`
@@ -20,7 +20,7 @@
 - 仓库 Topics：`on-device-ai` / `android` / `agent` / `local-llm` / `vision` / `accessibility` / `litert-lm` / `tavily` / `vision-narration` / `chinese`
 - Issues 面板已开启
 
-**变更（与上游 1.0.13-ala.32-visiontest 对比）**
+**变更（与上游 1.0.13 对比）**
 - 移除 `visiontest` / `zhanglaoshi` / `张老师` 残留
 - `versionName` 改为 `1.0.13-plaza.1`，匹配上游 `1_0_13.json` 模型白名单
 - `versionCode` 重置为 `100`
