@@ -1,5 +1,38 @@
 # 本地视觉创作交付说明
 
+## 2026-06-12 Stage 1.2
+
+本版本先修复测试链路的基础问题：固定云端 release 签名，并让测试版本号自动递增。
+
+### 本版本修复内容
+
+- 云端构建不再使用每台 runner 临时生成的 debug 签名。
+- GitHub Actions 改为从仓库 Secrets 注入固定 release keystore。
+- `versionCode` 改为云端自动递增，避免多个 APK 都是 `100`。
+- `versionName` 改为 `1.0.13-plaza.visual.<run_number>`，便于屏幕阅读器区分测试版本。
+- 云端构建会在上传 APK 前打印签名证书和 APK 版本信息，避免再次交付未知签名包。
+- 已将当前已下载的 Z-Image Turbo Q2_K 模型包备份到 `/storage/emulated/0/下载管理/local-visual-creation/model-backup/`。
+
+### 重要限制
+
+上一版已经安装到手机上的 APK 使用了临时 debug 签名，私钥无法从 GitHub runner 找回。因此第一次切换到固定 release 签名时，Android 仍然不能覆盖安装上一版。完成这一次签名切换后，后续所有固定 release 签名版本才可以覆盖更新。
+
+### 手动测试方式
+
+1. 安装本版本前，确认模型备份目录仍存在。
+2. 卸载上一版临时 debug 签名 APK。
+3. 安装本版本固定 release 签名 APK。
+4. 将备份模型目录还原到 `/storage/emulated/0/Android/data/com.localagent.plaza/files/z_image_turbo_q2_gguf/`。
+5. 打开应用，确认“本地视觉创作”仍显示 1 个模型。
+6. 进入模型页面，确认模型不需要重新下载或能识别已下载文件。
+
+### 成功标准
+
+- 本版本 APK 的签名证书 SHA256 固定为 `38:A9:A4:F1:5E:D5:3F:47:AB:EE:1A:03:43:B2:FE:3D:82:56:87:AC:B1:48:AC:8C:52:2F:A1:D2:9F:3E:29:2D`。
+- APK 的 `versionCode` 大于 100。
+- 安装完成后，下一次再产出的 APK 可以覆盖更新这个版本。
+- 备份模型文件可以还原，避免再次下载 6GB 模型包。
+
 ## 2026-06-12 Stage 1.1
 
 本版本修复上一版“本地视觉创作”入口显示包含 0 个模型且无法进入的问题。

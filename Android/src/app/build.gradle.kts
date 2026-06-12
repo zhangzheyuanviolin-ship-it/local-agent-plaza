@@ -33,13 +33,18 @@ android {
   compileSdk = 35
 
   val appApplicationId = "com.localagent.plaza"
+  val localVersionCode =
+    providers.environmentVariable("LOCAL_VERSION_CODE").orNull?.toIntOrNull() ?: 101
+  val localVersionName =
+    providers.environmentVariable("LOCAL_VERSION_NAME").orNull ?: "1.0.13-plaza.visual.1"
+  val releaseKeystorePath = providers.environmentVariable("ANDROID_RELEASE_KEYSTORE_PATH").orNull
 
   defaultConfig {
     applicationId = appApplicationId
     minSdk = 31
     targetSdk = 35
-    versionCode = 100
-    versionName = "1.0.13-plaza.1"
+    versionCode = localVersionCode
+    versionName = localVersionName
 
     // Needed for HuggingFace auth workflows.
     // Use the scheme of the "Redirect URLs" in HuggingFace app.
@@ -52,11 +57,27 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
+  signingConfigs {
+    if (!releaseKeystorePath.isNullOrBlank()) {
+      create("release") {
+        storeFile = file(releaseKeystorePath)
+        storePassword = providers.environmentVariable("ANDROID_RELEASE_KEYSTORE_PASSWORD").orNull
+        keyAlias = providers.environmentVariable("ANDROID_RELEASE_KEY_ALIAS").orNull
+        keyPassword = providers.environmentVariable("ANDROID_RELEASE_KEY_PASSWORD").orNull
+      }
+    }
+  }
+
   buildTypes {
     release {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("debug")
+      signingConfig =
+        if (!releaseKeystorePath.isNullOrBlank()) {
+          signingConfigs.getByName("release")
+        } else {
+          signingConfigs.getByName("debug")
+        }
     }
   }
   compileOptions {
