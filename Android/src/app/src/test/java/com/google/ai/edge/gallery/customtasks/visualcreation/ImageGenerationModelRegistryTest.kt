@@ -23,10 +23,24 @@ import org.junit.Test
 
 class ImageGenerationModelRegistryTest {
   @Test
-  fun registryIncludesDownloadableZImageTurboModel() {
+  fun registryIncludesDownloadableZImageAndStableDiffusionModels() {
     val modelIds = ImageGenerationModelRegistry.recommendedModels.map { it.modelId }
 
-    assertEquals(listOf("z-image-turbo-q2-gguf"), modelIds)
+    assertEquals(
+      listOf(
+        "z-image-turbo-q2-gguf",
+        "z-image-turbo-q3-gguf",
+        "z-image-turbo-q4-0-gguf",
+        "z-image-turbo-q4-k-gguf",
+        "z-image-turbo-q5-0-gguf",
+        "z-image-turbo-q6-k-gguf",
+        "z-image-turbo-q8-0-gguf",
+        "sd15-q4-0-gguf",
+        "sd15-q5-0-gguf",
+        "sd15-q8-0-gguf",
+      ),
+      modelIds,
+    )
   }
 
   @Test
@@ -43,6 +57,7 @@ class ImageGenerationModelRegistryTest {
     assertTrue(model.requiredFiles.any { it.role == ImageGenerationModelFileRole.VAE })
     assertTrue(model.requiredFiles.any { it.role == ImageGenerationModelFileRole.TEXT_ENCODER })
     assertEquals(6_407_162_885L, model.totalSizeInBytes)
+    assertEquals("z-image-turbo-q2-2025-12-02", model.localVersion)
     model.requiredFiles.forEach { file ->
       assertTrue(file.downloadUrl.startsWith("https://huggingface.co/"))
       assertTrue(file.downloadUrl.contains("/resolve/main/"))
@@ -51,11 +66,36 @@ class ImageGenerationModelRegistryTest {
   }
 
   @Test
+  fun higherQualityZImageVariantsUseVerifiedSizesAndSharedFiles() {
+    val q5 = ImageGenerationModelRegistry.requireModel("z-image-turbo-q5-0-gguf")
+
+    assertEquals("Z-Image Turbo Q5_0 GGUF", q5.displayName)
+    assertEquals(8_357_268_485L, q5.totalSizeInBytes)
+    assertTrue(q5.supportsChineseText)
+    assertTrue(q5.requiredFiles.any { it.fileName == "z_image_turbo-Q5_0.gguf" })
+    assertTrue(q5.requiredFiles.any { it.fileName == "ae.safetensors" })
+    assertTrue(q5.requiredFiles.any { it.fileName == "qwen_3_4b_fp4_mixed.safetensors" })
+  }
+
+  @Test
+  fun stableDiffusionEnglishCandidatesDeclareSingleCheckpointFiles() {
+    val sd15 = ImageGenerationModelRegistry.requireModel("sd15-q4-0-gguf")
+
+    assertEquals("Stable Diffusion 1.5 Q4_0 GGUF", sd15.displayName)
+    assertEquals("CreativeML Open RAIL-M", sd15.license)
+    assertEquals(false, sd15.supportsChineseText)
+    assertEquals(1, sd15.requiredFiles.size)
+    assertEquals(ImageGenerationModelFileRole.CHECKPOINT, sd15.requiredFiles.single().role)
+    assertEquals(1_566_768_416L, sd15.totalSizeInBytes)
+  }
+
+  @Test
   fun visualCreationTaskUsesRealDownloadModelInsteadOfPlaceholder() {
     val models = createVisualCreationImageModels()
 
-    assertEquals(listOf("z-image-turbo-q2-gguf"), models.map { it.name })
-    val model = models.single()
+    assertEquals("z-image-turbo-q2-gguf", models.first().name)
+    assertEquals(10, models.size)
+    val model = models.first()
     assertEquals("z_image_turbo-Q2_K.gguf", model.downloadFileName)
     assertTrue(model.url.endsWith("/z_image_turbo-Q2_K.gguf"))
     assertEquals(2, model.extraDataFiles.size)
