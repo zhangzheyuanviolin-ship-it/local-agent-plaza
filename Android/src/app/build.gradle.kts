@@ -56,12 +56,6 @@ android {
     manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    externalNativeBuild {
-      cmake {
-        cppFlags += listOf("-std=c++17", "-O3")
-        arguments += listOf("-DANDROID_STL=c++_shared")
-      }
-    }
   }
 
   signingConfigs {
