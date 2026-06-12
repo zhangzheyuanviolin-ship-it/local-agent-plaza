@@ -29,8 +29,10 @@ import com.google.ai.edge.gallery.common.ProjectConfig
 import com.google.ai.edge.gallery.common.SystemPromptHelper
 import com.google.ai.edge.gallery.common.getJsonResponse
 import com.google.ai.edge.gallery.common.isAICoreSupported
-import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NARRATION
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
+import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NARRATION
+import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_LOCAL_VISUAL_CREATION
+import com.google.ai.edge.gallery.customtasks.visualcreation.createVisualCreationImageModels
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
@@ -286,8 +288,23 @@ constructor(
     }
   }
 
+  private fun restoreLocalVisualCreationModels(tasks: Collection<Task>) {
+    val task = tasks.firstOrNull { it.id == TASK_ID_LOCAL_VISUAL_CREATION } ?: return
+    var changed = false
+    for (model in createVisualCreationImageModels()) {
+      if (task.models.none { it.name == model.name }) {
+        task.models.add(model)
+        changed = true
+      }
+    }
+    if (changed) {
+      task.updateTrigger.value = System.currentTimeMillis()
+    }
+  }
+
   fun processTasks() {
     val curTasks = getActiveCustomTasks().map { it.task }
+    restoreLocalVisualCreationModels(curTasks)
     for (task in curTasks) {
       for (model in task.models) {
         model.preProcess()
@@ -950,6 +967,7 @@ constructor(
       try {
         val curTasks = getActiveCustomTasks().map { it.task }
         clearNonImportedModelsFromTasks(curTasks)
+        restoreLocalVisualCreationModels(curTasks)
 
         // Clear existing allowlist models.
         _allowlistModels.clear()
@@ -1182,6 +1200,7 @@ constructor(
   private fun createBootstrapUiState(): ModelManagerUiState {
     val activeTasks = getActiveCustomTasks().map { it.task }
     clearAllModelsFromTasks(activeTasks)
+    restoreLocalVisualCreationModels(activeTasks)
 
     val modelDownloadStatus: MutableMap<String, ModelDownloadStatus> = mutableMapOf()
     val modelInstances: MutableMap<String, ModelInitializationStatus> = mutableMapOf()

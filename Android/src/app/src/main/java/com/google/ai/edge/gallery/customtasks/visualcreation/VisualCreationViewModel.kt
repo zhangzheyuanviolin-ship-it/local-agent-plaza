@@ -55,7 +55,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     _uiState.update {
       it.copy(
         selectedImageGenerationModelId = model.modelId,
-        status = VisualCreationStatus.IMAGE_MODEL_DOWNLOADED,
+        status = VisualCreationStatus.IDLE,
         statusText = "已选择图像生成模型：${model.displayName}",
       )
     }
@@ -78,8 +78,8 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     }
     _uiState.update {
       it.copy(
-        status = VisualCreationStatus.READY_FOR_VISUAL_PROCESSING,
-        statusText = "第一阶段页面骨架已就绪，真实本地图像生成后端将在下一步接入。",
+        status = VisualCreationStatus.ERROR,
+        statusText = "真实图像生成推理引擎尚未接入。本版本先用于验收真实模型包下载、模型加载入口和创作工作台页面。",
       )
     }
   }

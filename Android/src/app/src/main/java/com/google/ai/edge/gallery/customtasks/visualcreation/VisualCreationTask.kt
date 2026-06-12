@@ -36,8 +36,6 @@ import kotlinx.coroutines.CoroutineScope
 
 const val TASK_ID_LOCAL_VISUAL_CREATION = "llm_local_visual_creation"
 
-private const val VISUAL_CREATION_WORKBENCH_MODEL = "local_visual_creation_workbench"
-
 class VisualCreationWorkbenchInstance
 
 class VisualCreationTask @Inject constructor() : CustomTask {
@@ -47,16 +45,7 @@ class VisualCreationTask @Inject constructor() : CustomTask {
       label = "本地视觉创作",
       category = Category.LLM,
       icon = Icons.Outlined.Image,
-      models =
-        mutableListOf(
-          Model(
-            name = VISUAL_CREATION_WORKBENCH_MODEL,
-            displayName = "本地视觉创作工作台",
-            info = "本地视觉创作模块入口。图像生成模型在模块内部单独管理。",
-            downloadFileName = "workbench.marker",
-            localFileRelativeDirPathOverride = "visual_creation/workbench/",
-          )
-        ),
+      models = createVisualCreationImageModels().toMutableList(),
       description = "在设备本地生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。",
       shortDescription = "生成图片、理解图片，并基于图片继续创作",
       docUrl = "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza",

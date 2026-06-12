@@ -77,7 +77,7 @@ fun VisualCreationScreen(
       fontWeight = FontWeight.SemiBold,
     )
     Text(
-      text = "在本机生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。第一阶段先启用本地图像生成能力，后续处理入口从一开始保留在同一工作流中。",
+      text = "在本机生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。本版本先接入真实图像模型下载包和创作工作台，native 推理引擎将在下一阶段接入。",
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

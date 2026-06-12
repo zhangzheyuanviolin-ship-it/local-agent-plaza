@@ -16,6 +16,9 @@
 
 package com.google.ai.edge.gallery.customtasks.visualcreation
 
+import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.ModelDataFile
+
 enum class ImageGenerationBackend {
   STABLE_DIFFUSION_CPP,
 }
@@ -63,34 +66,8 @@ object ImageGenerationModelRegistry {
   val recommendedModels: List<ImageGenerationModelInfo> =
     listOf(
       ImageGenerationModelInfo(
-        modelId = "sd15-q4-engineering",
-        displayName = "Stable Diffusion 1.5 Q4 工程验证",
-        family = "Stable Diffusion 1.x",
-        backend = ImageGenerationBackend.STABLE_DIFFUSION_CPP,
-        format = "GGUF",
-        requiredFiles =
-          listOf(
-            ImageGenerationModelFile(
-              role = ImageGenerationModelFileRole.CHECKPOINT,
-              fileName = "sd-v1-5-pruned-emaonly-q4_0.gguf",
-              downloadUrl = "",
-              sizeInBytes = 1_100_000_000L,
-            )
-          ),
-        license = "OpenRAIL-M",
-        supportsTextToImage = true,
-        supportsImageToImage = false,
-        supportsImageEditing = false,
-        supportsChineseText = false,
-        lowMemoryRecommended = true,
-        minMemoryGb = 6,
-        recommendedWidth = 512,
-        recommendedHeight = 512,
-        notes = "第一阶段工程验证候选，用于优先跑通端侧文生图链路。",
-      ),
-      ImageGenerationModelInfo(
-        modelId = "z-image-turbo-q3-gguf",
-        displayName = "Z-Image Turbo Q3 GGUF",
+        modelId = "z-image-turbo-q2-gguf",
+        displayName = "Z-Image Turbo Q2_K GGUF",
         family = "Z-Image",
         backend = ImageGenerationBackend.STABLE_DIFFUSION_CPP,
         format = "GGUF",
@@ -98,23 +75,24 @@ object ImageGenerationModelRegistry {
           listOf(
             ImageGenerationModelFile(
               role = ImageGenerationModelFileRole.DIFFUSION_MODEL,
-              fileName = "z_image_turbo-Q3_K.gguf",
+              fileName = "z_image_turbo-Q2_K.gguf",
               downloadUrl =
-                "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q3_K.gguf",
+                "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q2_K.gguf",
               sizeInBytes = 2_592_442_304L,
             ),
             ImageGenerationModelFile(
               role = ImageGenerationModelFileRole.VAE,
-              fileName = "ae.sft",
-              downloadUrl = "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/ae.sft",
-              sizeInBytes = 335_000_000L,
+              fileName = "ae.safetensors",
+              downloadUrl =
+                "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors",
+              sizeInBytes = 335_304_388L,
             ),
             ImageGenerationModelFile(
               role = ImageGenerationModelFileRole.TEXT_ENCODER,
-              fileName = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+              fileName = "qwen_3_4b_fp4_mixed.safetensors",
               downloadUrl =
-                "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
-              sizeInBytes = 2_600_000_000L,
+                "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b_fp4_mixed.safetensors",
+              sizeInBytes = 3_479_416_193L,
             ),
           ),
         license = "Apache-2.0",
@@ -126,7 +104,8 @@ object ImageGenerationModelRegistry {
         minMemoryGb = 8,
         recommendedWidth = 512,
         recommendedHeight = 512,
-        notes = "中文能力候选，stable-diffusion.cpp文档列为Z-Image Turbo GGUF运行路径。",
+        notes =
+          "已核验公开可下载的第一阶段模型包：主扩散权重来自 leejet/Z-Image-Turbo-GGUF，VAE 和 Qwen3 4B FP4 文本编码器来自 Comfy-Org/z_image_turbo。",
       ),
     )
 
@@ -136,5 +115,47 @@ object ImageGenerationModelRegistry {
 
   fun requireModel(modelId: String): ImageGenerationModelInfo {
     return findModel(modelId) ?: error("Image generation model not found: $modelId")
+  }
+}
+
+fun createVisualCreationImageModels(): List<Model> {
+  return ImageGenerationModelRegistry.recommendedModels.map { modelInfo ->
+    val primaryFile =
+      modelInfo.requiredFiles.firstOrNull {
+        it.role == ImageGenerationModelFileRole.DIFFUSION_MODEL ||
+          it.role == ImageGenerationModelFileRole.CHECKPOINT
+      }
+        ?: error("Image generation model '${modelInfo.modelId}' has no primary model file")
+    Model(
+        name = modelInfo.modelId,
+        displayName = modelInfo.displayName,
+        info =
+          "${modelInfo.notes}\n\n模型格式：${modelInfo.format}；推理后端：stable-diffusion.cpp；" +
+            "文件总大小约 ${modelInfo.totalSizeInBytes / 1_000_000_000.0} GB；" +
+            "推荐尺寸 ${modelInfo.recommendedWidth} x ${modelInfo.recommendedHeight}；" +
+            "许可证：${modelInfo.license}。",
+        learnMoreUrl = "https://huggingface.co/leejet/Z-Image-Turbo-GGUF",
+        bestForTaskIds = listOf(TASK_ID_LOCAL_VISUAL_CREATION),
+        minDeviceMemoryInGb = modelInfo.minMemoryGb,
+        url = primaryFile.downloadUrl,
+        sizeInBytes = primaryFile.sizeInBytes,
+        downloadFileName = primaryFile.fileName,
+        version = "z-image-turbo-q2-2025-12-02",
+        extraDataFiles =
+          modelInfo.requiredFiles
+            .filterNot { it == primaryFile }
+            .map { file ->
+              ModelDataFile(
+                name = file.role.name.lowercase(),
+                url = file.downloadUrl,
+                downloadFileName = file.fileName,
+                sizeInBytes = file.sizeInBytes,
+              )
+            },
+        isLlm = false,
+        showRunAgainButton = false,
+        showBenchmarkButton = false,
+      )
+      .apply { preProcess() }
   }
 }

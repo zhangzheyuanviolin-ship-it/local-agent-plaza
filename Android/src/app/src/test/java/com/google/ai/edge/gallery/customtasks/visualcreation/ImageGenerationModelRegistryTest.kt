@@ -23,18 +23,17 @@ import org.junit.Test
 
 class ImageGenerationModelRegistryTest {
   @Test
-  fun registryIncludesEngineeringAndChineseCandidateModels() {
+  fun registryIncludesDownloadableZImageTurboModel() {
     val modelIds = ImageGenerationModelRegistry.recommendedModels.map { it.modelId }
 
-    assertTrue(modelIds.contains("sd15-q4-engineering"))
-    assertTrue(modelIds.contains("z-image-turbo-q3-gguf"))
+    assertEquals(listOf("z-image-turbo-q2-gguf"), modelIds)
   }
 
   @Test
-  fun zImageTurboCandidateDeclaresPackageMetadata() {
-    val model = ImageGenerationModelRegistry.requireModel("z-image-turbo-q3-gguf")
+  fun zImageTurboModelDeclaresVerifiedPackageMetadata() {
+    val model = ImageGenerationModelRegistry.requireModel("z-image-turbo-q2-gguf")
 
-    assertEquals("Z-Image Turbo Q3 GGUF", model.displayName)
+    assertEquals("Z-Image Turbo Q2_K GGUF", model.displayName)
     assertEquals(ImageGenerationBackend.STABLE_DIFFUSION_CPP, model.backend)
     assertEquals("GGUF", model.format)
     assertTrue(model.supportsTextToImage)
@@ -43,7 +42,28 @@ class ImageGenerationModelRegistryTest {
     assertTrue(model.requiredFiles.any { it.role == ImageGenerationModelFileRole.DIFFUSION_MODEL })
     assertTrue(model.requiredFiles.any { it.role == ImageGenerationModelFileRole.VAE })
     assertTrue(model.requiredFiles.any { it.role == ImageGenerationModelFileRole.TEXT_ENCODER })
-    assertTrue(model.totalSizeInBytes > 2_000_000_000L)
+    assertEquals(6_407_162_885L, model.totalSizeInBytes)
+    model.requiredFiles.forEach { file ->
+      assertTrue(file.downloadUrl.startsWith("https://huggingface.co/"))
+      assertTrue(file.downloadUrl.contains("/resolve/main/"))
+      assertTrue(file.sizeInBytes > 0L)
+    }
+  }
+
+  @Test
+  fun visualCreationTaskUsesRealDownloadModelInsteadOfPlaceholder() {
+    val models = createVisualCreationImageModels()
+
+    assertEquals(listOf("z-image-turbo-q2-gguf"), models.map { it.name })
+    val model = models.single()
+    assertEquals("z_image_turbo-Q2_K.gguf", model.downloadFileName)
+    assertTrue(model.url.endsWith("/z_image_turbo-Q2_K.gguf"))
+    assertEquals(2, model.extraDataFiles.size)
+    assertTrue(model.extraDataFiles.all { it.url.startsWith("https://huggingface.co/") })
+    assertTrue(model.extraDataFiles.none { it.downloadFileName == "workbench.marker" })
+    assertTrue(model.totalBytes > 0L)
+    assertEquals(false, model.isLlm)
+    assertEquals(false, model.showBenchmarkButton)
   }
 
   @Test

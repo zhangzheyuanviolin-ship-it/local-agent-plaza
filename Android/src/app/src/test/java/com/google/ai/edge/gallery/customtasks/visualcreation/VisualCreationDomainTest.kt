@@ -62,7 +62,7 @@ class VisualCreationDomainTest {
         imagePrompt = "雨夜街灯下的小提琴家",
         negativePrompt = "模糊，低质量",
         generationSettings = settings,
-        selectedImageGenerationModelId = "sd15-q4-engineering",
+        selectedImageGenerationModelId = "z-image-turbo-q2-gguf",
       )
 
     assertEquals("session-1", session.sessionId)
@@ -71,7 +71,7 @@ class VisualCreationDomainTest {
     assertEquals("雨夜街灯下的小提琴家", session.imagePrompt)
     assertEquals("模糊，低质量", session.negativePrompt)
     assertEquals(768, session.generationSettings.width)
-    assertEquals("sd15-q4-engineering", session.selectedImageGenerationModelId)
+    assertEquals("z-image-turbo-q2-gguf", session.selectedImageGenerationModelId)
     assertEquals(VisualProcessMode.DESCRIBE_IMAGE, session.visualProcessMode)
     assertEquals(VisualCreationStatus.IDLE, session.status)
     assertFalse(session.hasGeneratedImage)
