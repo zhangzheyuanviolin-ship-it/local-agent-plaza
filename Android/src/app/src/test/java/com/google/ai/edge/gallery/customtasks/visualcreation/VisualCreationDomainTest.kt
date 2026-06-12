@@ -16,6 +16,7 @@
 
 package com.google.ai.edge.gallery.customtasks.visualcreation
 
+import com.google.ai.edge.gallery.data.Model
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -83,5 +84,24 @@ class VisualCreationDomainTest {
     assertEquals("评审图片", VisualProcessMode.REVIEW_IMAGE.label)
     assertEquals("基于图片创作文字", VisualProcessMode.EXPAND_TO_STORY.label)
     assertEquals("自定义处理", VisualProcessMode.CUSTOM_PROMPT.label)
+  }
+
+  @Test
+  fun viewModelSyncsSelectedModelFromModelManagerInsteadOfDefaultingToFirstModel() {
+    val viewModel = VisualCreationViewModel()
+
+    viewModel.syncSelectedImageGenerationModel(
+      Model(
+        name = "sd15-q4-0-gguf",
+        displayName = "Stable Diffusion 1.5 Q4_0 GGUF",
+        downloadFileName = "stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf",
+      )
+    )
+
+    assertEquals("sd15-q4-0-gguf", viewModel.uiState.value.selectedImageGenerationModelId)
+    assertEquals(
+      "当前图像生成模型：Stable Diffusion 1.5 Q4_0 GGUF",
+      viewModel.uiState.value.statusText,
+    )
   }
 }

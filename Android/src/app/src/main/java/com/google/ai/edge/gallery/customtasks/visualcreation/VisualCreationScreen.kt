@@ -16,6 +16,8 @@
 
 package com.google.ai.edge.gallery.customtasks.visualcreation
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -28,7 +30,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -37,7 +38,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -55,13 +62,19 @@ fun VisualCreationScreen(
   setAppBarControlsDisabled: (Boolean) -> Unit,
   viewModel: VisualCreationViewModel = hiltViewModel(),
 ) {
+  val context = LocalContext.current
   val uiState by viewModel.uiState.collectAsState()
-  val selectedModel =
-    ImageGenerationModelRegistry.findModel(uiState.selectedImageGenerationModelId.orEmpty())
+  val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
+  val selectedAppModel = modelManagerUiState.selectedModel
+  val selectedModelInfo = ImageGenerationModelRegistry.findModel(selectedAppModel.name)
+  var showAdvancedSettings by remember { mutableStateOf(false) }
+  var showVisualProcessing by remember { mutableStateOf(false) }
 
   LaunchedEffect(uiState.status) {
     setAppBarControlsDisabled(uiState.status == VisualCreationStatus.GENERATING_IMAGE)
   }
+
+  LaunchedEffect(selectedAppModel.name) { viewModel.syncSelectedImageGenerationModel(selectedAppModel) }
 
   Column(
     modifier =
@@ -77,7 +90,7 @@ fun VisualCreationScreen(
       fontWeight = FontWeight.SemiBold,
     )
     Text(
-      text = "在本机生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。本版本先接入真实图像模型下载包和创作工作台，native 推理引擎将在下一阶段接入。",
+      text = "在本机生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。",
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -86,24 +99,19 @@ fun VisualCreationScreen(
       Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle("图像生成模型")
         Text(
-          text = "当前模型：${selectedModel?.displayName ?: "未选择"}",
+          text = "当前模型：${selectedAppModel.displayName.ifBlank { selectedAppModel.name }}",
           style = MaterialTheme.typography.bodyMedium,
         )
         Text(
-          text = "推理后端：${selectedModel?.backend ?: ImageGenerationBackend.STABLE_DIFFUSION_CPP}",
+          text = "推理后端：${selectedModelInfo?.backend ?: ImageGenerationBackend.STABLE_DIFFUSION_CPP}",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          ImageGenerationModelRegistry.recommendedModels.forEach { model ->
-            FilterChip(
-              selected = model.modelId == uiState.selectedImageGenerationModelId,
-              onClick = { viewModel.selectImageGenerationModel(model.modelId) },
-              label = { Text(model.displayName) },
-            )
-          }
-        }
-        OutlinedButton(onClick = {}) { Text("图像生成模型管理") }
+        Text(
+          text = "切换、下载或删除图像生成模型请返回上一层模型列表。本工作台只使用您进入时选择的模型。",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
       }
     }
 
@@ -129,20 +137,29 @@ fun VisualCreationScreen(
       }
     }
 
+    Button(
+      onClick = { viewModel.generateImage(context = context, model = selectedAppModel) },
+      enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      Text(if (uiState.status == VisualCreationStatus.GENERATING_IMAGE) "正在生成图片" else "生成图片")
+    }
+
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
       Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionTitle("生成参数")
-        SettingsLine("尺寸", "${uiState.settings.width} x ${uiState.settings.height}")
-        SettingsLine("采样步数", "${uiState.settings.steps}")
-        SettingsLine("CFG（提示词引导强度）", "${uiState.settings.cfgScale}")
-        SettingsLine("Sampler（采样器）", uiState.settings.sampler)
-        SettingsLine("低内存模式", if (uiState.settings.lowMemoryMode) "开启" else "关闭")
-        SettingsLine("VAE tiling", if (uiState.settings.vaeTiling) "开启" else "关闭")
-        Button(
-          onClick = viewModel::generatePlaceholder,
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Text("生成图片")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          SectionTitle("高级参数")
+          OutlinedButton(onClick = { showAdvancedSettings = !showAdvancedSettings }) {
+            Text(if (showAdvancedSettings) "收起" else "展开")
+          }
+        }
+        if (showAdvancedSettings) {
+          SettingsLine("尺寸", "${uiState.settings.width} x ${uiState.settings.height}")
+          SettingsLine("采样步数", "${uiState.settings.steps}")
+          SettingsLine("CFG（提示词引导强度）", "${uiState.settings.cfgScale}")
+          SettingsLine("Sampler（采样器）", uiState.settings.sampler)
+          SettingsLine("低内存模式", if (uiState.settings.lowMemoryMode) "开启" else "关闭")
+          SettingsLine("VAE tiling", if (uiState.settings.vaeTiling) "开启" else "关闭")
         }
       }
     }
@@ -159,11 +176,22 @@ fun VisualCreationScreen(
               contentDescription = "已生成图片。可以保存、重新生成，或发送给视觉语言模型进行描述、评审和创作。"
             },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          OutlinedButton(onClick = {}) { Text("保存到相册") }
-          OutlinedButton(onClick = {}) { Text("保存到本地文件夹") }
+        uiState.generatedImagePath?.let { path ->
+          val bitmap = remember(path) { BitmapFactory.decodeFile(path) }
+          bitmap?.let {
+            Image(
+              bitmap = it.asImageBitmap(),
+              contentDescription = "生成的图片",
+              contentScale = ContentScale.Fit,
+              modifier = Modifier.fillMaxWidth(),
+            )
+          }
         }
-        OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          OutlinedButton(onClick = {}, enabled = false) { Text("保存到相册") }
+          OutlinedButton(onClick = {}, enabled = false) { Text("保存到本地文件夹") }
+        }
+        OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
           Text("发送给视觉模型处理")
         }
       }
@@ -171,28 +199,35 @@ fun VisualCreationScreen(
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
       Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionTitle("图片后续处理")
-        Text("当前视觉语言模型：${uiState.selectedVlmModelName ?: "未选择"}")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          listOf(
-              VisualProcessMode.DESCRIBE_IMAGE,
-              VisualProcessMode.REVIEW_IMAGE,
-              VisualProcessMode.EXPAND_TO_STORY,
-            )
-            .forEach { mode ->
-              AssistChip(
-                onClick = { viewModel.updateVisualProcessMode(mode) },
-                label = { Text(mode.label) },
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          SectionTitle("图片后续处理")
+          OutlinedButton(onClick = { showVisualProcessing = !showVisualProcessing }) {
+            Text(if (showVisualProcessing) "收起" else "展开")
+          }
+        }
+        if (showVisualProcessing) {
+          Text("当前视觉语言模型：${uiState.selectedVlmModelName ?: "未选择"}")
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                VisualProcessMode.DESCRIBE_IMAGE,
+                VisualProcessMode.REVIEW_IMAGE,
+                VisualProcessMode.EXPAND_TO_STORY,
               )
-            }
+              .forEach { mode ->
+                AssistChip(
+                  onClick = { viewModel.updateVisualProcessMode(mode) },
+                  label = { Text(mode.label) },
+                )
+              }
+          }
+          OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
+            Text("选择视觉语言模型")
+          }
+          Text(
+            text = uiState.visualProcessResult.ifBlank { "生成图片后，可在后续阶段把图片发送给本地视觉语言模型进行描述、评审或文本创作。" },
+            style = MaterialTheme.typography.bodyMedium,
+          )
         }
-        OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) {
-          Text("选择视觉语言模型")
-        }
-        Text(
-          text = uiState.visualProcessResult.ifBlank { "生成图片后，可在后续阶段把图片发送给本地视觉语言模型进行描述、评审或文本创作。" },
-          style = MaterialTheme.typography.bodyMedium,
-        )
       }
     }
 

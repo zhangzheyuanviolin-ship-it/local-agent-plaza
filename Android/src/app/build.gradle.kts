@@ -45,6 +45,7 @@ android {
     targetSdk = 35
     versionCode = localVersionCode
     versionName = localVersionName
+    ndk { abiFilters += listOf("arm64-v8a") }
 
     // Needed for HuggingFace auth workflows.
     // Use the scheme of the "Redirect URLs" in HuggingFace app.
@@ -55,6 +56,12 @@ android {
     manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    externalNativeBuild {
+      cmake {
+        cppFlags += listOf("-std=c++17", "-O3")
+        arguments += listOf("-DANDROID_STL=c++_shared")
+      }
+    }
   }
 
   signingConfigs {
@@ -92,6 +99,7 @@ android {
     compose = true
     buildConfig = true
   }
+  externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } }
 }
 
 dependencies {

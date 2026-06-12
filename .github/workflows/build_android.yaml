@@ -27,6 +27,13 @@ jobs:
     steps:
       - name: Checkout the source code
         uses: actions/checkout@v4
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
