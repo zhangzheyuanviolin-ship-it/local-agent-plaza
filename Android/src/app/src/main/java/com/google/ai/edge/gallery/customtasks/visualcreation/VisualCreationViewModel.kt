@@ -16,13 +16,17 @@
 
 package com.google.ai.edge.gallery.customtasks.visualcreation
 
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.data.Model
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +50,10 @@ data class VisualCreationUiState(
   val generationProgressStep: Int = 0,
   val generationProgressSteps: Int = 0,
   val generatedImagePath: String? = null,
+  val generatedImageWidth: Int = 0,
+  val generatedImageHeight: Int = 0,
+  val savedGalleryUri: String? = null,
+  val savedLocalFileUri: String? = null,
   val selectedVisualProcessMode: VisualProcessMode = VisualProcessMode.DESCRIBE_IMAGE,
   val selectedVlmModelName: String? = null,
   val visualProcessResult: String = "",
@@ -166,6 +174,17 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
             _uiState.update { current ->
               if (current.status != VisualCreationStatus.GENERATING_IMAGE) {
                 current
+              } else if (
+                current.generationProgressSteps > 0 &&
+                  current.generationProgressStep >= current.generationProgressSteps
+              ) {
+                current.copy(
+                  statusText =
+                    buildDecodingStatusText(
+                      modelName = model.displayName.ifBlank { model.name },
+                      prompt = current.submittedPrompt,
+                    )
+                )
               } else if (current.generationProgressStep > 0) {
                 current.copy(
                   statusText =
@@ -192,7 +211,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
           }
         }
       try {
-        val rgbBytes =
+        val nativeResult =
           NativeImageGenerationBridge.generateSd15Image(
             modelPath = modelPath,
             prompt = prompt,
@@ -207,17 +226,40 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
               NativeImageGenerationBridge.ProgressListener { step, steps, _ ->
                 _uiState.update { current ->
                   if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
-                    current.copy(
-                      generationProgressStep = step.coerceAtLeast(0),
-                      generationProgressSteps = steps.coerceAtLeast(settings.steps),
-                      statusText =
-                        buildSamplingStatusText(
-                          modelName = model.displayName.ifBlank { model.name },
-                          step = step,
-                          steps = steps,
-                          prompt = current.submittedPrompt,
-                        ),
-                    )
+                    if (
+                      current.generationProgressSteps > 0 &&
+                        current.generationProgressStep >= current.generationProgressSteps &&
+                        step < current.generationProgressSteps
+                    ) {
+                      current.copy(
+                        statusText =
+                          buildDecodingStatusText(
+                            modelName = model.displayName.ifBlank { model.name },
+                            prompt = current.submittedPrompt,
+                          )
+                      )
+                    } else {
+                      val nextStep = step.coerceAtLeast(0)
+                      val nextSteps = steps.coerceAtLeast(settings.steps)
+                      current.copy(
+                        generationProgressStep = nextStep,
+                        generationProgressSteps = nextSteps,
+                        statusText =
+                          if (nextSteps > 0 && nextStep >= nextSteps) {
+                            buildDecodingStatusText(
+                              modelName = model.displayName.ifBlank { model.name },
+                              prompt = current.submittedPrompt,
+                            )
+                          } else {
+                            buildSamplingStatusText(
+                              modelName = model.displayName.ifBlank { model.name },
+                              step = step,
+                              steps = steps,
+                              prompt = current.submittedPrompt,
+                            )
+                          },
+                      )
+                    }
                   } else {
                     current
                   }
@@ -227,15 +269,16 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
         val outputPath =
           saveRgbImageAsPng(
             context = context,
-            rgbBytes = rgbBytes,
-            width = settings.width,
-            height = settings.height,
+            result = nativeResult,
           )
         _uiState.update {
           it.copy(
             status = VisualCreationStatus.IMAGE_GENERATED,
-            statusText = "图片生成完成：$outputPath",
+            statusText =
+              "图片生成完成：$outputPath，实际尺寸 ${nativeResult.width} x ${nativeResult.height}",
             generatedImagePath = outputPath,
+            generatedImageWidth = nativeResult.width,
+            generatedImageHeight = nativeResult.height,
           )
         }
       } catch (e: Throwable) {
@@ -247,6 +290,64 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
         }
       } finally {
         heartbeatJob.cancel()
+      }
+    }
+  }
+
+  fun saveGeneratedImageToGallery(context: Context) {
+    val imagePath = uiState.value.generatedImagePath
+    if (imagePath.isNullOrBlank()) {
+      _uiState.update { it.copy(status = VisualCreationStatus.ERROR, statusText = "当前没有可保存到相册的图片") }
+      return
+    }
+    viewModelScope.launch(Dispatchers.IO) {
+      try {
+        val savedUri = copyPngToMediaStore(
+          context = context,
+          sourcePath = imagePath,
+          collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+          relativePath = Environment.DIRECTORY_PICTURES + "/Local Visual Creation",
+        )
+        _uiState.update {
+          it.copy(
+            status = VisualCreationStatus.IMAGE_SAVED,
+            statusText = "图片已保存到系统相册：$savedUri",
+            savedGalleryUri = savedUri,
+          )
+        }
+      } catch (e: Throwable) {
+        _uiState.update {
+          it.copy(status = VisualCreationStatus.ERROR, statusText = "保存到系统相册失败：${e.message ?: e::class.java.simpleName}")
+        }
+      }
+    }
+  }
+
+  fun saveGeneratedImageToLocalFolder(context: Context) {
+    val imagePath = uiState.value.generatedImagePath
+    if (imagePath.isNullOrBlank()) {
+      _uiState.update { it.copy(status = VisualCreationStatus.ERROR, statusText = "当前没有可保存到本地文件夹的图片") }
+      return
+    }
+    viewModelScope.launch(Dispatchers.IO) {
+      try {
+        val savedUri = copyPngToMediaStore(
+          context = context,
+          sourcePath = imagePath,
+          collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+          relativePath = Environment.DIRECTORY_DOWNLOADS + "/local-visual-creation/generated-images",
+        )
+        _uiState.update {
+          it.copy(
+            status = VisualCreationStatus.IMAGE_SAVED,
+            statusText = "图片已保存到下载管理文件夹：$savedUri",
+            savedLocalFileUri = savedUri,
+          )
+        }
+      } catch (e: Throwable) {
+        _uiState.update {
+          it.copy(status = VisualCreationStatus.ERROR, statusText = "保存到本地文件夹失败：${e.message ?: e::class.java.simpleName}")
+        }
       }
     }
   }
@@ -266,24 +367,18 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
   ): String =
     "已提交提示词：${prompt.take(80)}。$modelName 正在采样，第 ${step.coerceAtLeast(0)} / ${steps.coerceAtLeast(1)} 步。"
 
+  private fun buildDecodingStatusText(
+    modelName: String,
+    prompt: String,
+  ): String = "已提交提示词：${prompt.take(80)}。$modelName 采样已完成，正在解码并保存图片。"
+
   private fun saveRgbImageAsPng(
     context: Context,
-    rgbBytes: ByteArray,
-    width: Int,
-    height: Int,
+    result: NativeImageGenerationResult,
   ): String {
-    val pixelCount = width * height
-    val channelCount = rgbBytes.size / pixelCount
-    require(channelCount >= 3) { "Invalid RGB buffer size: ${rgbBytes.size}" }
-
-    val pixels = IntArray(pixelCount)
-    for (i in 0 until pixelCount) {
-      val base = i * channelCount
-      val red = rgbBytes[base].toInt() and 0xff
-      val green = rgbBytes[base + 1].toInt() and 0xff
-      val blue = rgbBytes[base + 2].toInt() and 0xff
-      pixels[i] = (0xff shl 24) or (red shl 16) or (green shl 8) or blue
-    }
+    val width = result.width
+    val height = result.height
+    val pixels = nativeRgbToArgbPixels(result)
 
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
@@ -297,4 +392,58 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     bitmap.recycle()
     return outputFile.absolutePath
   }
+
+  private fun copyPngToMediaStore(
+    context: Context,
+    sourcePath: String,
+    collection: android.net.Uri,
+    relativePath: String,
+  ): String {
+    val sourceFile = File(sourcePath)
+    require(sourceFile.exists()) { "源图片不存在：$sourcePath" }
+
+    val fileName = sourceFile.name.ifBlank { "visual_creation_${System.currentTimeMillis()}.png" }
+    val values =
+      ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+        put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+        put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+        put(MediaStore.MediaColumns.IS_PENDING, 1)
+      }
+    val resolver = context.contentResolver
+    val uri = resolver.insert(collection, values) ?: error("系统媒体库拒绝创建目标文件")
+    try {
+      resolver.openOutputStream(uri)?.use { outputStream ->
+        FileInputStream(sourceFile).use { inputStream -> inputStream.copyTo(outputStream) }
+      } ?: error("无法打开目标文件输出流")
+      values.clear()
+      values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+      resolver.update(uri, values, null, null)
+      return uri.toString()
+    } catch (e: Throwable) {
+      resolver.delete(uri, null, null)
+      throw e
+    }
+  }
+}
+
+internal fun nativeRgbToArgbPixels(result: NativeImageGenerationResult): IntArray {
+  require(result.width > 0 && result.height > 0) {
+    "Invalid image size: ${result.width} x ${result.height}"
+  }
+  require(result.channels >= 3) { "Invalid channel count: ${result.channels}" }
+  val pixelCount = result.width * result.height
+  require(result.bytes.size == pixelCount * result.channels) {
+    "Invalid RGB buffer size: ${result.bytes.size}, expected ${pixelCount * result.channels}"
+  }
+
+  val pixels = IntArray(pixelCount)
+  for (i in 0 until pixelCount) {
+    val base = i * result.channels
+    val red = result.bytes[base].toInt() and 0xff
+    val green = result.bytes[base + 1].toInt() and 0xff
+    val blue = result.bytes[base + 2].toInt() and 0xff
+    pixels[i] = (0xff shl 24) or (red shl 16) or (green shl 8) or blue
+  }
+  return pixels
 }

@@ -16,6 +16,13 @@
 
 package com.google.ai.edge.gallery.customtasks.visualcreation
 
+data class NativeImageGenerationResult(
+  val width: Int,
+  val height: Int,
+  val channels: Int,
+  val bytes: ByteArray,
+)
+
 object NativeImageGenerationBridge {
   init {
     System.loadLibrary("visual_creation_jni")
@@ -36,5 +43,5 @@ object NativeImageGenerationBridge {
     seed: Long,
     threadCount: Int,
     progressListener: ProgressListener?,
-  ): ByteArray
+  ): NativeImageGenerationResult
 }

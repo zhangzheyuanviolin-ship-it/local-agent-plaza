@@ -229,8 +229,36 @@ fun VisualCreationScreen(
           }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          OutlinedButton(onClick = {}, enabled = false) { Text("保存到相册") }
-          OutlinedButton(onClick = {}, enabled = false) { Text("保存到本地文件夹") }
+          OutlinedButton(
+            onClick = { viewModel.saveGeneratedImageToGallery(context) },
+            enabled =
+              !uiState.generatedImagePath.isNullOrBlank() &&
+                uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+          ) {
+            Text("保存到相册")
+          }
+          OutlinedButton(
+            onClick = { viewModel.saveGeneratedImageToLocalFolder(context) },
+            enabled =
+              !uiState.generatedImagePath.isNullOrBlank() &&
+                uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+          ) {
+            Text("保存到本地文件夹")
+          }
+        }
+        uiState.savedGalleryUri?.let { uri ->
+          Text(
+            text = "系统相册保存位置：$uri",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        uiState.savedLocalFileUri?.let { uri ->
+          Text(
+            text = "本地文件夹保存位置：$uri",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
         }
         OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
           Text("发送给视觉模型处理")

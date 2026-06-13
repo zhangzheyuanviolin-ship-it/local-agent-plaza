@@ -19,6 +19,7 @@ package com.google.ai.edge.gallery.customtasks.visualcreation
 import com.google.ai.edge.gallery.data.Model
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -48,6 +49,33 @@ class VisualCreationDomainTest {
     assertEquals(7.0f, settings.cfgScale)
     assertTrue(settings.lowMemoryMode)
     assertTrue(settings.vaeTiling)
+  }
+
+  @Test
+  fun nativeRgbToArgbPixelsUsesNativeDimensionsAndChannels() {
+    val pixels =
+      nativeRgbToArgbPixels(
+        NativeImageGenerationResult(
+          width = 2,
+          height = 1,
+          channels = 3,
+          bytes = byteArrayOf(255.toByte(), 0, 0, 0, 255.toByte(), 0),
+        )
+      )
+
+    assertArrayEquals(intArrayOf(0xffff0000.toInt(), 0xff00ff00.toInt()), pixels)
+  }
+
+  @Test(expected = IllegalArgumentException::class)
+  fun nativeRgbToArgbPixelsRejectsBuffersThatDoNotMatchNativeDimensions() {
+    nativeRgbToArgbPixels(
+      NativeImageGenerationResult(
+        width = 2,
+        height = 2,
+        channels = 3,
+        bytes = byteArrayOf(255.toByte(), 0, 0, 0, 255.toByte(), 0),
+      )
+    )
   }
 
   @Test

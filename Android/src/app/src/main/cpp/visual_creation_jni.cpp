@@ -84,7 +84,7 @@ void sd_progress_callback(int step, int steps, float time, void* data) {
 
 }  // namespace
 
-extern "C" JNIEXPORT jbyteArray JNICALL
+extern "C" JNIEXPORT jobject JNICALL
 Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGenerationBridge_generateSd15Image(
     JNIEnv* env,
     jobject,
@@ -205,16 +205,56 @@ Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGeneration
     return nullptr;
   }
 
-  jbyteArray result = env->NewByteArray(static_cast<jsize>(byte_count));
-  if (result != nullptr) {
-    env->SetByteArrayRegion(
-        result, 0, static_cast<jsize>(byte_count), reinterpret_cast<jbyte*>(images[0].data));
+  jbyteArray pixel_bytes = env->NewByteArray(static_cast<jsize>(byte_count));
+  if (pixel_bytes == nullptr) {
+    std::free(images[0].data);
+    std::free(images);
+    if (progress_data.listener != nullptr) {
+      env->DeleteGlobalRef(progress_data.listener);
+    }
+    throw_java(env, "stable-diffusion.cpp returned image data that is too large for Java");
+    return nullptr;
   }
+  env->SetByteArrayRegion(
+      pixel_bytes, 0, static_cast<jsize>(byte_count), reinterpret_cast<jbyte*>(images[0].data));
+
+  jclass result_class =
+      env->FindClass("com/google/ai/edge/gallery/customtasks/visualcreation/NativeImageGenerationResult");
+  if (result_class == nullptr) {
+    std::free(images[0].data);
+    std::free(images);
+    if (progress_data.listener != nullptr) {
+      env->DeleteGlobalRef(progress_data.listener);
+    }
+    return nullptr;
+  }
+  jmethodID constructor = env->GetMethodID(result_class, "<init>", "(III[B)V");
+  if (constructor == nullptr) {
+    env->DeleteLocalRef(result_class);
+    std::free(images[0].data);
+    std::free(images);
+    if (progress_data.listener != nullptr) {
+      env->DeleteGlobalRef(progress_data.listener);
+    }
+    throw_java(env, "Native image result constructor is not available");
+    return nullptr;
+  }
+
+  jobject result =
+      env->NewObject(
+          result_class,
+          constructor,
+          static_cast<jint>(images[0].width),
+          static_cast<jint>(images[0].height),
+          static_cast<jint>(images[0].channel),
+          pixel_bytes);
 
   std::free(images[0].data);
   std::free(images);
   if (progress_data.listener != nullptr) {
     env->DeleteGlobalRef(progress_data.listener);
   }
+  env->DeleteLocalRef(pixel_bytes);
+  env->DeleteLocalRef(result_class);
   return result;
 }
