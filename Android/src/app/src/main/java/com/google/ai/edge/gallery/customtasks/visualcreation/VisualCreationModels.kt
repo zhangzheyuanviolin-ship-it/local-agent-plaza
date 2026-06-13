@@ -82,7 +82,7 @@ data class ImageGenerationSettings(
       )
 
     fun fastCpuVerification(): ImageGenerationSettings =
-      default().copy(width = 256, height = 256, steps = 8)
+      default().copy(width = 256, height = 256, steps = 20, vaeTiling = false)
   }
 }
 

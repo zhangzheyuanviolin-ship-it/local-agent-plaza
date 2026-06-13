@@ -45,10 +45,10 @@ class VisualCreationDomainTest {
 
     assertEquals(256, settings.width)
     assertEquals(256, settings.height)
-    assertEquals(8, settings.steps)
+    assertEquals(20, settings.steps)
     assertEquals(7.0f, settings.cfgScale)
     assertTrue(settings.lowMemoryMode)
-    assertTrue(settings.vaeTiling)
+    assertFalse(settings.vaeTiling)
   }
 
   @Test
@@ -80,14 +80,14 @@ class VisualCreationDomainTest {
 
   @Test
   fun normalizeSamplingProgressKeepsOnlyExpectedSamplingSteps() {
-    val progress = normalizeSamplingProgress(callbackStep = 5, callbackSteps = 8, expectedSteps = 8)
+    val progress = normalizeSamplingProgress(callbackStep = 5, callbackSteps = 20, expectedSteps = 20)
 
-    assertEquals(SamplingProgress(step = 5, steps = 8), progress)
+    assertEquals(SamplingProgress(step = 5, steps = 20), progress)
   }
 
   @Test
   fun normalizeSamplingProgressFiltersVaeTileProgress() {
-    val progress = normalizeSamplingProgress(callbackStep = 1131, callbackSteps = 1131, expectedSteps = 8)
+    val progress = normalizeSamplingProgress(callbackStep = 1131, callbackSteps = 1131, expectedSteps = 20)
 
     assertEquals(null, progress)
   }
@@ -159,6 +159,6 @@ class VisualCreationDomainTest {
     )
     assertEquals(256, viewModel.uiState.value.settings.width)
     assertEquals(256, viewModel.uiState.value.settings.height)
-    assertEquals(8, viewModel.uiState.value.settings.steps)
+    assertEquals(20, viewModel.uiState.value.settings.steps)
   }
 }
