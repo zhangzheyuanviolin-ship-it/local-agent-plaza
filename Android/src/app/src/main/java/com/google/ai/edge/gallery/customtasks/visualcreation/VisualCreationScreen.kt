@@ -70,9 +70,7 @@ fun VisualCreationScreen(
   var showAdvancedSettings by remember { mutableStateOf(false) }
   var showVisualProcessing by remember { mutableStateOf(false) }
 
-  LaunchedEffect(uiState.status) {
-    setAppBarControlsDisabled(uiState.status == VisualCreationStatus.GENERATING_IMAGE)
-  }
+  LaunchedEffect(Unit) { setAppBarControlsDisabled(false) }
 
   LaunchedEffect(selectedAppModel.name) { viewModel.syncSelectedImageGenerationModel(selectedAppModel) }
 

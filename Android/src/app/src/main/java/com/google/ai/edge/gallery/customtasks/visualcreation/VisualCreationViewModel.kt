@@ -226,11 +226,13 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
               NativeImageGenerationBridge.ProgressListener { step, steps, _ ->
                 _uiState.update { current ->
                   if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
-                    if (
-                      current.generationProgressSteps > 0 &&
-                        current.generationProgressStep >= current.generationProgressSteps &&
-                        step < current.generationProgressSteps
-                    ) {
+                    val sampleProgress =
+                      normalizeSamplingProgress(
+                        callbackStep = step,
+                        callbackSteps = steps,
+                        expectedSteps = settings.steps,
+                      )
+                    if (sampleProgress == null) {
                       current.copy(
                         statusText =
                           buildDecodingStatusText(
@@ -239,13 +241,11 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
                           )
                       )
                     } else {
-                      val nextStep = step.coerceAtLeast(0)
-                      val nextSteps = steps.coerceAtLeast(settings.steps)
                       current.copy(
-                        generationProgressStep = nextStep,
-                        generationProgressSteps = nextSteps,
+                        generationProgressStep = sampleProgress.step,
+                        generationProgressSteps = sampleProgress.steps,
                         statusText =
-                          if (nextSteps > 0 && nextStep >= nextSteps) {
+                          if (sampleProgress.isComplete) {
                             buildDecodingStatusText(
                               modelName = model.displayName.ifBlank { model.name },
                               prompt = current.submittedPrompt,
@@ -253,8 +253,8 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
                           } else {
                             buildSamplingStatusText(
                               modelName = model.displayName.ifBlank { model.name },
-                              step = step,
-                              steps = steps,
+                              step = sampleProgress.step,
+                              steps = sampleProgress.steps,
                               prompt = current.submittedPrompt,
                             )
                           },
@@ -446,4 +446,24 @@ internal fun nativeRgbToArgbPixels(result: NativeImageGenerationResult): IntArra
     pixels[i] = (0xff shl 24) or (red shl 16) or (green shl 8) or blue
   }
   return pixels
+}
+
+internal data class SamplingProgress(val step: Int, val steps: Int) {
+  val isComplete: Boolean
+    get() = step >= steps
+}
+
+internal fun normalizeSamplingProgress(
+  callbackStep: Int,
+  callbackSteps: Int,
+  expectedSteps: Int,
+): SamplingProgress? {
+  val totalSteps = expectedSteps.coerceAtLeast(1)
+  if (callbackSteps != totalSteps) {
+    return null
+  }
+  return SamplingProgress(
+    step = callbackStep.coerceIn(0, totalSteps),
+    steps = totalSteps,
+  )
 }

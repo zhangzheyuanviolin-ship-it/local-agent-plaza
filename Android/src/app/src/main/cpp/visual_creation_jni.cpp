@@ -171,7 +171,7 @@ Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGeneration
   gen_params.height = height > 0 ? height : 512;
   gen_params.seed = seed;
   gen_params.batch_count = 1;
-  gen_params.vae_tiling_params.enabled = true;
+  gen_params.vae_tiling_params.enabled = false;
   gen_params.sample_params.sample_steps = steps > 0 ? steps : 20;
   gen_params.sample_params.guidance.txt_cfg = cfg_scale > 0.0f ? cfg_scale : 7.0f;
   gen_params.sample_params.sample_method = EULER_SAMPLE_METHOD;

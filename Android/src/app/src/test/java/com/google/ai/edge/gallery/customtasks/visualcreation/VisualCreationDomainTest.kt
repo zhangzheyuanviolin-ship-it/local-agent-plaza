@@ -79,6 +79,20 @@ class VisualCreationDomainTest {
   }
 
   @Test
+  fun normalizeSamplingProgressKeepsOnlyExpectedSamplingSteps() {
+    val progress = normalizeSamplingProgress(callbackStep = 5, callbackSteps = 8, expectedSteps = 8)
+
+    assertEquals(SamplingProgress(step = 5, steps = 8), progress)
+  }
+
+  @Test
+  fun normalizeSamplingProgressFiltersVaeTileProgress() {
+    val progress = normalizeSamplingProgress(callbackStep = 1131, callbackSteps = 1131, expectedSteps = 8)
+
+    assertEquals(null, progress)
+  }
+
+  @Test
   fun resolveSeedUsesConfiguredSeedWhenRandomSeedIsDisabled() {
     val settings = ImageGenerationSettings.default().copy(randomSeed = false, seed = 42L)
 
