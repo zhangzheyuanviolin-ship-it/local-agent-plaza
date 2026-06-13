@@ -142,7 +142,48 @@ fun VisualCreationScreen(
       enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
       modifier = Modifier.fillMaxWidth(),
     ) {
-      Text(if (uiState.status == VisualCreationStatus.GENERATING_IMAGE) "正在生成图片" else "生成图片")
+      Text(
+        if (uiState.status == VisualCreationStatus.GENERATING_IMAGE) {
+          if (uiState.generationProgressStep > 0) {
+            "正在生成图片，第 ${uiState.generationProgressStep} / ${uiState.generationProgressSteps} 步"
+          } else {
+            "正在加载模型"
+          }
+        } else {
+          "生成图片"
+        }
+      )
+    }
+
+    if (uiState.submittedPrompt.isNotBlank()) {
+      ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          SectionTitle("已提交的生成请求")
+          Text(
+            text = "提示词：${uiState.submittedPrompt}",
+            style = MaterialTheme.typography.bodyMedium,
+          )
+          if (uiState.submittedNegativePrompt.isNotBlank()) {
+            Text(
+              text = "负面提示词：${uiState.submittedNegativePrompt}",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+          if (uiState.status == VisualCreationStatus.GENERATING_IMAGE) {
+            Text(
+              text =
+                if (uiState.generationProgressStep > 0) {
+                  "采样进度：第 ${uiState.generationProgressStep} / ${uiState.generationProgressSteps} 步"
+                } else {
+                  "进度：正在加载模型和初始化推理引擎"
+                },
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.primary,
+            )
+          }
+        }
+      }
     }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {

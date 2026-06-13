@@ -26,6 +26,7 @@ import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -39,6 +40,11 @@ data class VisualCreationUiState(
     ImageGenerationModelRegistry.recommendedModels.firstOrNull()?.modelId,
   val status: VisualCreationStatus = VisualCreationStatus.IMAGE_MODEL_MISSING,
   val statusText: String = "请选择或导入图像生成模型",
+  val submittedPrompt: String = "",
+  val submittedNegativePrompt: String = "",
+  val generationStartedAtMs: Long = 0L,
+  val generationProgressStep: Int = 0,
+  val generationProgressSteps: Int = 0,
   val generatedImagePath: String? = null,
   val selectedVisualProcessMode: VisualProcessMode = VisualProcessMode.DESCRIBE_IMAGE,
   val selectedVlmModelName: String? = null,
@@ -63,15 +69,20 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
       return
     }
     val modelInfo = ImageGenerationModelRegistry.findModel(model.name)
+    val nextSettings =
+      if (modelInfo?.family == "Stable Diffusion 1.5") {
+        ImageGenerationSettings.fastCpuVerification()
+      } else {
+        modelInfo?.let { info ->
+          _uiState.value.settings.copy(width = info.recommendedWidth, height = info.recommendedHeight)
+        } ?: _uiState.value.settings
+      }
     _uiState.update {
       it.copy(
         selectedImageGenerationModelId = model.name,
         status = VisualCreationStatus.IDLE,
         statusText = "当前图像生成模型：${model.displayName.ifBlank { model.name }}",
-        settings =
-          modelInfo?.let { info ->
-            it.settings.copy(width = info.recommendedWidth, height = info.recommendedHeight)
-          } ?: it.settings,
+        settings = nextSettings,
       )
     }
   }
@@ -127,26 +138,91 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
 
     val settings = uiState.value.settings
     val seed = settings.resolveSeed()
+    val negativePrompt = uiState.value.negativePrompt.trim()
+    val startedAtMs = System.currentTimeMillis()
     _uiState.update {
       it.copy(
+        prompt = "",
         status = VisualCreationStatus.GENERATING_IMAGE,
-        statusText = "正在使用 ${model.displayName.ifBlank { model.name }} 生成图片，首次加载模型会比较慢。",
+        statusText =
+          buildLoadingStatusText(
+            modelName = model.displayName.ifBlank { model.name },
+            prompt = prompt,
+            elapsedSeconds = 0,
+          ),
+        submittedPrompt = prompt,
+        submittedNegativePrompt = negativePrompt,
+        generationStartedAtMs = startedAtMs,
+        generationProgressStep = 0,
+        generationProgressSteps = settings.steps,
       )
     }
 
     viewModelScope.launch(Dispatchers.Default) {
+      val heartbeatJob =
+        launch {
+          while (true) {
+            delay(10_000)
+            _uiState.update { current ->
+              if (current.status != VisualCreationStatus.GENERATING_IMAGE) {
+                current
+              } else if (current.generationProgressStep > 0) {
+                current.copy(
+                  statusText =
+                    buildSamplingStatusText(
+                      modelName = model.displayName.ifBlank { model.name },
+                      step = current.generationProgressStep,
+                      steps = current.generationProgressSteps,
+                      prompt = current.submittedPrompt,
+                    )
+                )
+              } else {
+                current.copy(
+                  statusText =
+                    buildLoadingStatusText(
+                      modelName = model.displayName.ifBlank { model.name },
+                      prompt = current.submittedPrompt,
+                      elapsedSeconds =
+                        ((System.currentTimeMillis() - current.generationStartedAtMs) / 1000L)
+                          .coerceAtLeast(0L),
+                    )
+                )
+              }
+            }
+          }
+        }
       try {
         val rgbBytes =
           NativeImageGenerationBridge.generateSd15Image(
             modelPath = modelPath,
             prompt = prompt,
-            negativePrompt = uiState.value.negativePrompt,
+            negativePrompt = negativePrompt,
             width = settings.width,
             height = settings.height,
             steps = settings.steps,
             cfgScale = settings.cfgScale,
             seed = seed,
             threadCount = settings.threadCount,
+            progressListener =
+              NativeImageGenerationBridge.ProgressListener { step, steps, _ ->
+                _uiState.update { current ->
+                  if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
+                    current.copy(
+                      generationProgressStep = step.coerceAtLeast(0),
+                      generationProgressSteps = steps.coerceAtLeast(settings.steps),
+                      statusText =
+                        buildSamplingStatusText(
+                          modelName = model.displayName.ifBlank { model.name },
+                          step = step,
+                          steps = steps,
+                          prompt = current.submittedPrompt,
+                        ),
+                    )
+                  } else {
+                    current
+                  }
+                }
+              },
           )
         val outputPath =
           saveRgbImageAsPng(
@@ -169,9 +245,26 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
             statusText = "图片生成失败：${e.message ?: e::class.java.simpleName}",
           )
         }
+      } finally {
+        heartbeatJob.cancel()
       }
     }
   }
+
+  private fun buildLoadingStatusText(
+    modelName: String,
+    prompt: String,
+    elapsedSeconds: Long,
+  ): String =
+    "已提交提示词：${prompt.take(80)}。正在加载 $modelName 并初始化推理引擎，已等待 ${elapsedSeconds} 秒；首次加载模型会比较慢。"
+
+  private fun buildSamplingStatusText(
+    modelName: String,
+    step: Int,
+    steps: Int,
+    prompt: String,
+  ): String =
+    "已提交提示词：${prompt.take(80)}。$modelName 正在采样，第 ${step.coerceAtLeast(0)} / ${steps.coerceAtLeast(1)} 步。"
 
   private fun saveRgbImageAsPng(
     context: Context,

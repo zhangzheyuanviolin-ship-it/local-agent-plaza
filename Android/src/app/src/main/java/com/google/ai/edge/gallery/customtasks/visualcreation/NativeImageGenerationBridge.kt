@@ -21,6 +21,10 @@ object NativeImageGenerationBridge {
     System.loadLibrary("visual_creation_jni")
   }
 
+  fun interface ProgressListener {
+    fun onProgress(step: Int, steps: Int, secondsPerStep: Float)
+  }
+
   external fun generateSd15Image(
     modelPath: String,
     prompt: String,
@@ -31,5 +35,6 @@ object NativeImageGenerationBridge {
     cfgScale: Float,
     seed: Long,
     threadCount: Int,
+    progressListener: ProgressListener?,
   ): ByteArray
 }

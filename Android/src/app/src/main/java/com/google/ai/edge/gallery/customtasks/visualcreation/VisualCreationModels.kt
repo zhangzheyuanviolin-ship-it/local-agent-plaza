@@ -80,6 +80,9 @@ data class ImageGenerationSettings(
         threadCount = 4,
         backend = ImageGenerationBackend.STABLE_DIFFUSION_CPP,
       )
+
+    fun fastCpuVerification(): ImageGenerationSettings =
+      default().copy(width = 256, height = 256, steps = 8)
   }
 }
 

@@ -39,6 +39,18 @@ class VisualCreationDomainTest {
   }
 
   @Test
+  fun fastCpuVerificationSettingsUseSmallImageAndFewerSteps() {
+    val settings = ImageGenerationSettings.fastCpuVerification()
+
+    assertEquals(256, settings.width)
+    assertEquals(256, settings.height)
+    assertEquals(8, settings.steps)
+    assertEquals(7.0f, settings.cfgScale)
+    assertTrue(settings.lowMemoryMode)
+    assertTrue(settings.vaeTiling)
+  }
+
+  @Test
   fun resolveSeedUsesConfiguredSeedWhenRandomSeedIsDisabled() {
     val settings = ImageGenerationSettings.default().copy(randomSeed = false, seed = 42L)
 
@@ -103,5 +115,8 @@ class VisualCreationDomainTest {
       "当前图像生成模型：Stable Diffusion 1.5 Q4_0 GGUF",
       viewModel.uiState.value.statusText,
     )
+    assertEquals(256, viewModel.uiState.value.settings.width)
+    assertEquals(256, viewModel.uiState.value.settings.height)
+    assertEquals(8, viewModel.uiState.value.settings.steps)
   }
 }

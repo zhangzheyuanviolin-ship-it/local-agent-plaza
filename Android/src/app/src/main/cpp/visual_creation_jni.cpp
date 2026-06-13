@@ -46,6 +46,42 @@ void throw_java(JNIEnv* env, const char* message) {
   }
 }
 
+struct ProgressCallbackData {
+  JavaVM* java_vm = nullptr;
+  jobject listener = nullptr;
+  jmethodID on_progress = nullptr;
+};
+
+void notify_progress(ProgressCallbackData* data, int step, int steps, float seconds_per_step) {
+  if (data == nullptr || data->java_vm == nullptr || data->listener == nullptr ||
+      data->on_progress == nullptr) {
+    return;
+  }
+
+  JNIEnv* env = nullptr;
+  bool attached = false;
+  if (data->java_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
+    if (data->java_vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+      return;
+    }
+    attached = true;
+  }
+
+  env->CallVoidMethod(data->listener, data->on_progress, step, steps, seconds_per_step);
+  if (env->ExceptionCheck()) {
+    env->ExceptionDescribe();
+    env->ExceptionClear();
+  }
+
+  if (attached) {
+    data->java_vm->DetachCurrentThread();
+  }
+}
+
+void sd_progress_callback(int step, int steps, float time, void* data) {
+  notify_progress(static_cast<ProgressCallbackData*>(data), step, steps, time);
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jbyteArray JNICALL
@@ -60,7 +96,8 @@ Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGeneration
     jint steps,
     jfloat cfg_scale,
     jlong seed,
-    jint thread_count) {
+    jint thread_count,
+    jobject progress_listener) {
   const std::string model_path = read_jstring(env, model_path_j);
   const std::string prompt = read_jstring(env, prompt_j);
   const std::string negative_prompt = read_jstring(env, negative_prompt_j);
@@ -75,6 +112,23 @@ Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGeneration
   }
 
   sd_set_log_callback(sd_log_callback, nullptr);
+
+  ProgressCallbackData progress_data;
+  if (progress_listener != nullptr) {
+    env->GetJavaVM(&progress_data.java_vm);
+    progress_data.listener = env->NewGlobalRef(progress_listener);
+    jclass listener_class = env->GetObjectClass(progress_listener);
+    progress_data.on_progress = env->GetMethodID(listener_class, "onProgress", "(IIF)V");
+    env->DeleteLocalRef(listener_class);
+    if (progress_data.listener == nullptr || progress_data.on_progress == nullptr) {
+      throw_java(env, "Native progress callback is not available");
+      return nullptr;
+    }
+    sd_set_progress_callback(sd_progress_callback, &progress_data);
+    notify_progress(&progress_data, 0, steps > 0 ? steps : 20, 0.0f);
+  } else {
+    sd_set_progress_callback(nullptr, nullptr);
+  }
 
   sd_ctx_params_t ctx_params;
   sd_ctx_params_init(&ctx_params);
@@ -92,7 +146,20 @@ Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGeneration
 
   sd_ctx_t* ctx = new_sd_ctx(&ctx_params);
   if (ctx == nullptr) {
+    sd_set_progress_callback(nullptr, nullptr);
+    if (progress_data.listener != nullptr) {
+      env->DeleteGlobalRef(progress_data.listener);
+    }
     throw_java(env, "stable-diffusion.cpp failed to load the model");
+    return nullptr;
+  }
+  if (!sd_ctx_supports_image_generation(ctx)) {
+    free_sd_ctx(ctx);
+    sd_set_progress_callback(nullptr, nullptr);
+    if (progress_data.listener != nullptr) {
+      env->DeleteGlobalRef(progress_data.listener);
+    }
+    throw_java(env, "stable-diffusion.cpp loaded the model, but it does not support image generation");
     return nullptr;
   }
 
@@ -112,10 +179,14 @@ Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGeneration
 
   sd_image_t* images = generate_image(ctx, &gen_params);
   free_sd_ctx(ctx);
+  sd_set_progress_callback(nullptr, nullptr);
 
   if (images == nullptr || images[0].data == nullptr) {
     if (images != nullptr) {
       std::free(images);
+    }
+    if (progress_data.listener != nullptr) {
+      env->DeleteGlobalRef(progress_data.listener);
     }
     throw_java(env, "stable-diffusion.cpp failed to generate an image");
     return nullptr;
@@ -127,6 +198,9 @@ Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGeneration
   if (byte_count == 0 || images[0].channel < 3) {
     std::free(images[0].data);
     std::free(images);
+    if (progress_data.listener != nullptr) {
+      env->DeleteGlobalRef(progress_data.listener);
+    }
     throw_java(env, "stable-diffusion.cpp returned invalid image data");
     return nullptr;
   }
@@ -139,5 +213,8 @@ Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGeneration
 
   std::free(images[0].data);
   std::free(images);
+  if (progress_data.listener != nullptr) {
+    env->DeleteGlobalRef(progress_data.listener);
+  }
   return result;
 }
