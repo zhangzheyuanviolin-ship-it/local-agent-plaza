@@ -168,9 +168,39 @@ class VisualCreationDomainTest {
       "当前图像生成模型：Stable Diffusion 1.5 Q4_0 GGUF",
       viewModel.uiState.value.statusText,
     )
-    assertEquals(256, viewModel.uiState.value.settings.width)
-    assertEquals(256, viewModel.uiState.value.settings.height)
+    assertEquals(512, viewModel.uiState.value.settings.width)
+    assertEquals(512, viewModel.uiState.value.settings.height)
     assertEquals(28, viewModel.uiState.value.settings.steps)
+  }
+
+  @Test
+  fun registryPrefersLocalDreamQnnBackendBeforeCpuFallbacks() {
+    val first = ImageGenerationModelRegistry.recommendedModels.first()
+
+    assertEquals("absolute-reality-qnn-8gen2", first.modelId)
+    assertEquals(ImageGenerationBackend.LOCAL_DREAM_QNN_MNN, first.backend)
+    assertEquals("AbsoluteReality_qnn2.28_8gen2.zip", first.requiredFiles.single().fileName)
+  }
+
+  @Test
+  fun visualCreationImageModelsExposeLocalDreamArchivesAsZipDownloads() {
+    val model = createVisualCreationImageModels().first { it.name == "absolute-reality-qnn-8gen2" }
+
+    assertTrue(model.isZip)
+    assertEquals("model", model.unzipDir)
+    assertEquals("AbsoluteReality_qnn2.28_8gen2.zip", model.downloadFileName)
+  }
+
+  @Test
+  fun promptOptimizationModesHaveDistinctSystemPrompts() {
+    assertTrue(
+      defaultPromptOptimizerSystemPrompt(PromptOptimizationMode.ORIGINAL)
+        .contains("unchanged")
+    )
+    assertTrue(
+      defaultPromptOptimizerSystemPrompt(PromptOptimizationMode.ENGLISH_DEFAULT)
+        .contains("English text-to-image prompt")
+    )
   }
 
   @Test

@@ -20,10 +20,12 @@ import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelDataFile
 
 enum class ImageGenerationBackend {
+  LOCAL_DREAM_QNN_MNN,
   STABLE_DIFFUSION_CPP,
 }
 
 enum class ImageGenerationModelFileRole {
+  MODEL_ARCHIVE,
   CHECKPOINT,
   DIFFUSION_MODEL,
   VAE,
@@ -67,6 +69,8 @@ data class ImageGenerationModelInfo(
 object ImageGenerationModelRegistry {
   val recommendedModels: List<ImageGenerationModelInfo> =
     listOf(
+      absoluteRealityQnn8Gen2Model(),
+      absoluteRealityMnnCpuModel(),
       zImageTurboModel("q2", "Q2_K", "z_image_turbo-Q2_K.gguf", 2_592_442_304L, 8),
       zImageTurboModel("q3", "Q3_K", "z_image_turbo-Q3_K.gguf", 3_143_559_104L, 10),
       zImageTurboModel("q4-0", "Q4_0", "z_image_turbo-Q4_0.gguf", 3_683_370_944L, 12),
@@ -148,6 +152,71 @@ object ImageGenerationModelRegistry {
     )
   }
 
+  private fun absoluteRealityQnn8Gen2Model(): ImageGenerationModelInfo {
+    return ImageGenerationModelInfo(
+      modelId = "absolute-reality-qnn-8gen2",
+      displayName = "Absolute Reality QNN 8gen2",
+      family = "Absolute Reality SD1.5",
+      backend = ImageGenerationBackend.LOCAL_DREAM_QNN_MNN,
+      format = "QNN ZIP",
+      requiredFiles =
+        listOf(
+          ImageGenerationModelFile(
+            role = ImageGenerationModelFileRole.MODEL_ARCHIVE,
+            fileName = "AbsoluteReality_qnn2.28_8gen2.zip",
+            downloadUrl =
+              "https://huggingface.co/xororz/sd-qnn/resolve/main/AbsoluteReality_qnn2.28_8gen2.zip",
+            sizeInBytes = 1_128_267_776L,
+          )
+        ),
+      learnMoreUrl = "https://huggingface.co/xororz/sd-qnn",
+      localVersion = "absolute-reality-qnn-8gen2-2026-06-14",
+      license = "CC BY-NC 4.0 / upstream model licenses",
+      supportsTextToImage = true,
+      supportsImageToImage = false,
+      supportsImageEditing = false,
+      supportsChineseText = false,
+      lowMemoryRecommended = false,
+      minMemoryGb = 6,
+      recommendedWidth = 512,
+      recommendedHeight = 512,
+      notes =
+        "主力高速候选后端。使用 Local Dream 架构和 Qualcomm QNN NPU 加速，适配 Snapdragon 8 Gen 2/3/Elite 类设备；本集成仅用于非商业测试。",
+    )
+  }
+
+  private fun absoluteRealityMnnCpuModel(): ImageGenerationModelInfo {
+    return ImageGenerationModelInfo(
+      modelId = "absolute-reality-mnn-cpu",
+      displayName = "Absolute Reality MNN CPU",
+      family = "Absolute Reality SD1.5",
+      backend = ImageGenerationBackend.LOCAL_DREAM_QNN_MNN,
+      format = "MNN ZIP",
+      requiredFiles =
+        listOf(
+          ImageGenerationModelFile(
+            role = ImageGenerationModelFileRole.MODEL_ARCHIVE,
+            fileName = "AbsoluteReality.zip",
+            downloadUrl = "https://huggingface.co/xororz/sd-mnn/resolve/main/AbsoluteReality.zip",
+            sizeInBytes = 1_288_490_188L,
+          )
+        ),
+      learnMoreUrl = "https://huggingface.co/xororz/sd-mnn",
+      localVersion = "absolute-reality-mnn-cpu-2026-06-14",
+      license = "CC BY-NC 4.0 / upstream model licenses",
+      supportsTextToImage = true,
+      supportsImageToImage = false,
+      supportsImageEditing = false,
+      supportsChineseText = false,
+      lowMemoryRecommended = true,
+      minMemoryGb = 4,
+      recommendedWidth = 512,
+      recommendedHeight = 512,
+      notes =
+        "兼容性兜底的 Local Dream / MNN CPU 图像生成模型；速度慢于 QNN NPU，但比 stable-diffusion.cpp CPU 路线更接近 LLM-Hub。",
+    )
+  }
+
   private fun stableDiffusion15Model(
     modelId: String,
     quantLabel: String,
@@ -211,7 +280,8 @@ fun createVisualCreationImageModels(): List<Model> {
   return ImageGenerationModelRegistry.recommendedModels.map { modelInfo ->
     val primaryFile =
       modelInfo.requiredFiles.firstOrNull {
-        it.role == ImageGenerationModelFileRole.DIFFUSION_MODEL ||
+        it.role == ImageGenerationModelFileRole.MODEL_ARCHIVE ||
+          it.role == ImageGenerationModelFileRole.DIFFUSION_MODEL ||
           it.role == ImageGenerationModelFileRole.CHECKPOINT
       }
         ?: error("Image generation model '${modelInfo.modelId}' has no primary model file")
@@ -230,6 +300,8 @@ fun createVisualCreationImageModels(): List<Model> {
         sizeInBytes = primaryFile.sizeInBytes,
         downloadFileName = primaryFile.fileName,
         version = modelInfo.localVersion,
+        isZip = primaryFile.fileName.endsWith(".zip"),
+        unzipDir = if (primaryFile.fileName.endsWith(".zip")) "model" else "",
         extraDataFiles =
           modelInfo.requiredFiles
             .filterNot { it == primaryFile }

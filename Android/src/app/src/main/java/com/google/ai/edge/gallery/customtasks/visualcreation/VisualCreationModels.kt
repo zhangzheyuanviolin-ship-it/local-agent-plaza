@@ -78,7 +78,7 @@ data class ImageGenerationSettings(
         lowMemoryMode = true,
         vaeTiling = false,
         threadCount = 4,
-        backend = ImageGenerationBackend.STABLE_DIFFUSION_CPP,
+        backend = ImageGenerationBackend.LOCAL_DREAM_QNN_MNN,
       )
 
     fun fastCpuVerification(): ImageGenerationSettings =
@@ -92,6 +92,12 @@ data class NativeImageGenerationFileNames(
   val vaeFileName: String,
   val llmFileName: String,
 )
+
+enum class PromptOptimizationMode(val label: String) {
+  ORIGINAL("原文直发"),
+  ENGLISH_DEFAULT("默认英文优化"),
+  ENGLISH_CUSTOM("自定义英文优化"),
+}
 
 fun resolveNativeImageGenerationFileNames(
   modelInfo: ImageGenerationModelInfo
@@ -122,6 +128,16 @@ fun sanitizeGenerationSteps(value: Int): Int = value.coerceIn(1, 50)
 fun sanitizeCfgScale(value: Float): Float = value.coerceIn(1.0f, 12.0f)
 
 fun sanitizeThreadCount(value: Int): Int = value.coerceIn(1, 8)
+
+internal fun defaultPromptOptimizerSystemPrompt(mode: PromptOptimizationMode): String {
+  return when (mode) {
+    PromptOptimizationMode.ORIGINAL ->
+      "Return the user's image prompt unchanged. Do not translate, rewrite, explain, or add labels."
+    PromptOptimizationMode.ENGLISH_DEFAULT,
+    PromptOptimizationMode.ENGLISH_CUSTOM ->
+      "You are a prompt translator for offline Stable Diffusion image generation. Translate Chinese or multilingual user descriptions into a vivid, concise English text-to-image prompt. Preserve concrete subjects, scene layout, style, mood, lighting, colors, and camera details. Return only the final English prompt, without markdown, labels, quotes, explanations, or Chinese text."
+  }
+}
 
 data class VisualCreationSession(
   val sessionId: String,

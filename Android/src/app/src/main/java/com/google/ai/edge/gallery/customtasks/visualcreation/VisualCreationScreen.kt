@@ -72,16 +72,18 @@ fun VisualCreationScreen(
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val selectedAppModel = modelManagerUiState.selectedModel
   val selectedModelInfo = ImageGenerationModelRegistry.findModel(selectedAppModel.name)
+  val promptOptimizerTaskIds =
+    listOf(BuiltInTaskId.LLM_CHAT, BuiltInTaskId.LLM_PROMPT_LAB, BuiltInTaskId.LLM_AGENT_CHAT)
   val promptOptimizerModels =
     modelManagerUiState.tasks
-      .firstOrNull { it.id == BuiltInTaskId.LLM_CHAT }
-      ?.models
-      ?.filter { model ->
+      .filter { it.id in promptOptimizerTaskIds }
+      .flatMap { it.models }
+      .filter { model ->
         model.isLlm &&
           modelManagerUiState.modelDownloadStatus[model.name]?.status ==
             ModelDownloadStatusType.SUCCEEDED
       }
-      ?: emptyList()
+      .distinctBy { it.name }
   val selectedPromptOptimizerModel =
     promptOptimizerModels.firstOrNull { it.name == uiState.selectedPromptOptimizerModelName }
       ?: promptOptimizerModels.firstOrNull()
@@ -165,18 +167,47 @@ fun VisualCreationScreen(
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
       Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle("中文提示词优化")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          PromptOptimizationMode.entries.forEach { mode ->
+            AssistChip(
+              onClick = { viewModel.updatePromptOptimizationMode(mode) },
+              label = {
+                Text(
+                  if (uiState.promptOptimizationMode == mode) {
+                    "${mode.label}（当前）"
+                  } else {
+                    mode.label
+                  }
+                )
+              },
+            )
+          }
+        }
         Text(
           text = uiState.promptOptimizationStatusText,
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (promptOptimizerModels.isEmpty()) {
+        if (uiState.promptOptimizationMode == PromptOptimizationMode.ENGLISH_CUSTOM) {
+          OutlinedTextField(
+            value = uiState.customPromptOptimizerSystemPrompt,
+            onValueChange = viewModel::updateCustomPromptOptimizerSystemPrompt,
+            label = { Text("发送给文本模型的系统提示词") },
+            minLines = 4,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+          )
+        }
+        if (
+          promptOptimizerModels.isEmpty() &&
+            uiState.promptOptimizationMode != PromptOptimizationMode.ORIGINAL
+        ) {
           Text(
-            text = "没有检测到已下载的本地文本模型。请先在文本聊天任务下载一个支持多语言的文本模型。",
+            text = "没有检测到已下载的本地文本模型。请先在 AI 对话、提示词实验室或智能体对话任务下载一个支持多语言的文本模型。",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
-        } else {
+        } else if (uiState.promptOptimizationMode != PromptOptimizationMode.ORIGINAL) {
           FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             promptOptimizerModels.take(6).forEach { model ->
               AssistChip(
@@ -197,13 +228,22 @@ fun VisualCreationScreen(
         OutlinedButton(
           onClick = { viewModel.optimizePromptWithLocalLlm(context, selectedPromptOptimizerModel) },
           enabled =
-            promptOptimizerModels.isNotEmpty() &&
+            (uiState.promptOptimizationMode == PromptOptimizationMode.ORIGINAL ||
+              promptOptimizerModels.isNotEmpty()) &&
               uiState.prompt.isNotBlank() &&
               !uiState.isOptimizingPrompt &&
               uiState.status != VisualCreationStatus.GENERATING_IMAGE,
           modifier = Modifier.fillMaxWidth(),
         ) {
-          Text(if (uiState.isOptimizingPrompt) "正在优化提示词" else "翻译并优化为英文提示词")
+          Text(
+            if (uiState.isOptimizingPrompt) {
+              "正在优化提示词"
+            } else if (uiState.promptOptimizationMode == PromptOptimizationMode.ORIGINAL) {
+              "使用当前中文提示词直接生成"
+            } else {
+              "翻译并优化为英文提示词"
+            }
+          )
         }
       }
     }

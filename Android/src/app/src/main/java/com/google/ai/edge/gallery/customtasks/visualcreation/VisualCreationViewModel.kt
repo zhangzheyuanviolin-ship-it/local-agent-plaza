@@ -63,6 +63,9 @@ data class VisualCreationUiState(
   val selectedVlmModelName: String? = null,
   val visualProcessResult: String = "",
   val selectedPromptOptimizerModelName: String? = null,
+  val promptOptimizationMode: PromptOptimizationMode = PromptOptimizationMode.ENGLISH_DEFAULT,
+  val customPromptOptimizerSystemPrompt: String =
+    defaultPromptOptimizerSystemPrompt(PromptOptimizationMode.ENGLISH_DEFAULT),
   val promptOptimizationStatusText: String = "中文提示词优化未运行",
   val isOptimizingPrompt: Boolean = false,
 )
@@ -109,6 +112,25 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     _uiState.update { it.copy(selectedPromptOptimizerModelName = modelName) }
   }
 
+  fun updatePromptOptimizationMode(mode: PromptOptimizationMode) {
+    _uiState.update {
+      val nextPrompt =
+        if (
+          mode == PromptOptimizationMode.ENGLISH_CUSTOM &&
+            it.customPromptOptimizerSystemPrompt.isNotBlank()
+        ) {
+          it.customPromptOptimizerSystemPrompt
+        } else {
+          defaultPromptOptimizerSystemPrompt(mode)
+        }
+      it.copy(promptOptimizationMode = mode, customPromptOptimizerSystemPrompt = nextPrompt)
+    }
+  }
+
+  fun updateCustomPromptOptimizerSystemPrompt(systemPrompt: String) {
+    _uiState.update { it.copy(customPromptOptimizerSystemPrompt = systemPrompt) }
+  }
+
   fun updateImageWidth(width: Int) {
     _uiState.update { it.copy(settings = it.settings.copy(width = sanitizeGenerationDimension(width))) }
   }
@@ -144,12 +166,23 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
 
   fun optimizePromptWithLocalLlm(context: Context, model: Model?) {
     val sourcePrompt = uiState.value.prompt.trim()
+    val mode = uiState.value.promptOptimizationMode
     if (sourcePrompt.isEmpty()) {
       _uiState.update {
         it.copy(
           status = VisualCreationStatus.ERROR,
           statusText = "请先输入中文或自然语言图片描述，再进行提示词优化",
           promptOptimizationStatusText = "提示词优化失败：没有可优化的提示词",
+        )
+      }
+      return
+    }
+    if (mode == PromptOptimizationMode.ORIGINAL) {
+      _uiState.update {
+        it.copy(
+          status = VisualCreationStatus.IDLE,
+          promptOptimizationStatusText = "已选择原文直发：生成图片时会直接使用当前提示词",
+          statusText = "原文直发模式不调用文本模型",
         )
       }
       return
@@ -166,6 +199,10 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     }
 
     viewModelScope.launch(Dispatchers.Default) {
+      val systemPrompt =
+        uiState.value.customPromptOptimizerSystemPrompt.ifBlank {
+          defaultPromptOptimizerSystemPrompt(mode)
+        }
       _uiState.update {
         it.copy(
           isOptimizingPrompt = true,
@@ -181,7 +218,8 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
         }
       }
       try {
-        val initError = initializePromptOptimizer(context = context, model = model)
+        val initError =
+          initializePromptOptimizer(context = context, model = model, systemPrompt = systemPrompt)
         if (!initError.isNullOrBlank()) {
           _uiState.update {
             it.copy(
@@ -199,10 +237,11 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
           model = model,
           supportImage = false,
           supportAudio = false,
-          systemInstruction = Contents.of(PROMPT_OPTIMIZER_SYSTEM_PROMPT),
+          systemInstruction = Contents.of(systemPrompt),
         )
 
-        val optimized = runPromptOptimizer(model = model, sourcePrompt = sourcePrompt)
+        val optimized =
+          runPromptOptimizer(model = model, sourcePrompt = sourcePrompt, systemPrompt = systemPrompt)
         if (optimized.isBlank()) {
           _uiState.update {
             it.copy(
@@ -251,17 +290,22 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     }
 
     val modelInfo = ImageGenerationModelRegistry.findModel(model.name)
-    if (modelInfo?.backend != ImageGenerationBackend.STABLE_DIFFUSION_CPP || !modelInfo.supportsTextToImage) {
+    if (modelInfo == null || !modelInfo.supportsTextToImage) {
       _uiState.update {
         it.copy(
           status = VisualCreationStatus.ERROR,
-          statusText = "当前模型暂未声明可由 stable-diffusion.cpp 执行文生图：${model.displayName.ifBlank { model.name }}",
+          statusText = "当前模型暂未声明支持文生图：${model.displayName.ifBlank { model.name }}",
         )
       }
       return
     }
 
-    val nativeFiles = resolveNativeImageGenerationFiles(context = context, model = model, modelInfo = modelInfo)
+    val nativeFiles =
+      if (modelInfo.backend == ImageGenerationBackend.STABLE_DIFFUSION_CPP) {
+        resolveNativeImageGenerationFiles(context = context, model = model, modelInfo = modelInfo)
+      } else {
+        NativeImageGenerationFiles(modelPath = model.getPath(context), diffusionModelPath = "", vaePath = "", llmPath = "")
+      }
     val missingFiles =
       listOf(
           nativeFiles.modelPath,
@@ -348,63 +392,77 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
         }
       try {
         val nativeResult =
-          NativeImageGenerationBridge.generateImage(
-            modelPath = nativeFiles.modelPath,
-            diffusionModelPath = nativeFiles.diffusionModelPath,
-            vaePath = nativeFiles.vaePath,
-            llmPath = nativeFiles.llmPath,
-            prompt = prompt,
-            negativePrompt = negativePrompt,
-            width = settings.width,
-            height = settings.height,
-            steps = settings.steps,
-            cfgScale = settings.cfgScale,
-            seed = seed,
-            threadCount = settings.threadCount,
-            progressListener =
-              NativeImageGenerationBridge.ProgressListener { step, steps, _ ->
-                _uiState.update { current ->
-                  if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
-                    val sampleProgress =
-                      normalizeSamplingProgress(
-                        callbackStep = step,
-                        callbackSteps = steps,
-                        expectedSteps = settings.steps,
-                      )
-                    if (sampleProgress == null) {
-                      current.copy(
-                        statusText =
-                          buildDecodingStatusText(
-                            modelName = model.displayName.ifBlank { model.name },
-                            prompt = current.submittedPrompt,
-                          )
-                      )
-                    } else {
-                      current.copy(
-                        generationProgressStep = sampleProgress.step,
-                        generationProgressSteps = sampleProgress.steps,
-                        statusText =
-                          if (sampleProgress.isComplete) {
+          if (modelInfo.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN) {
+            LocalDreamImageGenerationClient(context)
+              .generateImage(
+                modelPath = nativeFiles.modelPath,
+                prompt = prompt,
+                negativePrompt = negativePrompt,
+                width = settings.width,
+                height = settings.height,
+                steps = settings.steps,
+                cfgScale = settings.cfgScale,
+                seed = seed,
+              )
+          } else {
+            NativeImageGenerationBridge.generateImage(
+              modelPath = nativeFiles.modelPath,
+              diffusionModelPath = nativeFiles.diffusionModelPath,
+              vaePath = nativeFiles.vaePath,
+              llmPath = nativeFiles.llmPath,
+              prompt = prompt,
+              negativePrompt = negativePrompt,
+              width = settings.width,
+              height = settings.height,
+              steps = settings.steps,
+              cfgScale = settings.cfgScale,
+              seed = seed,
+              threadCount = settings.threadCount,
+              progressListener =
+                NativeImageGenerationBridge.ProgressListener { step, steps, _ ->
+                  _uiState.update { current ->
+                    if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
+                      val sampleProgress =
+                        normalizeSamplingProgress(
+                          callbackStep = step,
+                          callbackSteps = steps,
+                          expectedSteps = settings.steps,
+                        )
+                      if (sampleProgress == null) {
+                        current.copy(
+                          statusText =
                             buildDecodingStatusText(
                               modelName = model.displayName.ifBlank { model.name },
                               prompt = current.submittedPrompt,
                             )
-                          } else {
-                            buildSamplingStatusText(
-                              modelName = model.displayName.ifBlank { model.name },
-                              step = sampleProgress.step,
-                              steps = sampleProgress.steps,
-                              prompt = current.submittedPrompt,
-                            )
-                          },
-                      )
+                        )
+                      } else {
+                        current.copy(
+                          generationProgressStep = sampleProgress.step,
+                          generationProgressSteps = sampleProgress.steps,
+                          statusText =
+                            if (sampleProgress.isComplete) {
+                              buildDecodingStatusText(
+                                modelName = model.displayName.ifBlank { model.name },
+                                prompt = current.submittedPrompt,
+                              )
+                            } else {
+                              buildSamplingStatusText(
+                                modelName = model.displayName.ifBlank { model.name },
+                                step = sampleProgress.step,
+                                steps = sampleProgress.steps,
+                                prompt = current.submittedPrompt,
+                              )
+                            },
+                        )
+                      }
+                    } else {
+                      current
                     }
-                  } else {
-                    current
                   }
-                }
-              },
-          )
+                },
+            )
+          }
         val outputPath =
           saveRgbImageAsPng(
             context = context,
@@ -565,7 +623,11 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     }
   }
 
-  private suspend fun initializePromptOptimizer(context: Context, model: Model): String? {
+  private suspend fun initializePromptOptimizer(
+    context: Context,
+    model: Model,
+    systemPrompt: String,
+  ): String? {
     if (model.instance != null) {
       return null
     }
@@ -576,7 +638,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
       taskId = TASK_ID_LOCAL_VISUAL_CREATION,
       supportImage = false,
       supportAudio = false,
-      systemInstruction = Contents.of(PROMPT_OPTIMIZER_SYSTEM_PROMPT),
+      systemInstruction = Contents.of(systemPrompt),
       coroutineScope = viewModelScope,
       onDone = { message ->
         if (!initResult.isCompleted) {
@@ -588,15 +650,16 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
       ?: "初始化本地文本模型超时"
   }
 
-  private suspend fun runPromptOptimizer(model: Model, sourcePrompt: String): String {
+  private suspend fun runPromptOptimizer(
+    model: Model,
+    sourcePrompt: String,
+    systemPrompt: String,
+  ): String {
     val result = CompletableDeferred<Result<String>>()
     val rawResponse = StringBuilder()
     val optimizerInput =
       """
-      Convert this user's image idea into one high-quality English prompt for text-to-image generation.
-      Preserve concrete objects, scene layout, style, mood, color, lighting, and camera details.
-      Add concise quality/style descriptors only when useful.
-      Return only the final English prompt, without markdown, labels, quotes, explanations, or Chinese text.
+      $systemPrompt
 
       User idea:
       $sourcePrompt
@@ -626,9 +689,6 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
   }
 }
 
-private const val PROMPT_OPTIMIZER_SYSTEM_PROMPT =
-  "You are a prompt translator for offline image generation. Translate Chinese or multilingual user descriptions into vivid, concise English text-to-image prompts. Return only the final English prompt."
-
 private data class NativeImageGenerationFiles(
   val modelPath: String,
   val diffusionModelPath: String,
@@ -647,11 +707,13 @@ private fun defaultSettingsForModel(
     currentSettings.copy(
       width = sanitizeGenerationDimension(modelInfo.recommendedWidth),
       height = sanitizeGenerationDimension(modelInfo.recommendedHeight),
+      backend = modelInfo.backend,
       vaeTiling = false,
     )
   return when (modelInfo.family) {
     "Z-Image" -> base.copy(steps = 8, cfgScale = 1.0f)
     "Stable Diffusion 1.5" -> base.copy(steps = 28, cfgScale = 7.0f)
+    "Absolute Reality SD1.5" -> base.copy(steps = 28, cfgScale = 7.0f)
     else -> base
   }
 }

@@ -23,11 +23,13 @@ import org.junit.Test
 
 class ImageGenerationModelRegistryTest {
   @Test
-  fun registryIncludesDownloadableZImageAndStableDiffusionModels() {
+  fun registryIncludesDownloadableLocalDreamZImageAndStableDiffusionModels() {
     val modelIds = ImageGenerationModelRegistry.recommendedModels.map { it.modelId }
 
     assertEquals(
       listOf(
+        "absolute-reality-qnn-8gen2",
+        "absolute-reality-mnn-cpu",
         "z-image-turbo-q2-gguf",
         "z-image-turbo-q3-gguf",
         "z-image-turbo-q4-0-gguf",
@@ -41,6 +43,23 @@ class ImageGenerationModelRegistryTest {
       ),
       modelIds,
     )
+  }
+
+  @Test
+  fun localDreamQnnModelDeclaresArchiveAndBackendMetadata() {
+    val model = ImageGenerationModelRegistry.requireModel("absolute-reality-qnn-8gen2")
+
+    assertEquals("Absolute Reality QNN 8gen2", model.displayName)
+    assertEquals(ImageGenerationBackend.LOCAL_DREAM_QNN_MNN, model.backend)
+    assertEquals("QNN/MNN ZIP", model.format)
+    assertEquals(false, model.supportsChineseText)
+    assertTrue(model.supportsTextToImage)
+    assertTrue(model.lowMemoryRecommended)
+    assertEquals(1, model.requiredFiles.size)
+    assertEquals(ImageGenerationModelFileRole.MODEL_ARCHIVE, model.requiredFiles.single().role)
+    assertEquals("AbsoluteReality_qnn2.28_8gen2.zip", model.requiredFiles.single().fileName)
+    assertEquals(1_128_267_776L, model.totalSizeInBytes)
+    assertEquals("absolute-reality-qnn-8gen2-2026-06-14", model.localVersion)
   }
 
   @Test
@@ -93,13 +112,14 @@ class ImageGenerationModelRegistryTest {
   fun visualCreationTaskUsesRealDownloadModelInsteadOfPlaceholder() {
     val models = createVisualCreationImageModels()
 
-    assertEquals("z-image-turbo-q2-gguf", models.first().name)
-    assertEquals(10, models.size)
+    assertEquals("absolute-reality-qnn-8gen2", models.first().name)
+    assertEquals(12, models.size)
     val model = models.first()
-    assertEquals("z_image_turbo-Q2_K.gguf", model.downloadFileName)
-    assertTrue(model.url.endsWith("/z_image_turbo-Q2_K.gguf"))
-    assertEquals(2, model.extraDataFiles.size)
-    assertTrue(model.extraDataFiles.all { it.url.startsWith("https://huggingface.co/") })
+    assertEquals("AbsoluteReality_qnn2.28_8gen2.zip", model.downloadFileName)
+    assertTrue(model.url.endsWith("/AbsoluteReality_qnn2.28_8gen2.zip"))
+    assertEquals(0, model.extraDataFiles.size)
+    assertTrue(model.isZip)
+    assertEquals("model", model.unzipDir)
     assertTrue(model.extraDataFiles.none { it.downloadFileName == "workbench.marker" })
     assertTrue(model.totalBytes > 0L)
     assertEquals(false, model.isLlm)
