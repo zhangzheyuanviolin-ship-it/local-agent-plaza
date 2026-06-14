@@ -33,6 +33,8 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,7 +55,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.google.ai.edge.gallery.data.BuiltInTaskId
+import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import java.util.Locale
 
 @Composable
 fun VisualCreationScreen(
@@ -67,12 +72,34 @@ fun VisualCreationScreen(
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val selectedAppModel = modelManagerUiState.selectedModel
   val selectedModelInfo = ImageGenerationModelRegistry.findModel(selectedAppModel.name)
+  val promptOptimizerModels =
+    modelManagerUiState.tasks
+      .firstOrNull { it.id == BuiltInTaskId.LLM_CHAT }
+      ?.models
+      ?.filter { model ->
+        model.isLlm &&
+          modelManagerUiState.modelDownloadStatus[model.name]?.status ==
+            ModelDownloadStatusType.SUCCEEDED
+      }
+      ?: emptyList()
+  val selectedPromptOptimizerModel =
+    promptOptimizerModels.firstOrNull { it.name == uiState.selectedPromptOptimizerModelName }
+      ?: promptOptimizerModels.firstOrNull()
   var showAdvancedSettings by remember { mutableStateOf(false) }
   var showVisualProcessing by remember { mutableStateOf(false) }
 
   LaunchedEffect(Unit) { setAppBarControlsDisabled(false) }
 
   LaunchedEffect(selectedAppModel.name) { viewModel.syncSelectedImageGenerationModel(selectedAppModel) }
+
+  LaunchedEffect(selectedPromptOptimizerModel?.name) {
+    if (
+      uiState.selectedPromptOptimizerModelName == null &&
+        selectedPromptOptimizerModel?.name != null
+    ) {
+      viewModel.selectPromptOptimizerModel(selectedPromptOptimizerModel.name)
+    }
+  }
 
   Column(
     modifier =
@@ -135,6 +162,52 @@ fun VisualCreationScreen(
       }
     }
 
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionTitle("中文提示词优化")
+        Text(
+          text = uiState.promptOptimizationStatusText,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (promptOptimizerModels.isEmpty()) {
+          Text(
+            text = "没有检测到已下载的本地文本模型。请先在文本聊天任务下载一个支持多语言的文本模型。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        } else {
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            promptOptimizerModels.take(6).forEach { model ->
+              AssistChip(
+                onClick = { viewModel.selectPromptOptimizerModel(model.name) },
+                label = { Text(model.displayName.ifBlank { model.name }) },
+              )
+            }
+          }
+          Text(
+            text =
+              "当前优化模型：${
+                selectedPromptOptimizerModel?.let { it.displayName.ifBlank { it.name } } ?: "未选择"
+              }",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        OutlinedButton(
+          onClick = { viewModel.optimizePromptWithLocalLlm(context, selectedPromptOptimizerModel) },
+          enabled =
+            promptOptimizerModels.isNotEmpty() &&
+              uiState.prompt.isNotBlank() &&
+              !uiState.isOptimizingPrompt &&
+              uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text(if (uiState.isOptimizingPrompt) "正在优化提示词" else "翻译并优化为英文提示词")
+        }
+      }
+    }
+
     Button(
       onClick = { viewModel.generateImage(context = context, model = selectedAppModel) },
       enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
@@ -193,9 +266,59 @@ fun VisualCreationScreen(
           }
         }
         if (showAdvancedSettings) {
-          SettingsLine("尺寸", "${uiState.settings.width} x ${uiState.settings.height}")
-          SettingsLine("采样步数", "${uiState.settings.steps}")
-          SettingsLine("CFG（提示词引导强度）", "${uiState.settings.cfgScale}")
+          ParameterSlider(
+            label = "宽度",
+            value = uiState.settings.width,
+            range = 128f..1024f,
+            enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+            onValueChange = viewModel::updateImageWidth,
+          )
+          ParameterSlider(
+            label = "高度",
+            value = uiState.settings.height,
+            range = 128f..1024f,
+            enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+            onValueChange = viewModel::updateImageHeight,
+          )
+          ParameterSlider(
+            label = "采样步数",
+            value = uiState.settings.steps,
+            range = 1f..50f,
+            enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+            onValueChange = viewModel::updateGenerationSteps,
+          )
+          FloatParameterSlider(
+            label = "CFG（提示词引导强度）",
+            value = uiState.settings.cfgScale,
+            range = 1f..12f,
+            enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+            onValueChange = viewModel::updateCfgScale,
+          )
+          Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("随机种子", style = MaterialTheme.typography.bodyMedium)
+            Switch(
+              checked = uiState.settings.randomSeed,
+              onCheckedChange = viewModel::updateRandomSeed,
+              enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+            )
+          }
+          if (!uiState.settings.randomSeed) {
+            OutlinedTextField(
+              value = uiState.settings.seed.toString(),
+              onValueChange = viewModel::updateSeed,
+              label = { Text("固定种子") },
+              singleLine = true,
+              enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+              modifier = Modifier.fillMaxWidth(),
+            )
+          }
+          ParameterSlider(
+            label = "线程数",
+            value = uiState.settings.threadCount,
+            range = 1f..8f,
+            enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+            onValueChange = viewModel::updateThreadCount,
+          )
           SettingsLine("Sampler（采样器）", uiState.settings.sampler)
           SettingsLine("低内存模式", if (uiState.settings.lowMemoryMode) "开启" else "关闭")
           SettingsLine("VAE tiling", if (uiState.settings.vaeTiling) "开启" else "关闭")
@@ -318,6 +441,44 @@ private fun SectionTitle(text: String) {
     style = MaterialTheme.typography.titleMedium,
     fontWeight = FontWeight.SemiBold,
   )
+}
+
+@Composable
+private fun ParameterSlider(
+  label: String,
+  value: Int,
+  range: ClosedFloatingPointRange<Float>,
+  enabled: Boolean,
+  onValueChange: (Int) -> Unit,
+) {
+  Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Text("$label：$value", style = MaterialTheme.typography.bodyMedium)
+    Slider(
+      value = value.toFloat(),
+      onValueChange = { onValueChange(it.toInt()) },
+      valueRange = range,
+      enabled = enabled,
+    )
+  }
+}
+
+@Composable
+private fun FloatParameterSlider(
+  label: String,
+  value: Float,
+  range: ClosedFloatingPointRange<Float>,
+  enabled: Boolean,
+  onValueChange: (Float) -> Unit,
+) {
+  Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Text("$label：${String.format(Locale.US, "%.1f", value)}", style = MaterialTheme.typography.bodyMedium)
+    Slider(
+      value = value,
+      onValueChange = onValueChange,
+      valueRange = range,
+      enabled = enabled,
+    )
+  }
 }
 
 @Composable

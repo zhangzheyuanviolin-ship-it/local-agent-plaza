@@ -85,10 +85,13 @@ void sd_progress_callback(int step, int steps, float time, void* data) {
 }  // namespace
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGenerationBridge_generateSd15Image(
+Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGenerationBridge_generateImage(
     JNIEnv* env,
     jobject,
     jstring model_path_j,
+    jstring diffusion_model_path_j,
+    jstring vae_path_j,
+    jstring llm_path_j,
     jstring prompt_j,
     jstring negative_prompt_j,
     jint width,
@@ -99,11 +102,14 @@ Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGeneration
     jint thread_count,
     jobject progress_listener) {
   const std::string model_path = read_jstring(env, model_path_j);
+  const std::string diffusion_model_path = read_jstring(env, diffusion_model_path_j);
+  const std::string vae_path = read_jstring(env, vae_path_j);
+  const std::string llm_path = read_jstring(env, llm_path_j);
   const std::string prompt = read_jstring(env, prompt_j);
   const std::string negative_prompt = read_jstring(env, negative_prompt_j);
 
-  if (model_path.empty()) {
-    throw_java(env, "Model path is empty");
+  if (model_path.empty() && diffusion_model_path.empty()) {
+    throw_java(env, "Model path and diffusion model path are both empty");
     return nullptr;
   }
   if (prompt.empty()) {
@@ -133,6 +139,9 @@ Java_com_google_ai_edge_gallery_customtasks_visualcreation_NativeImageGeneration
   sd_ctx_params_t ctx_params;
   sd_ctx_params_init(&ctx_params);
   ctx_params.model_path = model_path.c_str();
+  ctx_params.diffusion_model_path = diffusion_model_path.c_str();
+  ctx_params.vae_path = vae_path.c_str();
+  ctx_params.llm_path = llm_path.c_str();
   ctx_params.n_threads = thread_count > 0 ? thread_count : sd_get_num_physical_cores();
   ctx_params.wtype = SD_TYPE_COUNT;
   ctx_params.rng_type = CPU_RNG;

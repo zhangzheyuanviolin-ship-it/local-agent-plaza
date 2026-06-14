@@ -23,18 +23,23 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.ai.edge.gallery.common.processLlmResponse
 import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.runtime.runtimeHelper
+import com.google.ai.edge.litertlm.Contents
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import javax.inject.Inject
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class VisualCreationUiState(
   val prompt: String = "",
@@ -57,6 +62,9 @@ data class VisualCreationUiState(
   val selectedVisualProcessMode: VisualProcessMode = VisualProcessMode.DESCRIBE_IMAGE,
   val selectedVlmModelName: String? = null,
   val visualProcessResult: String = "",
+  val selectedPromptOptimizerModelName: String? = null,
+  val promptOptimizationStatusText: String = "中文提示词优化未运行",
+  val isOptimizingPrompt: Boolean = false,
 )
 
 @HiltViewModel
@@ -73,18 +81,8 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
   }
 
   fun syncSelectedImageGenerationModel(model: Model) {
-    if (_uiState.value.selectedImageGenerationModelId == model.name) {
-      return
-    }
     val modelInfo = ImageGenerationModelRegistry.findModel(model.name)
-    val nextSettings =
-      if (modelInfo?.family == "Stable Diffusion 1.5") {
-        ImageGenerationSettings.fastCpuVerification()
-      } else {
-        modelInfo?.let { info ->
-          _uiState.value.settings.copy(width = info.recommendedWidth, height = info.recommendedHeight)
-        } ?: _uiState.value.settings
-      }
+    val nextSettings = defaultSettingsForModel(modelInfo, _uiState.value.settings)
     _uiState.update {
       it.copy(
         selectedImageGenerationModelId = model.name,
@@ -102,12 +100,142 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
         selectedImageGenerationModelId = model.modelId,
         status = VisualCreationStatus.IDLE,
         statusText = "已选择图像生成模型：${model.displayName}",
+        settings = defaultSettingsForModel(model, it.settings),
       )
     }
   }
 
+  fun selectPromptOptimizerModel(modelName: String?) {
+    _uiState.update { it.copy(selectedPromptOptimizerModelName = modelName) }
+  }
+
+  fun updateImageWidth(width: Int) {
+    _uiState.update { it.copy(settings = it.settings.copy(width = sanitizeGenerationDimension(width))) }
+  }
+
+  fun updateImageHeight(height: Int) {
+    _uiState.update { it.copy(settings = it.settings.copy(height = sanitizeGenerationDimension(height))) }
+  }
+
+  fun updateGenerationSteps(steps: Int) {
+    _uiState.update { it.copy(settings = it.settings.copy(steps = sanitizeGenerationSteps(steps))) }
+  }
+
+  fun updateCfgScale(cfgScale: Float) {
+    _uiState.update { it.copy(settings = it.settings.copy(cfgScale = sanitizeCfgScale(cfgScale))) }
+  }
+
+  fun updateRandomSeed(randomSeed: Boolean) {
+    _uiState.update { it.copy(settings = it.settings.copy(randomSeed = randomSeed)) }
+  }
+
+  fun updateSeed(seed: String) {
+    val parsed = seed.trim().toLongOrNull() ?: return
+    _uiState.update { it.copy(settings = it.settings.copy(seed = parsed.coerceAtLeast(0L))) }
+  }
+
+  fun updateThreadCount(threadCount: Int) {
+    _uiState.update { it.copy(settings = it.settings.copy(threadCount = sanitizeThreadCount(threadCount))) }
+  }
+
   fun updateVisualProcessMode(mode: VisualProcessMode) {
     _uiState.update { it.copy(selectedVisualProcessMode = mode) }
+  }
+
+  fun optimizePromptWithLocalLlm(context: Context, model: Model?) {
+    val sourcePrompt = uiState.value.prompt.trim()
+    if (sourcePrompt.isEmpty()) {
+      _uiState.update {
+        it.copy(
+          status = VisualCreationStatus.ERROR,
+          statusText = "请先输入中文或自然语言图片描述，再进行提示词优化",
+          promptOptimizationStatusText = "提示词优化失败：没有可优化的提示词",
+        )
+      }
+      return
+    }
+    if (model == null || !model.isLlm) {
+      _uiState.update {
+        it.copy(
+          status = VisualCreationStatus.ERROR,
+          statusText = "请先选择一个已下载的本地文本模型用于中文提示词翻译优化",
+          promptOptimizationStatusText = "提示词优化未运行：没有可用文本模型",
+        )
+      }
+      return
+    }
+
+    viewModelScope.launch(Dispatchers.Default) {
+      _uiState.update {
+        it.copy(
+          isOptimizingPrompt = true,
+          promptOptimizationStatusText = "正在使用 ${model.displayName.ifBlank { model.name }} 翻译并优化提示词",
+          statusText = "正在调用本地文本模型优化图片提示词",
+        )
+      }
+      var cleanedUp = false
+      val cleanUpModel = {
+        if (!cleanedUp) {
+          cleanedUp = true
+          model.runtimeHelper.cleanUp(model = model, onDone = {})
+        }
+      }
+      try {
+        val initError = initializePromptOptimizer(context = context, model = model)
+        if (!initError.isNullOrBlank()) {
+          _uiState.update {
+            it.copy(
+              isOptimizingPrompt = false,
+              status = VisualCreationStatus.ERROR,
+              statusText = "本地提示词优化模型初始化失败：$initError",
+              promptOptimizationStatusText = "提示词优化失败：$initError",
+            )
+          }
+          cleanUpModel()
+          return@launch
+        }
+
+        model.runtimeHelper.resetConversation(
+          model = model,
+          supportImage = false,
+          supportAudio = false,
+          systemInstruction = Contents.of(PROMPT_OPTIMIZER_SYSTEM_PROMPT),
+        )
+
+        val optimized = runPromptOptimizer(model = model, sourcePrompt = sourcePrompt)
+        if (optimized.isBlank()) {
+          _uiState.update {
+            it.copy(
+              isOptimizingPrompt = false,
+              status = VisualCreationStatus.ERROR,
+              statusText = "本地提示词优化失败：模型没有返回有效英文提示词",
+              promptOptimizationStatusText = "提示词优化失败：空结果",
+            )
+          }
+        } else {
+          _uiState.update {
+            it.copy(
+              prompt = optimized,
+              isOptimizingPrompt = false,
+              status = VisualCreationStatus.IDLE,
+              statusText = "提示词已优化为英文，可直接生成图片",
+              promptOptimizationStatusText = "已生成英文提示词：$optimized",
+            )
+          }
+        }
+      } catch (e: Throwable) {
+        _uiState.update {
+          it.copy(
+            isOptimizingPrompt = false,
+            status = VisualCreationStatus.ERROR,
+            statusText = "本地提示词优化失败：${e.message ?: e::class.java.simpleName}",
+            promptOptimizationStatusText = "提示词优化失败：${e.message ?: e::class.java.simpleName}",
+          )
+        }
+      } finally {
+        cleanUpModel()
+      }
+    }
   }
 
   fun generateImage(context: Context, model: Model) {
@@ -123,22 +251,30 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     }
 
     val modelInfo = ImageGenerationModelRegistry.findModel(model.name)
-    if (modelInfo?.family != "Stable Diffusion 1.5") {
+    if (modelInfo?.backend != ImageGenerationBackend.STABLE_DIFFUSION_CPP || !modelInfo.supportsTextToImage) {
       _uiState.update {
         it.copy(
           status = VisualCreationStatus.ERROR,
-          statusText = "本版本真实推理先支持 Stable Diffusion 1.5 单文件 GGUF。请在模型列表选择并下载 SD1.5 Q4_0、Q5_0 或 Q8_0 后生成。",
+          statusText = "当前模型暂未声明可由 stable-diffusion.cpp 执行文生图：${model.displayName.ifBlank { model.name }}",
         )
       }
       return
     }
 
-    val modelPath = model.getPath(context)
-    if (!File(modelPath).exists()) {
+    val nativeFiles = resolveNativeImageGenerationFiles(context = context, model = model, modelInfo = modelInfo)
+    val missingFiles =
+      listOf(
+          nativeFiles.modelPath,
+          nativeFiles.diffusionModelPath,
+          nativeFiles.vaePath,
+          nativeFiles.llmPath,
+        )
+        .filter { it.isNotBlank() && !File(it).exists() }
+    if (missingFiles.isNotEmpty()) {
       _uiState.update {
         it.copy(
           status = VisualCreationStatus.ERROR,
-          statusText = "未找到已下载模型文件：$modelPath",
+          statusText = "未找到已下载模型文件：${missingFiles.joinToString()}",
         )
       }
       return
@@ -212,8 +348,11 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
         }
       try {
         val nativeResult =
-          NativeImageGenerationBridge.generateSd15Image(
-            modelPath = modelPath,
+          NativeImageGenerationBridge.generateImage(
+            modelPath = nativeFiles.modelPath,
+            diffusionModelPath = nativeFiles.diffusionModelPath,
+            vaePath = nativeFiles.vaePath,
+            llmPath = nativeFiles.llmPath,
             prompt = prompt,
             negativePrompt = negativePrompt,
             width = settings.width,
@@ -425,6 +564,131 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
       throw e
     }
   }
+
+  private suspend fun initializePromptOptimizer(context: Context, model: Model): String? {
+    if (model.instance != null) {
+      return null
+    }
+    val initResult = CompletableDeferred<String>()
+    model.runtimeHelper.initialize(
+      context = context,
+      model = model,
+      taskId = TASK_ID_LOCAL_VISUAL_CREATION,
+      supportImage = false,
+      supportAudio = false,
+      systemInstruction = Contents.of(PROMPT_OPTIMIZER_SYSTEM_PROMPT),
+      coroutineScope = viewModelScope,
+      onDone = { message ->
+        if (!initResult.isCompleted) {
+          initResult.complete(message)
+        }
+      },
+    )
+    return withTimeoutOrNull(180_000L) { initResult.await() }
+      ?: "初始化本地文本模型超时"
+  }
+
+  private suspend fun runPromptOptimizer(model: Model, sourcePrompt: String): String {
+    val result = CompletableDeferred<Result<String>>()
+    val rawResponse = StringBuilder()
+    val optimizerInput =
+      """
+      Convert this user's image idea into one high-quality English prompt for text-to-image generation.
+      Preserve concrete objects, scene layout, style, mood, color, lighting, and camera details.
+      Add concise quality/style descriptors only when useful.
+      Return only the final English prompt, without markdown, labels, quotes, explanations, or Chinese text.
+
+      User idea:
+      $sourcePrompt
+      """
+        .trimIndent()
+
+    model.runtimeHelper.runInference(
+      model = model,
+      input = optimizerInput,
+      resultListener = { partialResult, done, _ ->
+        rawResponse.append(partialResult)
+        if (done && !result.isCompleted) {
+          result.complete(Result.success(sanitizePromptOptimizerOutput(rawResponse.toString())))
+        }
+      },
+      cleanUpListener = {},
+      onError = { message ->
+        if (!result.isCompleted) {
+          result.complete(Result.failure(IllegalStateException(message)))
+        }
+      },
+      coroutineScope = viewModelScope,
+    )
+
+    return withTimeoutOrNull(180_000L) { result.await().getOrThrow() }
+      ?: error("本地文本模型生成提示词超时")
+  }
+}
+
+private const val PROMPT_OPTIMIZER_SYSTEM_PROMPT =
+  "You are a prompt translator for offline image generation. Translate Chinese or multilingual user descriptions into vivid, concise English text-to-image prompts. Return only the final English prompt."
+
+private data class NativeImageGenerationFiles(
+  val modelPath: String,
+  val diffusionModelPath: String,
+  val vaePath: String,
+  val llmPath: String,
+)
+
+private fun defaultSettingsForModel(
+  modelInfo: ImageGenerationModelInfo?,
+  currentSettings: ImageGenerationSettings,
+): ImageGenerationSettings {
+  if (modelInfo == null) {
+    return currentSettings
+  }
+  val base =
+    currentSettings.copy(
+      width = sanitizeGenerationDimension(modelInfo.recommendedWidth),
+      height = sanitizeGenerationDimension(modelInfo.recommendedHeight),
+      vaeTiling = false,
+    )
+  return when (modelInfo.family) {
+    "Z-Image" -> base.copy(steps = 8, cfgScale = 1.0f)
+    "Stable Diffusion 1.5" -> base.copy(steps = 28, cfgScale = 7.0f)
+    else -> base
+  }
+}
+
+private fun resolveNativeImageGenerationFiles(
+  context: Context,
+  model: Model,
+  modelInfo: ImageGenerationModelInfo,
+): NativeImageGenerationFiles {
+  val fileNames = resolveNativeImageGenerationFileNames(modelInfo)
+  return NativeImageGenerationFiles(
+    modelPath = fileNames.modelFileName.takeIf { it.isNotBlank() }?.let { model.getPath(context, it) } ?: "",
+    diffusionModelPath =
+      fileNames.diffusionModelFileName.takeIf { it.isNotBlank() }?.let { model.getPath(context, it) }
+        ?: "",
+    vaePath = fileNames.vaeFileName.takeIf { it.isNotBlank() }?.let { model.getPath(context, it) } ?: "",
+    llmPath = fileNames.llmFileName.takeIf { it.isNotBlank() }?.let { model.getPath(context, it) } ?: "",
+  )
+}
+
+private fun sanitizePromptOptimizerOutput(raw: String): String {
+  return processLlmResponse(raw)
+    .replace("```", "")
+    .lineSequence()
+    .map { line ->
+      line
+        .trim()
+        .removePrefix("English prompt:")
+        .removePrefix("Prompt:")
+        .removePrefix("Final prompt:")
+        .trim()
+        .trim('"', '\'', '“', '”')
+    }
+    .filter { it.isNotBlank() }
+    .joinToString(" ")
+    .replace(Regex("\\s+"), " ")
+    .trim()
 }
 
 internal fun nativeRgbToArgbPixels(result: NativeImageGenerationResult): IntArray {

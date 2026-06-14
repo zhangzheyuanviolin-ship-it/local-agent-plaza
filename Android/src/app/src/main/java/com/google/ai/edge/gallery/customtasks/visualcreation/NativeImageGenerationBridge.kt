@@ -32,8 +32,11 @@ object NativeImageGenerationBridge {
     fun onProgress(step: Int, steps: Int, secondsPerStep: Float)
   }
 
-  external fun generateSd15Image(
+  external fun generateImage(
     modelPath: String,
+    diffusionModelPath: String,
+    vaePath: String,
+    llmPath: String,
     prompt: String,
     negativePrompt: String,
     width: Int,

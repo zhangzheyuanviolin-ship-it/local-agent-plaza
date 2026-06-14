@@ -69,22 +69,59 @@ data class ImageGenerationSettings(
       ImageGenerationSettings(
         width = 512,
         height = 512,
-        steps = 20,
+        steps = 28,
         cfgScale = 7.0f,
         seed = 0L,
         randomSeed = true,
         sampler = "euler",
         outputFormat = "PNG",
         lowMemoryMode = true,
-        vaeTiling = true,
+        vaeTiling = false,
         threadCount = 4,
         backend = ImageGenerationBackend.STABLE_DIFFUSION_CPP,
       )
 
     fun fastCpuVerification(): ImageGenerationSettings =
-      default().copy(width = 256, height = 256, steps = 20, vaeTiling = false)
+      default().copy(width = 512, height = 512, steps = 28, vaeTiling = false)
   }
 }
+
+data class NativeImageGenerationFileNames(
+  val modelFileName: String,
+  val diffusionModelFileName: String,
+  val vaeFileName: String,
+  val llmFileName: String,
+)
+
+fun resolveNativeImageGenerationFileNames(
+  modelInfo: ImageGenerationModelInfo
+): NativeImageGenerationFileNames {
+  val checkpoint =
+    modelInfo.requiredFiles.firstOrNull { it.role == ImageGenerationModelFileRole.CHECKPOINT }
+  val diffusion =
+    modelInfo.requiredFiles.firstOrNull { it.role == ImageGenerationModelFileRole.DIFFUSION_MODEL }
+  val vae = modelInfo.requiredFiles.firstOrNull { it.role == ImageGenerationModelFileRole.VAE }
+  val textEncoder =
+    modelInfo.requiredFiles.firstOrNull { it.role == ImageGenerationModelFileRole.TEXT_ENCODER }
+
+  return NativeImageGenerationFileNames(
+    modelFileName = checkpoint?.fileName ?: "",
+    diffusionModelFileName = diffusion?.fileName ?: "",
+    vaeFileName = vae?.fileName ?: "",
+    llmFileName = textEncoder?.fileName ?: "",
+  )
+}
+
+fun sanitizeGenerationDimension(value: Int): Int {
+  val coerced = value.coerceIn(128, 1024)
+  return ((coerced + 31) / 64 * 64).coerceIn(128, 1024)
+}
+
+fun sanitizeGenerationSteps(value: Int): Int = value.coerceIn(1, 50)
+
+fun sanitizeCfgScale(value: Float): Float = value.coerceIn(1.0f, 12.0f)
+
+fun sanitizeThreadCount(value: Int): Int = value.coerceIn(1, 8)
 
 data class VisualCreationSession(
   val sessionId: String,
