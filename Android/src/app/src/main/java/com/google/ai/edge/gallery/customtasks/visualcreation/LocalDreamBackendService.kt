@@ -30,16 +30,22 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 class LocalDreamBackendService : Service() {
-  private val runtimeDir: File by lazy { File(filesDir, RUNTIME_DIR) }
+  private val extractedRuntimeDir: File by lazy { File(filesDir, RUNTIME_DIR) }
+  private val runtimeDir: File by lazy { resolveRuntimeDir() }
+  private val diagnosticLogFile: File by lazy {
+    File(getExternalFilesDir("visual_creation_diagnostics") ?: filesDir, "local_dream_backend.log")
+  }
   private var backendProcess: Process? = null
 
   override fun onCreate() {
     super.onCreate()
+    appendDiagnostic("LocalDreamBackendService created")
     createNotificationChannel()
     prepareRuntimeDir()
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    appendDiagnostic("Service start: action=${intent?.action}")
     startForeground(NOTIFICATION_ID, createNotification("正在初始化图像生成后端"))
     when (intent?.action) {
       ACTION_START -> {
@@ -62,16 +68,21 @@ class LocalDreamBackendService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onDestroy() {
+    appendDiagnostic("LocalDreamBackendService destroyed")
     stopBackend()
     super.onDestroy()
   }
 
   private fun prepareRuntimeDir() {
-    runtimeDir.mkdirs()
+    if (runtimeDir == File(applicationInfo.nativeLibraryDir)) {
+      appendDiagnostic("Using installed native library directory for QNN runtime: ${runtimeDir.absolutePath}")
+      return
+    }
+    extractedRuntimeDir.mkdirs()
     val qnnLibs = assets.list(QNN_ASSET_DIR) ?: emptyArray()
-    Log.i(TAG, "Found ${qnnLibs.size} QNN runtime assets")
+    appendDiagnostic("Found ${qnnLibs.size} QNN runtime assets")
     qnnLibs.forEach { fileName ->
-      val targetFile = File(runtimeDir, fileName)
+      val targetFile = File(extractedRuntimeDir, fileName)
       val assetPath = "$QNN_ASSET_DIR/$fileName"
       val needsCopy =
         !targetFile.exists() ||
@@ -84,31 +95,45 @@ class LocalDreamBackendService : Service() {
         targetFile.setExecutable(true, true)
       }
     }
-    runtimeDir.setReadable(true, true)
-    runtimeDir.setExecutable(true, true)
+    extractedRuntimeDir.setReadable(true, true)
+    extractedRuntimeDir.setExecutable(true, true)
+  }
+
+  private fun resolveRuntimeDir(): File {
+    val nativeDir = File(applicationInfo.nativeLibraryDir)
+    val nativeQnn = File(nativeDir, "libQnnHtp.so")
+    val nativeSystem = File(nativeDir, "libQnnSystem.so")
+    return if (nativeQnn.exists() && nativeSystem.exists()) {
+      nativeDir
+    } else {
+      extractedRuntimeDir
+    }
   }
 
   private fun startBackend(modelDir: File, useGpu: Boolean): Boolean {
     return try {
       stopBackendProcessOnly()
+      killOrphanBackendProcesses()
       if (!modelDir.exists()) {
-        Log.e(TAG, "Model directory not found: ${modelDir.absolutePath}")
+        appendDiagnostic("Model directory not found: ${modelDir.absolutePath}", isError = true)
         return false
       }
       val actualDir = findActualModelDir(modelDir)
       val modelType = detectModelType(actualDir)
       if (modelType == LocalDreamModelType.UNKNOWN) {
-        Log.e(TAG, "No Local Dream model files found under ${modelDir.absolutePath}")
+        appendDiagnostic("No Local Dream model files found under ${modelDir.absolutePath}", isError = true)
         return false
       }
       val executable = File(applicationInfo.nativeLibraryDir, EXECUTABLE_NAME)
       if (!executable.exists()) {
-        Log.e(TAG, "Executable not found: ${executable.absolutePath}")
+        appendDiagnostic("Executable not found: ${executable.absolutePath}", isError = true)
         return false
       }
       val command = buildCommand(executable, actualDir, modelType, useGpu)
       val env = buildEnvironment()
-      Log.i(TAG, "Starting Local Dream backend: ${command.joinToString(" ")}")
+      appendDiagnostic("Starting Local Dream backend: ${command.joinToString(" ")}")
+      appendDiagnostic("LD_LIBRARY_PATH=${env["LD_LIBRARY_PATH"]}")
+      appendDiagnostic("DSP_LIBRARY_PATH=${env["DSP_LIBRARY_PATH"]}")
       backendProcess =
         ProcessBuilder(command)
           .directory(File(applicationInfo.nativeLibraryDir))
@@ -118,7 +143,7 @@ class LocalDreamBackendService : Service() {
       startMonitorThread()
       true
     } catch (e: Throwable) {
-      Log.e(TAG, "Failed to start Local Dream backend", e)
+      appendDiagnostic("Failed to start Local Dream backend: ${e.message}", e, isError = true)
       false
     }
   }
@@ -191,7 +216,7 @@ class LocalDreamBackendService : Service() {
     } else {
       command += "--cpu"
       if (useGpu) {
-        Log.i(TAG, "MNN backend will receive use_opencl=true in generate requests")
+        appendDiagnostic("MNN backend will receive use_opencl=true in generate requests")
       }
     }
     return command
@@ -226,7 +251,14 @@ class LocalDreamBackendService : Service() {
 
   private fun buildEnvironment(): Map<String, String> {
     val libraryPath =
-      listOf(runtimeDir.absolutePath, "/system/lib64", "/vendor/lib64", "/vendor/lib64/egl")
+      listOf(
+          runtimeDir.absolutePath,
+          applicationInfo.nativeLibraryDir,
+          "/system/lib64",
+          "/vendor/lib64",
+          "/vendor/lib64/egl",
+        )
+        .distinct()
         .joinToString(":")
     return mapOf("LD_LIBRARY_PATH" to libraryPath, "DSP_LIBRARY_PATH" to runtimeDir.absolutePath)
   }
@@ -236,12 +268,12 @@ class LocalDreamBackendService : Service() {
         try {
           backendProcess?.let { process ->
             process.inputStream.bufferedReader().useLines { lines ->
-              lines.forEach { line -> Log.i(TAG, "Backend: $line") }
+              lines.forEach { line -> appendDiagnostic("Backend: $line") }
             }
-            Log.w(TAG, "Backend process exited with code ${process.waitFor()}")
+            appendDiagnostic("Backend process exited with code ${process.waitFor()}", isError = true)
           }
         } catch (e: Throwable) {
-          Log.w(TAG, "Backend monitor stopped: ${e.message}")
+          appendDiagnostic("Backend monitor stopped: ${e.message}", e, isError = true)
         }
       }
       .apply {
@@ -265,10 +297,40 @@ class LocalDreamBackendService : Service() {
           process.destroyForcibly()
         }
       } catch (e: Throwable) {
-        Log.w(TAG, "Failed to stop backend process: ${e.message}")
+        appendDiagnostic("Failed to stop backend process: ${e.message}", e, isError = true)
       }
     }
     backendProcess = null
+  }
+
+  private fun killOrphanBackendProcesses() {
+    try {
+      val killer =
+        ProcessBuilder(
+            "sh",
+            "-c",
+            "for pid in $(pidof libstable_diffusion_core.so 2>/dev/null); do kill $pid 2>/dev/null || true; done",
+          )
+          .redirectErrorStream(true)
+          .start()
+      killer.waitFor(3, TimeUnit.SECONDS)
+      appendDiagnostic("Checked for orphan libstable_diffusion_core.so processes before startup")
+    } catch (e: Throwable) {
+      appendDiagnostic("Unable to clean orphan backend processes: ${e.message}", e, isError = true)
+    }
+  }
+
+  private fun appendDiagnostic(message: String, throwable: Throwable? = null, isError: Boolean = false) {
+    if (isError) {
+      Log.w(TAG, message, throwable)
+    } else {
+      Log.i(TAG, message)
+    }
+    runCatching {
+      diagnosticLogFile.parentFile?.mkdirs()
+      diagnosticLogFile.appendText("${System.currentTimeMillis()} $message\n")
+      throwable?.stackTraceToString()?.let { diagnosticLogFile.appendText(it + "\n") }
+    }
   }
 
   private fun createNotificationChannel() {

@@ -53,7 +53,13 @@ class LocalDreamImageGenerationClient(private val context: Context) {
   ): NativeImageGenerationResult = withContext(Dispatchers.IO) {
     require(File(modelPath).exists()) { "Local Dream 模型目录不存在：$modelPath" }
     LocalDreamBackendService.start(context = context, modelPath = modelPath, useGpu = useOpenCl)
-    waitUntilHealthy()
+    try {
+      waitUntilHealthy()
+    } catch (e: Throwable) {
+      LocalDreamBackendService.stop(context)
+      delay(1_000)
+      error("${e.message}；已停止未就绪的 Local Dream 后端，请重新点击生成")
+    }
 
     val json =
       JSONObject().apply {
@@ -109,13 +115,13 @@ class LocalDreamImageGenerationClient(private val context: Context) {
   }
 
   private suspend fun waitUntilHealthy() {
-    repeat(45) {
+    repeat(120) {
       if (checkBackendHealth()) {
         return
       }
       delay(1_000)
     }
-    error("Local Dream 后端 45 秒内没有就绪")
+    error("Local Dream 后端 120 秒内没有就绪")
   }
 
   private fun checkBackendHealth(): Boolean {
