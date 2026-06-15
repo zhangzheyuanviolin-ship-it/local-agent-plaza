@@ -309,7 +309,7 @@ class LocalDreamBackendService : Service() {
         ProcessBuilder(
             "sh",
             "-c",
-            "for pid in $(pidof libstable_diffusion_core.so 2>/dev/null); do kill $pid 2>/dev/null || true; done",
+            "for pid in $(pidof libstable_diffusion_core.so 2>/dev/null); do kill ${'$'}pid 2>/dev/null || true; done",
           )
           .redirectErrorStream(true)
           .start()
