@@ -1183,9 +1183,15 @@ constructor(
     }
 
     // A model is partially downloaded when the tmp file exists.
-    val tmpFilePath =
-      model.getPath(context = context, fileName = "${model.downloadFileName}.$TMP_FILE_EXT")
-    return File(tmpFilePath).exists()
+    return getModelDownloadTempFile(model).exists()
+  }
+
+  private fun getModelDownloadTempFile(model: Model): File {
+    return File(
+      externalFilesDir,
+      listOf(model.normalizedName, model.version, "${model.downloadFileName}.$TMP_FILE_EXT")
+        .joinToString(File.separator),
+    )
   }
 
   private fun createEmptyUiState(): ModelManagerUiState {
@@ -1560,20 +1566,19 @@ constructor(
     var receivedBytes = 0L
     var totalBytes = 0L
 
+    // Fully downloaded. Check this before partial download because zip models resolve getPath() to
+    // the unzipped directory once extracted.
+    if (isModelDownloaded(model = model)) {
+      status = ModelDownloadStatusType.SUCCEEDED
+      Log.d(TAG, "${model.name} has been downloaded.")
+    }
     // Partially downloaded.
-    if (isModelPartiallyDownloaded(model = model)) {
+    else if (isModelPartiallyDownloaded(model = model)) {
       status = ModelDownloadStatusType.PARTIALLY_DOWNLOADED
-      val tmpFilePath =
-        model.getPath(context = context, fileName = "${model.downloadFileName}.$TMP_FILE_EXT")
-      val tmpFile = File(tmpFilePath)
+      val tmpFile = getModelDownloadTempFile(model)
       receivedBytes = tmpFile.length()
       totalBytes = model.totalBytes
       Log.d(TAG, "${model.name} is partially downloaded. $receivedBytes/$totalBytes")
-    }
-    // Fully downloaded.
-    else if (isModelDownloaded(model = model)) {
-      status = ModelDownloadStatusType.SUCCEEDED
-      Log.d(TAG, "${model.name} has been downloaded.")
     }
     // Not downloaded.
     else {
