@@ -43,11 +43,16 @@ object LocalDreamBackendStartupPolicy {
     requestedModelPath: String,
     currentTextEmbeddingSize: Int,
     requestedTextEmbeddingSize: Int,
+    currentWidth: Int,
+    currentHeight: Int,
+    requestedWidth: Int,
+    requestedHeight: Int,
   ): LocalDreamBackendStartupAction {
     val sameModel =
       !currentModelPath.isNullOrBlank() && File(currentModelPath).absolutePath == File(requestedModelPath).absolutePath
     val sameTextEmbeddingSize = currentTextEmbeddingSize == requestedTextEmbeddingSize
-    return if (healthCheckSuccessful && sameModel && sameTextEmbeddingSize) {
+    val sameDimensions = currentWidth == requestedWidth && currentHeight == requestedHeight
+    return if (healthCheckSuccessful && sameModel && sameTextEmbeddingSize && sameDimensions) {
       LocalDreamBackendStartupAction.REUSE_RUNNING_BACKEND
     } else {
       LocalDreamBackendStartupAction.START_OR_RESTART_BACKEND
@@ -84,6 +89,10 @@ class LocalDreamImageGenerationClient(private val context: Context) {
         requestedModelPath = modelPath,
         currentTextEmbeddingSize = LocalDreamBackendService.getActiveTextEmbeddingSize(context),
         requestedTextEmbeddingSize = textEmbeddingSize,
+        currentWidth = LocalDreamBackendService.getActiveWidth(context),
+        currentHeight = LocalDreamBackendService.getActiveHeight(context),
+        requestedWidth = width,
+        requestedHeight = height,
       )
     if (startupAction == LocalDreamBackendStartupAction.START_OR_RESTART_BACKEND) {
       LocalDreamBackendService.start(
@@ -91,6 +100,8 @@ class LocalDreamImageGenerationClient(private val context: Context) {
         modelPath = modelPath,
         useGpu = useOpenCl,
         textEmbeddingSize = textEmbeddingSize,
+        width = width,
+        height = height,
       )
       try {
         waitUntilHealthy()
@@ -129,19 +140,22 @@ class LocalDreamImageGenerationClient(private val context: Context) {
         error("Local Dream 生成失败：HTTP ${response.code} ${response.message}")
       }
       val body = response.body?.string().orEmpty()
+      val resultObject = parseGenerateResponse(body)
+      val resultWidth = resultObject?.optInt("width", width)?.takeIf { it > 0 } ?: width
+      val resultHeight = resultObject?.optInt("height", height)?.takeIf { it > 0 } ?: height
       val imageBase64 =
-        parseGenerateResponse(body)?.optString("image").orEmpty().ifBlank {
+        resultObject?.optString("image").orEmpty().ifBlank {
           error("Local Dream 没有返回图片数据")
         }
       val imageBytes = Base64.decode(imageBase64, Base64.DEFAULT)
-      val pixelCount = width * height
+      val pixelCount = resultWidth * resultHeight
       val channels =
         when (imageBytes.size) {
           pixelCount * 3 -> 3
           pixelCount * 4 -> 4
           else -> error("Local Dream 返回图片字节数异常：${imageBytes.size}")
         }
-      NativeImageGenerationResult(width = width, height = height, channels = channels, bytes = imageBytes)
+      NativeImageGenerationResult(width = resultWidth, height = resultHeight, channels = channels, bytes = imageBytes)
     }
   }
 

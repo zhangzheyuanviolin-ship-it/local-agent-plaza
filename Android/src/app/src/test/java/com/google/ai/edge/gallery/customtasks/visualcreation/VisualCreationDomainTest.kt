@@ -262,6 +262,10 @@ class VisualCreationDomainTest {
         requestedModelPath = "/models/absolute",
         currentTextEmbeddingSize = 768,
         requestedTextEmbeddingSize = 768,
+        currentWidth = 512,
+        currentHeight = 512,
+        requestedWidth = 512,
+        requestedHeight = 512,
       )
 
     assertEquals(LocalDreamBackendStartupAction.REUSE_RUNNING_BACKEND, policy)
@@ -277,6 +281,10 @@ class VisualCreationDomainTest {
         requestedModelPath = "/models/absolute",
         currentTextEmbeddingSize = 768,
         requestedTextEmbeddingSize = 768,
+        currentWidth = 512,
+        currentHeight = 512,
+        requestedWidth = 512,
+        requestedHeight = 512,
       ),
     )
     assertEquals(
@@ -287,6 +295,10 @@ class VisualCreationDomainTest {
         requestedModelPath = "/models/dreamshaper",
         currentTextEmbeddingSize = 768,
         requestedTextEmbeddingSize = 768,
+        currentWidth = 512,
+        currentHeight = 512,
+        requestedWidth = 512,
+        requestedHeight = 512,
       ),
     )
     assertEquals(
@@ -297,7 +309,80 @@ class VisualCreationDomainTest {
         requestedModelPath = "/models/sdxl",
         currentTextEmbeddingSize = 768,
         requestedTextEmbeddingSize = 1280,
+        currentWidth = 1024,
+        currentHeight = 1024,
+        requestedWidth = 1024,
+        requestedHeight = 1024,
       ),
     )
+    assertEquals(
+      LocalDreamBackendStartupAction.START_OR_RESTART_BACKEND,
+      LocalDreamBackendStartupPolicy.decide(
+        healthCheckSuccessful = true,
+        currentModelPath = "/models/absolute",
+        requestedModelPath = "/models/absolute",
+        currentTextEmbeddingSize = 768,
+        requestedTextEmbeddingSize = 768,
+        currentWidth = 512,
+        currentHeight = 512,
+        requestedWidth = 768,
+        requestedHeight = 768,
+      ),
+    )
+  }
+
+  @Test
+  fun localDreamCommandUsesOfficialSdxlModelDirLaunchMode() {
+    val command =
+      buildLocalDreamCommand(
+        executable = java.io.File("/app/libstable_diffusion_core.so"),
+        modelDir = java.io.File("/models/sdxl"),
+        runtimeDir = java.io.File("/app/lib"),
+        modelType = LocalDreamModelType.SDXL_QNN,
+        width = 1024,
+        height = 1024,
+      )
+
+    assertEquals(
+      listOf(
+        "/app/libstable_diffusion_core.so",
+        "--type",
+        "sdxl",
+        "--model_dir",
+        "/models/sdxl",
+        "--port",
+        "8081",
+        "--lib_dir",
+        "/app/lib",
+        "--lowram",
+      ),
+      command,
+    )
+  }
+
+  @Test
+  fun localDreamCommandUsesOfficialSd15NpuModeAndPatchWhenAvailable() {
+    val tempDir = createTempDir(prefix = "local-dream-sd15")
+    try {
+      java.io.File(tempDir, "768.patch").writeText("patch")
+
+      val command =
+        buildLocalDreamCommand(
+          executable = java.io.File("/app/libstable_diffusion_core.so"),
+          modelDir = tempDir,
+          runtimeDir = java.io.File("/app/lib"),
+          modelType = LocalDreamModelType.SD15_QNN,
+          width = 768,
+          height = 768,
+        )
+
+      assertEquals("sd15npu", command[command.indexOf("--type") + 1])
+      assertEquals(tempDir.absolutePath, command[command.indexOf("--model_dir") + 1])
+      assertEquals("/app/lib", command[command.indexOf("--lib_dir") + 1])
+      assertEquals(java.io.File(tempDir, "768.patch").absolutePath, command[command.indexOf("--patch") + 1])
+      assertFalse(command.contains("--lowram"))
+    } finally {
+      tempDir.deleteRecursively()
+    }
   }
 }

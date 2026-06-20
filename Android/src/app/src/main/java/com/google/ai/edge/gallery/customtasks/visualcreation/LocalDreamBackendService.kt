@@ -29,6 +29,80 @@ import androidx.core.app.NotificationCompat
 import java.io.File
 import java.util.concurrent.TimeUnit
 
+internal enum class LocalDreamModelType(val cliType: String, val usesQnn: Boolean) {
+  SD15_QNN("sd15npu", true),
+  SD15_MNN("sd15cpu", false),
+  SDXL_QNN("sdxl", true),
+  UNKNOWN("", false),
+}
+
+internal fun buildLocalDreamCommand(
+  executable: File,
+  modelDir: File,
+  runtimeDir: File,
+  modelType: LocalDreamModelType,
+  width: Int,
+  height: Int,
+): List<String> {
+  require(modelType != LocalDreamModelType.UNKNOWN) { "未知 Local Dream 模型类型" }
+  val command =
+    mutableListOf(
+      executable.absolutePath,
+      "--type",
+      modelType.cliType,
+      "--model_dir",
+      modelDir.absolutePath,
+      "--port",
+      LocalDreamBackendService.LOCAL_DREAM_PORT.toString(),
+    )
+  if (modelType.usesQnn) {
+    command += listOf("--lib_dir", runtimeDir.absolutePath)
+  }
+  if (modelType == LocalDreamModelType.SD15_QNN && (width != 512 || height != 512)) {
+    selectSd15PatchFile(modelDir = modelDir, width = width, height = height)?.let { patch ->
+      command += listOf("--patch", patch.absolutePath)
+    }
+  }
+  if (File(modelDir, "V_PRED").exists()) {
+    command += "--use_v_pred"
+  }
+  if (modelType == LocalDreamModelType.SDXL_QNN) {
+    command += "--lowram"
+  }
+  return command
+}
+
+internal fun detectLocalDreamModelType(dir: File): LocalDreamModelType {
+  val hasSdxlMarker = File(dir, "SDXL").exists()
+  val hasQnn = firstLocalDreamFileRecursive(dir) { it.name.startsWith("unet", true) && it.name.endsWith(".bin", true) }
+  val hasMnn = firstLocalDreamFileRecursive(dir) { it.name.startsWith("unet", true) && it.name.endsWith(".mnn", true) }
+  return when {
+    hasSdxlMarker && hasQnn != null -> LocalDreamModelType.SDXL_QNN
+    hasQnn != null -> LocalDreamModelType.SD15_QNN
+    hasMnn != null -> LocalDreamModelType.SD15_MNN
+    else -> LocalDreamModelType.UNKNOWN
+  }
+}
+
+private fun selectSd15PatchFile(modelDir: File, width: Int, height: Int): File? {
+  val preferred =
+    if (width == height) {
+      listOf(File(modelDir, "$width.patch"), File(modelDir, "${width}x$height.patch"))
+    } else {
+      listOf(File(modelDir, "${width}x$height.patch"))
+    }
+  return preferred.firstOrNull { it.exists() }
+}
+
+private fun firstLocalDreamFileRecursive(dir: File, predicate: (File) -> Boolean): File? {
+  val files = dir.listFiles() ?: return null
+  files.firstOrNull { it.isFile && predicate(it) }?.let { return it }
+  files.filter { it.isDirectory }.forEach { child ->
+    firstLocalDreamFileRecursive(child, predicate)?.let { return it }
+  }
+  return null
+}
+
 class LocalDreamBackendService : Service() {
   private val extractedRuntimeDir: File by lazy { File(filesDir, RUNTIME_DIR) }
   private val runtimeDir: File by lazy { resolveRuntimeDir() }
@@ -58,6 +132,8 @@ class LocalDreamBackendService : Service() {
             modelDir = File(modelPath),
             useGpu = intent.getBooleanExtra(EXTRA_USE_GPU, false),
             textEmbeddingSize = intent.getIntExtra(EXTRA_TEXT_EMBEDDING_SIZE, DEFAULT_TEXT_EMBEDDING_SIZE),
+            width = intent.getIntExtra(EXTRA_WIDTH, DEFAULT_WIDTH),
+            height = intent.getIntExtra(EXTRA_HEIGHT, DEFAULT_HEIGHT),
           )
         ) {
           updateNotification("本地图像生成后端运行中")
@@ -116,7 +192,13 @@ class LocalDreamBackendService : Service() {
     }
   }
 
-  private fun startBackend(modelDir: File, useGpu: Boolean, textEmbeddingSize: Int): Boolean {
+  private fun startBackend(
+    modelDir: File,
+    useGpu: Boolean,
+    textEmbeddingSize: Int,
+    width: Int,
+    height: Int,
+  ): Boolean {
     return try {
       stopBackendProcessOnly()
       killOrphanBackendProcesses()
@@ -125,7 +207,7 @@ class LocalDreamBackendService : Service() {
         return false
       }
       val actualDir = findActualModelDir(modelDir)
-      val modelType = detectModelType(actualDir)
+      val modelType = detectLocalDreamModelType(actualDir)
       if (modelType == LocalDreamModelType.UNKNOWN) {
         appendDiagnostic("No Local Dream model files found under ${modelDir.absolutePath}", isError = true)
         return false
@@ -135,7 +217,18 @@ class LocalDreamBackendService : Service() {
         appendDiagnostic("Executable not found: ${executable.absolutePath}", isError = true)
         return false
       }
-      val command = buildCommand(executable, actualDir, modelType, useGpu, textEmbeddingSize)
+      val command =
+        buildLocalDreamCommand(
+          executable = executable,
+          modelDir = actualDir,
+          runtimeDir = runtimeDir,
+          modelType = modelType,
+          width = width,
+          height = height,
+        )
+      if (modelType == LocalDreamModelType.SD15_MNN && useGpu) {
+        appendDiagnostic("MNN backend will receive use_opencl=true in generate requests")
+      }
       val env = buildEnvironment()
       appendDiagnostic("Starting Local Dream backend: ${command.joinToString(" ")}")
       appendDiagnostic("LD_LIBRARY_PATH=${env["LD_LIBRARY_PATH"]}")
@@ -146,97 +239,12 @@ class LocalDreamBackendService : Service() {
           .redirectErrorStream(true)
           .apply { environment().putAll(env) }
           .start()
-      setActiveBackendState(this, modelDir.absolutePath, textEmbeddingSize)
+      setActiveBackendState(this, modelDir.absolutePath, textEmbeddingSize, width, height)
       startMonitorThread()
       true
     } catch (e: Throwable) {
       appendDiagnostic("Failed to start Local Dream backend: ${e.message}", e, isError = true)
       false
-    }
-  }
-
-  private fun buildCommand(
-    executable: File,
-    modelDir: File,
-    modelType: LocalDreamModelType,
-    useGpu: Boolean,
-    textEmbeddingSize: Int,
-  ): List<String> {
-    val clipFile =
-      when {
-        File(modelDir, "clip.bin").exists() -> File(modelDir, "clip.bin")
-        File(modelDir, "clip_v2.mnn").exists() -> File(modelDir, "clip.mnn")
-        File(modelDir, "clip.mnn").exists() -> File(modelDir, "clip.mnn")
-        else -> File(modelDir, "clip.bin")
-      }
-    val tokenizerFile = firstFileRecursive(modelDir) { it.name.equals("tokenizer.json", true) }
-    val vaeDecoderFile =
-      firstFileRecursive(modelDir) {
-        it.name.startsWith("vae_decoder", true) &&
-          it.name.endsWith(if (modelType == LocalDreamModelType.QNN) ".bin" else ".mnn", true)
-      }
-    val unetFile =
-      firstFileRecursive(modelDir) {
-        it.name.startsWith("unet", true) &&
-          it.name.endsWith(if (modelType == LocalDreamModelType.QNN) ".bin" else ".mnn", true)
-      }
-    require(tokenizerFile != null) { "未找到 tokenizer.json" }
-    require(vaeDecoderFile != null) { "未找到 VAE decoder 文件" }
-    require(unetFile != null) { "未找到 UNet 文件" }
-
-    val command =
-      mutableListOf(
-        executable.absolutePath,
-        "--clip",
-        clipFile.absolutePath,
-        "--unet",
-        unetFile.absolutePath,
-        "--vae_decoder",
-        vaeDecoderFile.absolutePath,
-        "--tokenizer",
-        tokenizerFile.absolutePath,
-        "--port",
-        LOCAL_DREAM_PORT.toString(),
-        "--text_embedding_size",
-        textEmbeddingSize.toString(),
-      )
-
-    val vaeEncoderFile =
-      firstFileRecursive(modelDir) {
-        it.name.startsWith("vae_encoder", true) &&
-          it.name.endsWith(if (modelType == LocalDreamModelType.QNN) ".bin" else ".mnn", true)
-      }
-    if (vaeEncoderFile != null) {
-      command += listOf("--vae_encoder", vaeEncoderFile.absolutePath)
-    }
-
-    if (modelType == LocalDreamModelType.QNN) {
-      command +=
-        listOf(
-          "--backend",
-          File(runtimeDir, "libQnnHtp.so").absolutePath,
-          "--system_library",
-          File(runtimeDir, "libQnnSystem.so").absolutePath,
-        )
-      if (clipFile.name.endsWith(".mnn", true)) {
-        command += "--use_cpu_clip"
-      }
-    } else {
-      command += "--cpu"
-      if (useGpu) {
-        appendDiagnostic("MNN backend will receive use_opencl=true in generate requests")
-      }
-    }
-    return command
-  }
-
-  private fun detectModelType(dir: File): LocalDreamModelType {
-    val hasQnn = firstFileRecursive(dir) { it.name.startsWith("unet", true) && it.name.endsWith(".bin", true) }
-    val hasMnn = firstFileRecursive(dir) { it.name.startsWith("unet", true) && it.name.endsWith(".mnn", true) }
-    return when {
-      hasQnn != null -> LocalDreamModelType.QNN
-      hasMnn != null -> LocalDreamModelType.MNN
-      else -> LocalDreamModelType.UNKNOWN
     }
   }
 
@@ -369,12 +377,6 @@ class LocalDreamBackendService : Service() {
     manager.notify(NOTIFICATION_ID, createNotification(contentText))
   }
 
-  private enum class LocalDreamModelType {
-    QNN,
-    MNN,
-    UNKNOWN,
-  }
-
   companion object {
     private const val TAG = "LocalDreamBackendService"
     private const val CHANNEL_ID = "local_visual_creation_backend"
@@ -388,16 +390,24 @@ class LocalDreamBackendService : Service() {
     private const val EXTRA_MODEL_PATH = "model_path"
     private const val EXTRA_USE_GPU = "use_gpu"
     private const val EXTRA_TEXT_EMBEDDING_SIZE = "text_embedding_size"
+    private const val EXTRA_WIDTH = "width"
+    private const val EXTRA_HEIGHT = "height"
     private const val PREFS_NAME = "local_dream_backend"
     private const val KEY_ACTIVE_MODEL_PATH = "active_model_path"
     private const val KEY_ACTIVE_TEXT_EMBEDDING_SIZE = "active_text_embedding_size"
+    private const val KEY_ACTIVE_WIDTH = "active_width"
+    private const val KEY_ACTIVE_HEIGHT = "active_height"
     private const val DEFAULT_TEXT_EMBEDDING_SIZE = 768
+    private const val DEFAULT_WIDTH = 512
+    private const val DEFAULT_HEIGHT = 512
 
     fun start(
       context: Context,
       modelPath: String,
       useGpu: Boolean = false,
       textEmbeddingSize: Int = 768,
+      width: Int = 512,
+      height: Int = 512,
     ) {
       val intent =
         Intent(context, LocalDreamBackendService::class.java).apply {
@@ -405,6 +415,8 @@ class LocalDreamBackendService : Service() {
           putExtra(EXTRA_MODEL_PATH, modelPath)
           putExtra(EXTRA_USE_GPU, useGpu)
           putExtra(EXTRA_TEXT_EMBEDDING_SIZE, textEmbeddingSize)
+          putExtra(EXTRA_WIDTH, width)
+          putExtra(EXTRA_HEIGHT, height)
         }
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         context.startForegroundService(intent)
@@ -429,12 +441,28 @@ class LocalDreamBackendService : Service() {
         .getInt(KEY_ACTIVE_TEXT_EMBEDDING_SIZE, DEFAULT_TEXT_EMBEDDING_SIZE)
     }
 
-    private fun setActiveBackendState(context: Context, modelPath: String, textEmbeddingSize: Int) {
+    fun getActiveWidth(context: Context): Int {
+      return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_ACTIVE_WIDTH, DEFAULT_WIDTH)
+    }
+
+    fun getActiveHeight(context: Context): Int {
+      return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_ACTIVE_HEIGHT, DEFAULT_HEIGHT)
+    }
+
+    private fun setActiveBackendState(
+      context: Context,
+      modelPath: String,
+      textEmbeddingSize: Int,
+      width: Int,
+      height: Int,
+    ) {
       context
         .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit()
         .putString(KEY_ACTIVE_MODEL_PATH, File(modelPath).absolutePath)
         .putInt(KEY_ACTIVE_TEXT_EMBEDDING_SIZE, textEmbeddingSize)
+        .putInt(KEY_ACTIVE_WIDTH, width)
+        .putInt(KEY_ACTIVE_HEIGHT, height)
         .apply()
     }
 
@@ -444,6 +472,8 @@ class LocalDreamBackendService : Service() {
         .edit()
         .remove(KEY_ACTIVE_MODEL_PATH)
         .remove(KEY_ACTIVE_TEXT_EMBEDDING_SIZE)
+        .remove(KEY_ACTIVE_WIDTH)
+        .remove(KEY_ACTIVE_HEIGHT)
         .apply()
     }
   }
