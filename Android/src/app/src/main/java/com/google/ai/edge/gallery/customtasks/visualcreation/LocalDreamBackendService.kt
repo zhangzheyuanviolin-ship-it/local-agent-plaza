@@ -140,6 +140,7 @@ class LocalDreamBackendService : Service() {
           .redirectErrorStream(true)
           .apply { environment().putAll(env) }
           .start()
+      setActiveModelPath(this, modelDir.absolutePath)
       startMonitorThread()
       true
     } catch (e: Throwable) {
@@ -301,6 +302,7 @@ class LocalDreamBackendService : Service() {
       }
     }
     backendProcess = null
+    clearActiveModelPath(this)
   }
 
   private fun killOrphanBackendProcesses() {
@@ -378,6 +380,8 @@ class LocalDreamBackendService : Service() {
     private const val ACTION_STOP = "com.localagent.plaza.visualcreation.LOCAL_DREAM_STOP"
     private const val EXTRA_MODEL_PATH = "model_path"
     private const val EXTRA_USE_GPU = "use_gpu"
+    private const val PREFS_NAME = "local_dream_backend"
+    private const val KEY_ACTIVE_MODEL_PATH = "active_model_path"
 
     fun start(context: Context, modelPath: String, useGpu: Boolean = false) {
       val intent =
@@ -397,6 +401,22 @@ class LocalDreamBackendService : Service() {
       context.startService(
         Intent(context, LocalDreamBackendService::class.java).apply { action = ACTION_STOP }
       )
+    }
+
+    fun getActiveModelPath(context: Context): String? {
+      return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_ACTIVE_MODEL_PATH, null)
+    }
+
+    private fun setActiveModelPath(context: Context, modelPath: String) {
+      context
+        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putString(KEY_ACTIVE_MODEL_PATH, File(modelPath).absolutePath)
+        .apply()
+    }
+
+    private fun clearActiveModelPath(context: Context) {
+      context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(KEY_ACTIVE_MODEL_PATH).apply()
     }
   }
 }

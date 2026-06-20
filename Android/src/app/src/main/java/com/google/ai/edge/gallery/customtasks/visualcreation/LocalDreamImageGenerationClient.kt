@@ -31,6 +31,27 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
+enum class LocalDreamBackendStartupAction {
+  REUSE_RUNNING_BACKEND,
+  START_OR_RESTART_BACKEND,
+}
+
+object LocalDreamBackendStartupPolicy {
+  fun decide(
+    healthCheckSuccessful: Boolean,
+    currentModelPath: String?,
+    requestedModelPath: String,
+  ): LocalDreamBackendStartupAction {
+    val sameModel =
+      !currentModelPath.isNullOrBlank() && File(currentModelPath).absolutePath == File(requestedModelPath).absolutePath
+    return if (healthCheckSuccessful && sameModel) {
+      LocalDreamBackendStartupAction.REUSE_RUNNING_BACKEND
+    } else {
+      LocalDreamBackendStartupAction.START_OR_RESTART_BACKEND
+    }
+  }
+}
+
 class LocalDreamImageGenerationClient(private val context: Context) {
   private val baseUrl = "http://127.0.0.1:${LocalDreamBackendService.LOCAL_DREAM_PORT}"
   private val client =
@@ -52,13 +73,21 @@ class LocalDreamImageGenerationClient(private val context: Context) {
     useOpenCl: Boolean = false,
   ): NativeImageGenerationResult = withContext(Dispatchers.IO) {
     require(File(modelPath).exists()) { "Local Dream 模型目录不存在：$modelPath" }
-    LocalDreamBackendService.start(context = context, modelPath = modelPath, useGpu = useOpenCl)
-    try {
-      waitUntilHealthy()
-    } catch (e: Throwable) {
-      LocalDreamBackendService.stop(context)
-      delay(1_000)
-      error("${e.message}；已停止未就绪的 Local Dream 后端，请重新点击生成")
+    val startupAction =
+      LocalDreamBackendStartupPolicy.decide(
+        healthCheckSuccessful = checkBackendHealth(),
+        currentModelPath = LocalDreamBackendService.getActiveModelPath(context),
+        requestedModelPath = modelPath,
+      )
+    if (startupAction == LocalDreamBackendStartupAction.START_OR_RESTART_BACKEND) {
+      LocalDreamBackendService.start(context = context, modelPath = modelPath, useGpu = useOpenCl)
+      try {
+        waitUntilHealthy()
+      } catch (e: Throwable) {
+        LocalDreamBackendService.stop(context)
+        delay(1_000)
+        error("${e.message}；已停止未就绪的 Local Dream 后端，请重新点击生成")
+      }
     }
 
     val json =

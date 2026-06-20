@@ -128,7 +128,7 @@ class VisualCreationDomainTest {
         imagePrompt = "雨夜街灯下的小提琴家",
         negativePrompt = "模糊，低质量",
         generationSettings = settings,
-        selectedImageGenerationModelId = "z-image-turbo-q2-gguf",
+        selectedImageGenerationModelId = "dreamshaper-v8-qnn-8gen2",
       )
 
     assertEquals("session-1", session.sessionId)
@@ -137,7 +137,7 @@ class VisualCreationDomainTest {
     assertEquals("雨夜街灯下的小提琴家", session.imagePrompt)
     assertEquals("模糊，低质量", session.negativePrompt)
     assertEquals(768, session.generationSettings.width)
-    assertEquals("z-image-turbo-q2-gguf", session.selectedImageGenerationModelId)
+    assertEquals("dreamshaper-v8-qnn-8gen2", session.selectedImageGenerationModelId)
     assertEquals(VisualProcessMode.DESCRIBE_IMAGE, session.visualProcessMode)
     assertEquals(VisualCreationStatus.IDLE, session.status)
     assertFalse(session.hasGeneratedImage)
@@ -157,15 +157,15 @@ class VisualCreationDomainTest {
 
     viewModel.syncSelectedImageGenerationModel(
       Model(
-        name = "sd15-q4-0-gguf",
-        displayName = "Stable Diffusion 1.5 Q4_0 GGUF",
-        downloadFileName = "stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf",
+        name = "dreamshaper-v8-qnn-8gen2",
+        displayName = "DreamShaper V8 QNN 8gen2",
+        downloadFileName = "DreamShaperV8_qnn2.28_8gen2.zip",
       )
     )
 
-    assertEquals("sd15-q4-0-gguf", viewModel.uiState.value.selectedImageGenerationModelId)
+    assertEquals("dreamshaper-v8-qnn-8gen2", viewModel.uiState.value.selectedImageGenerationModelId)
     assertEquals(
-      "当前图像生成模型：Stable Diffusion 1.5 Q4_0 GGUF",
+      "当前图像生成模型：DreamShaper V8 QNN 8gen2",
       viewModel.uiState.value.statusText,
     )
     assertEquals(512, viewModel.uiState.value.settings.width)
@@ -184,11 +184,11 @@ class VisualCreationDomainTest {
 
   @Test
   fun visualCreationImageModelsExposeLocalDreamArchivesAsZipDownloads() {
-    val model = createVisualCreationImageModels().first { it.name == "absolute-reality-qnn-8gen2" }
+    val model = createVisualCreationImageModels().first { it.name == "dreamshaper-v8-qnn-8gen2" }
 
     assertTrue(model.isZip)
     assertEquals("model", model.unzipDir)
-    assertEquals("AbsoluteReality_qnn2.28_8gen2.zip", model.downloadFileName)
+    assertEquals("DreamShaperV8_qnn2.28_8gen2.zip", model.downloadFileName)
   }
 
   @Test
@@ -204,45 +204,65 @@ class VisualCreationDomainTest {
   }
 
   @Test
-  fun viewModelSyncsZImageWithChineseModelDefaults() {
+  fun viewModelSyncsQnnModelWithLocalDreamDefaults() {
     val viewModel = VisualCreationViewModel()
 
     viewModel.syncSelectedImageGenerationModel(
       Model(
-        name = "z-image-turbo-q2-gguf",
-        displayName = "Z-Image Turbo Q2_K GGUF",
-        downloadFileName = "z_image_turbo-Q2_K.gguf",
+        name = "realistic-vision-hyper-qnn-8gen2",
+        displayName = "Realistic Vision Hyper QNN 8gen2",
+        downloadFileName = "RealisticVisionHyper_qnn2.28_8gen2.zip",
       )
     )
 
-    assertEquals("z-image-turbo-q2-gguf", viewModel.uiState.value.selectedImageGenerationModelId)
+    assertEquals("realistic-vision-hyper-qnn-8gen2", viewModel.uiState.value.selectedImageGenerationModelId)
     assertEquals(512, viewModel.uiState.value.settings.width)
     assertEquals(512, viewModel.uiState.value.settings.height)
-    assertEquals(8, viewModel.uiState.value.settings.steps)
-    assertEquals(1.0f, viewModel.uiState.value.settings.cfgScale)
+    assertEquals(28, viewModel.uiState.value.settings.steps)
+    assertEquals(7.0f, viewModel.uiState.value.settings.cfgScale)
   }
 
   @Test
-  fun resolveNativeFileNamesUsesSeparateZImageComponents() {
-    val modelInfo = ImageGenerationModelRegistry.requireModel("z-image-turbo-q2-gguf")
+  fun resolveNativeFileNamesLeavesLocalDreamArchiveToDirectoryBackend() {
+    val modelInfo = ImageGenerationModelRegistry.requireModel("dreamshaper-v8-qnn-8gen2")
 
     val files = resolveNativeImageGenerationFileNames(modelInfo)
 
     assertEquals("", files.modelFileName)
-    assertEquals("z_image_turbo-Q2_K.gguf", files.diffusionModelFileName)
-    assertEquals("ae.safetensors", files.vaeFileName)
-    assertEquals("qwen_3_4b_fp4_mixed.safetensors", files.llmFileName)
-  }
-
-  @Test
-  fun resolveNativeFileNamesUsesCheckpointForSd15() {
-    val modelInfo = ImageGenerationModelRegistry.requireModel("sd15-q4-0-gguf")
-
-    val files = resolveNativeImageGenerationFileNames(modelInfo)
-
-    assertEquals("stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf", files.modelFileName)
     assertEquals("", files.diffusionModelFileName)
     assertEquals("", files.vaeFileName)
     assertEquals("", files.llmFileName)
+  }
+
+  @Test
+  fun localDreamStartupPolicyReusesHealthyBackendInsteadOfRestartingIt() {
+    val policy =
+      LocalDreamBackendStartupPolicy.decide(
+        healthCheckSuccessful = true,
+        currentModelPath = "/models/absolute",
+        requestedModelPath = "/models/absolute",
+      )
+
+    assertEquals(LocalDreamBackendStartupAction.REUSE_RUNNING_BACKEND, policy)
+  }
+
+  @Test
+  fun localDreamStartupPolicyRestartsWhenModelChangesOrBackendIsUnhealthy() {
+    assertEquals(
+      LocalDreamBackendStartupAction.START_OR_RESTART_BACKEND,
+      LocalDreamBackendStartupPolicy.decide(
+        healthCheckSuccessful = false,
+        currentModelPath = "/models/absolute",
+        requestedModelPath = "/models/absolute",
+      ),
+    )
+    assertEquals(
+      LocalDreamBackendStartupAction.START_OR_RESTART_BACKEND,
+      LocalDreamBackendStartupPolicy.decide(
+        healthCheckSuccessful = true,
+        currentModelPath = "/models/absolute",
+        requestedModelPath = "/models/dreamshaper",
+      ),
+    )
   }
 }

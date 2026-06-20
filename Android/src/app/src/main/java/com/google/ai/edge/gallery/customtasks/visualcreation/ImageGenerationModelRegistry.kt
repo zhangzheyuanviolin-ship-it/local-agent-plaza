@@ -70,35 +70,47 @@ object ImageGenerationModelRegistry {
   val recommendedModels: List<ImageGenerationModelInfo> =
     listOf(
       absoluteRealityQnn8Gen2Model(),
+      qnn8Gen2Model(
+        modelId = "dreamshaper-v8-qnn-8gen2",
+        displayName = "DreamShaper V8 QNN 8gen2",
+        fileName = "DreamShaperV8_qnn2.28_8gen2.zip",
+        sizeInBytes = 1_032_290_626L,
+        notes = "Local Dream QNN 8gen2候选模型，偏通用幻想、写实和插画场景；适合测试比Absolute Reality更强的复杂画面理解。",
+      ),
+      qnn8Gen2Model(
+        modelId = "realistic-vision-hyper-qnn-8gen2",
+        displayName = "Realistic Vision Hyper QNN 8gen2",
+        fileName = "RealisticVisionHyper_qnn2.28_8gen2.zip",
+        sizeInBytes = 1_068_141_522L,
+        notes = "Local Dream QNN 8gen2候选模型，偏写实摄影风格；适合人物、动物、室内外真实场景验证。",
+      ),
+      qnn8Gen2Model(
+        modelId = "majicmix-realistic-v7-qnn-8gen2",
+        displayName = "MajicMix Realistic V7 QNN 8gen2",
+        fileName = "MajicmixRealisticV7_qnn2.28_8gen2.zip",
+        sizeInBytes = 1_055_975_131L,
+        notes = "Local Dream QNN 8gen2候选模型，偏亚洲写实和人像风格；用于测试人物与装饰细节生成。",
+      ),
+      qnn8Gen2Model(
+        modelId = "anything-v5-qnn-8gen2",
+        displayName = "Anything V5 QNN 8gen2",
+        fileName = "AnythingV5_qnn2.28_8gen2.zip",
+        sizeInBytes = 1_057_820_237L,
+        notes = "Local Dream QNN 8gen2候选模型，偏二次元和插画风格；适合测试非写实画风。",
+      ),
+      qnn8Gen2Model(
+        modelId = "meina-mix-v12-qnn-8gen2",
+        displayName = "MeinaMix V12 QNN 8gen2",
+        fileName = "MeinaMixV12_qnn2.28_8gen2.zip",
+        sizeInBytes = 1_031_765_133L,
+        notes = "Local Dream QNN 8gen2候选模型，偏动漫插画和角色创作；适合测试风格化提示词。",
+      ),
+      abyssOrangeMix3Qnn8Gen2Model(),
       absoluteRealityMnnCpuModel(),
-      zImageTurboModel("q2", "Q2_K", "z_image_turbo-Q2_K.gguf", 2_592_442_304L, 8),
-      zImageTurboModel("q3", "Q3_K", "z_image_turbo-Q3_K.gguf", 3_143_559_104L, 10),
-      zImageTurboModel("q4-0", "Q4_0", "z_image_turbo-Q4_0.gguf", 3_683_370_944L, 12),
-      zImageTurboModel("q4-k", "Q4_K", "z_image_turbo-Q4_K.gguf", 3_864_250_304L, 12),
-      zImageTurboModel("q5-0", "Q5_0", "z_image_turbo-Q5_0.gguf", 4_542_547_904L, 14),
-      zImageTurboModel("q6-k", "Q6_K", "z_image_turbo-Q6_K.gguf", 5_263_239_104L, 16),
-      zImageTurboModel("q8-0", "Q8_0", "z_image_turbo-Q8_0.gguf", 6_577_440_704L, 18),
-      stableDiffusion15Model(
-        modelId = "sd15-q4-0-gguf",
-        quantLabel = "Q4_0",
-        fileName = "stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf",
-        sizeInBytes = 1_566_768_416L,
-        minMemoryGb = 6,
-      ),
-      stableDiffusion15Model(
-        modelId = "sd15-q5-0-gguf",
-        quantLabel = "Q5_0",
-        fileName = "stable-diffusion-v1-5-pruned-emaonly-Q5_0.gguf",
-        sizeInBytes = 1_615_967_904L,
-        minMemoryGb = 6,
-      ),
-      stableDiffusion15Model(
-        modelId = "sd15-q8-0-gguf",
-        quantLabel = "Q8_0",
-        fileName = "stable-diffusion-v1-5-pruned-emaonly-Q8_0.gguf",
-        sizeInBytes = 1_763_578_176L,
-        minMemoryGb = 8,
-      ),
+      mnnCpuModel("anything-v5-mnn-cpu", "Anything V5 MNN CPU", "AnythingV5.zip", 1_191_044_427L),
+      mnnCpuModel("chillout-mix-mnn-cpu", "ChilloutMix MNN CPU", "ChilloutMix.zip", 1_203_917_293L),
+      mnnCpuModel("cute-yuki-mix-mnn-cpu", "CuteYukiMix MNN CPU", "CuteYukiMix.zip", 1_188_112_898L),
+      mnnCpuModel("qtea-mix-mnn-cpu", "QteaMix MNN CPU", "QteaMix.zip", 1_191_096_924L),
     )
 
   fun findModel(modelId: String): ImageGenerationModelInfo? {
@@ -109,46 +121,72 @@ object ImageGenerationModelRegistry {
     return findModel(modelId) ?: error("Image generation model not found: $modelId")
   }
 
-  private fun zImageTurboModel(
-    modelIdSuffix: String,
-    quantLabel: String,
+  private fun qnn8Gen2Model(
+    modelId: String,
+    displayName: String,
     fileName: String,
     sizeInBytes: Long,
-    minMemoryGb: Int,
+    notes: String,
   ): ImageGenerationModelInfo {
     return ImageGenerationModelInfo(
-      modelId = "z-image-turbo-$modelIdSuffix-gguf",
-      displayName = "Z-Image Turbo $quantLabel GGUF",
-      family = "Z-Image",
-      backend = ImageGenerationBackend.STABLE_DIFFUSION_CPP,
-      format = "GGUF",
+      modelId = modelId,
+      displayName = displayName,
+      family = "Local Dream SD1.5 QNN",
+      backend = ImageGenerationBackend.LOCAL_DREAM_QNN_MNN,
+      format = "QNN ZIP",
       requiredFiles =
         listOf(
           ImageGenerationModelFile(
-            role = ImageGenerationModelFileRole.DIFFUSION_MODEL,
+            role = ImageGenerationModelFileRole.MODEL_ARCHIVE,
             fileName = fileName,
-            downloadUrl = "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/$fileName",
+            downloadUrl = "https://huggingface.co/xororz/sd-qnn/resolve/main/$fileName",
             sizeInBytes = sizeInBytes,
           )
-        ) + zImageSharedFiles(),
-      learnMoreUrl = "https://huggingface.co/leejet/Z-Image-Turbo-GGUF",
-      localVersion =
-        if (modelIdSuffix == "q2") {
-          "z-image-turbo-q2-2025-12-02"
-        } else {
-          "z-image-turbo-$modelIdSuffix-2025-12-02"
-        },
-      license = "Apache-2.0",
+        ),
+      learnMoreUrl = "https://huggingface.co/xororz/sd-qnn",
+      localVersion = "$modelId-2026-06-20",
+      license = "Upstream model licenses / local-dream converted weights",
       supportsTextToImage = true,
       supportsImageToImage = false,
       supportsImageEditing = false,
-      supportsChineseText = true,
-      lowMemoryRecommended = modelIdSuffix == "q2" || modelIdSuffix == "q3",
-      minMemoryGb = minMemoryGb,
+      supportsChineseText = false,
+      lowMemoryRecommended = false,
+      minMemoryGb = 6,
       recommendedWidth = 512,
       recommendedHeight = 512,
-      notes =
-        "中文优先候选模型。主扩散权重来自 leejet/Z-Image-Turbo-GGUF，VAE 和 Qwen3 4B FP4 文本编码器来自 Comfy-Org/z_image_turbo；下载链接和文件大小已核验。",
+      notes = notes,
+    )
+  }
+
+  private fun abyssOrangeMix3Qnn8Gen2Model(): ImageGenerationModelInfo {
+    return ImageGenerationModelInfo(
+      modelId = "abyss-orange-mix3-qnn-8gen2",
+      displayName = "AbyssOrangeMix3 QNN 8gen2",
+      family = "Local Dream SD1.5 QNN",
+      backend = ImageGenerationBackend.LOCAL_DREAM_QNN_MNN,
+      format = "QNN ZIP",
+      requiredFiles =
+        listOf(
+          ImageGenerationModelFile(
+            role = ImageGenerationModelFileRole.MODEL_ARCHIVE,
+            fileName = "abyssorangemix3AOM3_aom3a1b_qnn2.28_8gen2.zip",
+            downloadUrl =
+              "https://huggingface.co/Mr-J-369/AbyssOrangeMix3-SD1.5-qnn2.28/resolve/main/abyssorangemix3AOM3_aom3a1b_qnn2.28_8gen2.zip",
+            sizeInBytes = 990_581_965L,
+          )
+        ),
+      learnMoreUrl = "https://huggingface.co/Mr-J-369/AbyssOrangeMix3-SD1.5-qnn2.28",
+      localVersion = "abyss-orange-mix3-qnn-8gen2-2026-06-20",
+      license = "Upstream model licenses / local-dream converted weights",
+      supportsTextToImage = true,
+      supportsImageToImage = false,
+      supportsImageEditing = false,
+      supportsChineseText = false,
+      lowMemoryRecommended = false,
+      minMemoryGb = 6,
+      recommendedWidth = 512,
+      recommendedHeight = 512,
+      notes = "第三方Local Dream QNN 8gen2社区转换模型，偏二次元和插画；ZIP内包含QNN格式UNet/VAE与MNN文本编码器文件。",
     )
   }
 
@@ -186,24 +224,42 @@ object ImageGenerationModelRegistry {
   }
 
   private fun absoluteRealityMnnCpuModel(): ImageGenerationModelInfo {
-    return ImageGenerationModelInfo(
+    return mnnCpuModel(
       modelId = "absolute-reality-mnn-cpu",
       displayName = "Absolute Reality MNN CPU",
-      family = "Absolute Reality SD1.5",
+      fileName = "AbsoluteReality.zip",
+      sizeInBytes = 1_288_490_188L,
+      notes = "兼容性兜底的Local Dream / MNN CPU图像生成模型；速度慢于QNN NPU，但适合QNN不可用时验证。",
+      localVersion = "absolute-reality-mnn-cpu-2026-06-14",
+    )
+  }
+
+  private fun mnnCpuModel(
+    modelId: String,
+    displayName: String,
+    fileName: String,
+    sizeInBytes: Long,
+    notes: String = "Local Dream / MNN CPU候选模型，作为兼容性兜底；速度通常慢于QNN NPU版本。",
+    localVersion: String = "$modelId-2026-06-20",
+  ): ImageGenerationModelInfo {
+    return ImageGenerationModelInfo(
+      modelId = modelId,
+      displayName = displayName,
+      family = "Local Dream SD1.5 MNN",
       backend = ImageGenerationBackend.LOCAL_DREAM_QNN_MNN,
       format = "MNN ZIP",
       requiredFiles =
         listOf(
           ImageGenerationModelFile(
             role = ImageGenerationModelFileRole.MODEL_ARCHIVE,
-            fileName = "AbsoluteReality.zip",
-            downloadUrl = "https://huggingface.co/xororz/sd-mnn/resolve/main/AbsoluteReality.zip",
-            sizeInBytes = 1_288_490_188L,
+            fileName = fileName,
+            downloadUrl = "https://huggingface.co/xororz/sd-mnn/resolve/main/$fileName",
+            sizeInBytes = sizeInBytes,
           )
         ),
       learnMoreUrl = "https://huggingface.co/xororz/sd-mnn",
-      localVersion = "absolute-reality-mnn-cpu-2026-06-14",
-      license = "CC BY-NC 4.0 / upstream model licenses",
+      localVersion = localVersion,
+      license = "Upstream model licenses / local-dream converted weights",
       supportsTextToImage = true,
       supportsImageToImage = false,
       supportsImageEditing = false,
@@ -212,66 +268,7 @@ object ImageGenerationModelRegistry {
       minMemoryGb = 4,
       recommendedWidth = 512,
       recommendedHeight = 512,
-      notes =
-        "兼容性兜底的 Local Dream / MNN CPU 图像生成模型；速度慢于 QNN NPU，但比 stable-diffusion.cpp CPU 路线更接近 LLM-Hub。",
-    )
-  }
-
-  private fun stableDiffusion15Model(
-    modelId: String,
-    quantLabel: String,
-    fileName: String,
-    sizeInBytes: Long,
-    minMemoryGb: Int,
-  ): ImageGenerationModelInfo {
-    return ImageGenerationModelInfo(
-      modelId = modelId,
-      displayName = "Stable Diffusion 1.5 $quantLabel GGUF",
-      family = "Stable Diffusion 1.5",
-      backend = ImageGenerationBackend.STABLE_DIFFUSION_CPP,
-      format = "GGUF",
-      requiredFiles =
-        listOf(
-          ImageGenerationModelFile(
-            role = ImageGenerationModelFileRole.CHECKPOINT,
-            fileName = fileName,
-            downloadUrl =
-              "https://huggingface.co/second-state/stable-diffusion-v1-5-GGUF/resolve/main/$fileName",
-            sizeInBytes = sizeInBytes,
-          )
-        ),
-      learnMoreUrl = "https://huggingface.co/second-state/stable-diffusion-v1-5-GGUF",
-      localVersion = "$modelId-2024-11-22",
-      license = "CreativeML Open RAIL-M",
-      supportsTextToImage = true,
-      supportsImageToImage = false,
-      supportsImageEditing = false,
-      supportsChineseText = false,
-      lowMemoryRecommended = true,
-      minMemoryGb = minMemoryGb,
-      recommendedWidth = 512,
-      recommendedHeight = 512,
-      notes =
-        "英文 Stable Diffusion 1.5 候选模型，来自 second-state/stable-diffusion-v1-5-GGUF；用于后续英文提示词和低内存文生图链路验证。",
-    )
-  }
-
-  private fun zImageSharedFiles(): List<ImageGenerationModelFile> {
-    return listOf(
-      ImageGenerationModelFile(
-        role = ImageGenerationModelFileRole.VAE,
-        fileName = "ae.safetensors",
-        downloadUrl =
-          "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors",
-        sizeInBytes = 335_304_388L,
-      ),
-      ImageGenerationModelFile(
-        role = ImageGenerationModelFileRole.TEXT_ENCODER,
-        fileName = "qwen_3_4b_fp4_mixed.safetensors",
-        downloadUrl =
-          "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/text_encoders/qwen_3_4b_fp4_mixed.safetensors",
-        sizeInBytes = 3_479_416_193L,
-      ),
+      notes = notes,
     )
   }
 }
@@ -289,7 +286,7 @@ fun createVisualCreationImageModels(): List<Model> {
         name = modelInfo.modelId,
         displayName = modelInfo.displayName,
         info =
-          "${modelInfo.notes}\n\n模型格式：${modelInfo.format}；推理后端：stable-diffusion.cpp；" +
+          "${modelInfo.notes}\n\n模型格式：${modelInfo.format}；推理后端：Local Dream QNN/MNN；" +
             "文件总大小约 ${modelInfo.totalSizeInBytes / 1_000_000_000.0} GB；" +
             "推荐尺寸 ${modelInfo.recommendedWidth} x ${modelInfo.recommendedHeight}；" +
             "许可证：${modelInfo.license}。",
