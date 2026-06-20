@@ -47,6 +47,7 @@ data class ImageGenerationModelInfo(
   val displayName: String,
   val family: String,
   val backend: ImageGenerationBackend,
+  val localDreamTextEmbeddingSize: Int = 768,
   val format: String,
   val requiredFiles: List<ImageGenerationModelFile>,
   val learnMoreUrl: String,
@@ -111,6 +112,74 @@ object ImageGenerationModelRegistry {
       mnnCpuModel("chillout-mix-mnn-cpu", "ChilloutMix MNN CPU", "ChilloutMix.zip", 1_203_917_293L),
       mnnCpuModel("cute-yuki-mix-mnn-cpu", "CuteYukiMix MNN CPU", "CuteYukiMix.zip", 1_188_112_898L),
       mnnCpuModel("qtea-mix-mnn-cpu", "QteaMix MNN CPU", "QteaMix.zip", 1_191_096_924L),
+      sdxlQnn8Gen3Model(
+        modelId = "sdxl-base-qnn-8gen3",
+        displayName = "SDXL Base 1.0 QNN 8gen3",
+        fileName = "sdxl_base_qnn2.28_8gen3.zip",
+        sizeInBytes = 3_753_226_114L,
+        sourceRepo = "xororz/sdxl-qnn",
+        notes = "Local Dream SDXL QNN 8gen3基础通用模型，推荐高内存设备测试1024 x 1024文生图质量和复杂提示词遵循能力。",
+      ),
+      sdxlQnn8Gen3Model(
+        modelId = "illustrious-v16-qnn-8gen3",
+        displayName = "Illustrious v16 QNN 8gen3",
+        fileName = "illustrious_v16_qnn2.28_8gen3.zip",
+        sizeInBytes = 3_726_876_852L,
+        sourceRepo = "xororz/sdxl-qnn",
+        license = "Upstream Illustrious / NoAI style licenses; verify upstream use terms",
+        notes = "Local Dream SDXL QNN 8gen3高质量插画候选模型，适合复杂角色、场景和风格化画面测试。",
+      ),
+      sdxlQnn8Gen3Model(
+        modelId = "illustrious-v16-dmd2-qnn-8gen3",
+        displayName = "Illustrious v16 DMD2 QNN 8gen3",
+        fileName = "illustrious_v16_dmd2_qnn2.28_8gen3.zip",
+        sizeInBytes = 3_722_127_035L,
+        sourceRepo = "xororz/sdxl-qnn",
+        license = "Upstream Illustrious / DMD2 converted weights; verify upstream use terms",
+        notes = "Local Dream SDXL QNN 8gen3 DMD2蒸馏候选模型，优先用于测试更少步数下的插画出图速度和质量。",
+      ),
+      sdxlQnn8Gen3Model(
+        modelId = "realvis-xl-v5-qnn-8gen3",
+        displayName = "RealVisXL V5 QNN 8gen3",
+        fileName = "realvis_xl_v5_qnn2.28_8gen3.zip",
+        sizeInBytes = 3_499_694_289L,
+        sourceRepo = "xororz/sdxl-qnn",
+        notes = "Local Dream SDXL QNN 8gen3写实摄影候选模型，适合人物、动物、产品和真实场景测试。",
+      ),
+      sdxlQnn8Gen3Model(
+        modelId = "juggernaut-xl-qnn-8gen3",
+        displayName = "Juggernaut XL QNN 8gen3",
+        fileName = "juggernaut_qnn2.28_8gen3.zip",
+        sizeInBytes = 3_747_687_306L,
+        sourceRepo = "xororz/sdxl-qnn",
+        notes = "Local Dream SDXL QNN 8gen3通用高质量候选模型，适合复杂写实、电影感和多元素画面测试。",
+      ),
+      sdxlQnn8Gen3Model(
+        modelId = "cyber-realistic-v10-qnn-8gen3",
+        displayName = "CyberRealistic V10 QNN 8gen3",
+        fileName = "cyber_realistic_v10_qnn2.28_8gen3.zip",
+        sizeInBytes = 3_745_235_842L,
+        sourceRepo = "xororz/sdxl-qnn",
+        notes = "Local Dream SDXL QNN 8gen3写实和电影风格候选模型，适合测试清晰主体、复杂光照和材质表现。",
+      ),
+      sdxlQnn8Gen3Model(
+        modelId = "wai-illustrious-v170-dmd2-qnn-8gen3",
+        displayName = "WAI Illustrious SDXL v170 DMD2 QNN 8gen3",
+        fileName = "waiIllustriousSDXL_v170DMD2_qnn2.28_8gen3.zip",
+        sizeInBytes = 3_724_793_979L,
+        sourceRepo = "YuuiKurata/waiIllustriousSDXL_qnn2.28",
+        license = "CreativeML Open RAIL-M / upstream WAI Illustrious terms",
+        notes = "Local Dream SDXL QNN 8gen3高质量插画模型，Hugging Face模型卡标注Local Dream和Snapdragon 8 Gen 3/Elite方向。",
+      ),
+      sdxlQnn8Gen3Model(
+        modelId = "intorealism-ultra-v11-qnn-8gen3",
+        displayName = "IntoRealism Ultra V11 QNN 8gen3",
+        fileName = "IntoRealism_Ultra_V11_qnn2.28_8gen3.zip",
+        sizeInBytes = 3_789_403_504L,
+        sourceRepo = "Mr-J-369/intorealismUltra_v11-SDXL-qnn2.28",
+        license = "Apache-2.0 / upstream converted weights",
+        notes = "Local Dream SDXL QNN 8gen3写实高质量候选模型，适合测试复杂自然语言提示词下的真实感和主体稳定性。",
+      ),
     )
 
   fun findModel(modelId: String): ImageGenerationModelInfo? {
@@ -268,6 +337,46 @@ object ImageGenerationModelRegistry {
       minMemoryGb = 4,
       recommendedWidth = 512,
       recommendedHeight = 512,
+      notes = notes,
+    )
+  }
+
+  private fun sdxlQnn8Gen3Model(
+    modelId: String,
+    displayName: String,
+    fileName: String,
+    sizeInBytes: Long,
+    sourceRepo: String,
+    notes: String,
+    license: String = "Upstream model licenses / local-dream converted weights",
+  ): ImageGenerationModelInfo {
+    return ImageGenerationModelInfo(
+      modelId = modelId,
+      displayName = displayName,
+      family = "Local Dream SDXL QNN",
+      backend = ImageGenerationBackend.LOCAL_DREAM_QNN_MNN,
+      localDreamTextEmbeddingSize = 1280,
+      format = "QNN SDXL ZIP",
+      requiredFiles =
+        listOf(
+          ImageGenerationModelFile(
+            role = ImageGenerationModelFileRole.MODEL_ARCHIVE,
+            fileName = fileName,
+            downloadUrl = "https://huggingface.co/$sourceRepo/resolve/main/$fileName",
+            sizeInBytes = sizeInBytes,
+          )
+        ),
+      learnMoreUrl = "https://huggingface.co/$sourceRepo",
+      localVersion = "$modelId-2026-06-20",
+      license = license,
+      supportsTextToImage = true,
+      supportsImageToImage = false,
+      supportsImageEditing = false,
+      supportsChineseText = false,
+      lowMemoryRecommended = false,
+      minMemoryGb = 16,
+      recommendedWidth = 1024,
+      recommendedHeight = 1024,
       notes = notes,
     )
   }

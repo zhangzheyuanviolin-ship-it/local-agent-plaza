@@ -41,10 +41,13 @@ object LocalDreamBackendStartupPolicy {
     healthCheckSuccessful: Boolean,
     currentModelPath: String?,
     requestedModelPath: String,
+    currentTextEmbeddingSize: Int,
+    requestedTextEmbeddingSize: Int,
   ): LocalDreamBackendStartupAction {
     val sameModel =
       !currentModelPath.isNullOrBlank() && File(currentModelPath).absolutePath == File(requestedModelPath).absolutePath
-    return if (healthCheckSuccessful && sameModel) {
+    val sameTextEmbeddingSize = currentTextEmbeddingSize == requestedTextEmbeddingSize
+    return if (healthCheckSuccessful && sameModel && sameTextEmbeddingSize) {
       LocalDreamBackendStartupAction.REUSE_RUNNING_BACKEND
     } else {
       LocalDreamBackendStartupAction.START_OR_RESTART_BACKEND
@@ -70,6 +73,7 @@ class LocalDreamImageGenerationClient(private val context: Context) {
     steps: Int,
     cfgScale: Float,
     seed: Long,
+    textEmbeddingSize: Int,
     useOpenCl: Boolean = false,
   ): NativeImageGenerationResult = withContext(Dispatchers.IO) {
     require(File(modelPath).exists()) { "Local Dream 模型目录不存在：$modelPath" }
@@ -78,9 +82,16 @@ class LocalDreamImageGenerationClient(private val context: Context) {
         healthCheckSuccessful = checkBackendHealth(),
         currentModelPath = LocalDreamBackendService.getActiveModelPath(context),
         requestedModelPath = modelPath,
+        currentTextEmbeddingSize = LocalDreamBackendService.getActiveTextEmbeddingSize(context),
+        requestedTextEmbeddingSize = textEmbeddingSize,
       )
     if (startupAction == LocalDreamBackendStartupAction.START_OR_RESTART_BACKEND) {
-      LocalDreamBackendService.start(context = context, modelPath = modelPath, useGpu = useOpenCl)
+      LocalDreamBackendService.start(
+        context = context,
+        modelPath = modelPath,
+        useGpu = useOpenCl,
+        textEmbeddingSize = textEmbeddingSize,
+      )
       try {
         waitUntilHealthy()
       } catch (e: Throwable) {

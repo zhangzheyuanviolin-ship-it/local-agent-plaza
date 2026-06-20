@@ -89,6 +89,7 @@ fun VisualCreationScreen(
       ?: promptOptimizerModels.firstOrNull()
   var showAdvancedSettings by remember { mutableStateOf(false) }
   var showVisualProcessing by remember { mutableStateOf(false) }
+  var showPromptOptimizationManagement by remember { mutableStateOf(false) }
 
   LaunchedEffect(Unit) { setAppBarControlsDisabled(false) }
 
@@ -166,104 +167,85 @@ fun VisualCreationScreen(
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
       Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionTitle("中文提示词优化")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          PromptOptimizationMode.entries.forEach { mode ->
-            AssistChip(
-              onClick = { viewModel.updatePromptOptimizationMode(mode) },
-              label = {
-                Text(
-                  if (uiState.promptOptimizationMode == mode) {
-                    "${mode.label}（当前）"
-                  } else {
-                    mode.label
-                  }
-                )
-              },
-            )
-          }
-        }
-        Text(
-          text = uiState.promptOptimizationStatusText,
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (uiState.promptOptimizationMode == PromptOptimizationMode.ENGLISH_CUSTOM) {
-          OutlinedTextField(
-            value = uiState.customPromptOptimizerSystemPrompt,
-            onValueChange = viewModel::updateCustomPromptOptimizerSystemPrompt,
-            label = { Text("发送给文本模型的系统提示词") },
-            minLines = 4,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
-          )
-        }
-        if (
-          promptOptimizerModels.isEmpty() &&
-            uiState.promptOptimizationMode != PromptOptimizationMode.ORIGINAL
-        ) {
-          Text(
-            text = "没有检测到已下载的本地文本模型。请先在 AI 对话、提示词实验室或智能体对话任务下载一个支持多语言的文本模型。",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        } else if (uiState.promptOptimizationMode != PromptOptimizationMode.ORIGINAL) {
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            promptOptimizerModels.take(6).forEach { model ->
-              AssistChip(
-                onClick = { viewModel.selectPromptOptimizerModel(model.name) },
-                label = { Text(model.displayName.ifBlank { model.name }) },
-              )
-            }
-          }
-          Text(
-            text =
-              "当前优化模型：${
-                selectedPromptOptimizerModel?.let { it.displayName.ifBlank { it.name } } ?: "未选择"
-              }",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
-        OutlinedButton(
+        Button(
           onClick = { viewModel.optimizePromptWithLocalLlm(context, selectedPromptOptimizerModel) },
           enabled =
-            (uiState.promptOptimizationMode == PromptOptimizationMode.ORIGINAL ||
-              promptOptimizerModels.isNotEmpty()) &&
+            promptOptimizerModels.isNotEmpty() &&
               uiState.prompt.isNotBlank() &&
               !uiState.isOptimizingPrompt &&
               uiState.status != VisualCreationStatus.GENERATING_IMAGE,
           modifier = Modifier.fillMaxWidth(),
         ) {
+          Text(if (uiState.isOptimizingPrompt) "正在优化提示词" else "优化提示词")
+        }
+        Button(
+          onClick = { viewModel.generateImage(context = context, model = selectedAppModel) },
+          enabled =
+            uiState.prompt.isNotBlank() &&
+              !uiState.isOptimizingPrompt &&
+              uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
           Text(
-            if (uiState.isOptimizingPrompt) {
-              "正在优化提示词"
-            } else if (uiState.promptOptimizationMode == PromptOptimizationMode.ORIGINAL) {
-              "使用当前中文提示词直接生成"
+            if (uiState.status == VisualCreationStatus.GENERATING_IMAGE) {
+              if (uiState.generationProgressStep > 0) {
+                "正在生成图片，第 ${uiState.generationProgressStep} / ${uiState.generationProgressSteps} 步"
+              } else {
+                "正在加载模型"
+              }
             } else {
-              "翻译并优化为英文提示词"
+              "原文直发"
             }
           )
         }
-      }
-    }
-
-    Button(
-      onClick = { viewModel.generateImage(context = context, model = selectedAppModel) },
-      enabled = uiState.status != VisualCreationStatus.GENERATING_IMAGE,
-      modifier = Modifier.fillMaxWidth(),
-    ) {
-      Text(
-        if (uiState.status == VisualCreationStatus.GENERATING_IMAGE) {
-          if (uiState.generationProgressStep > 0) {
-            "正在生成图片，第 ${uiState.generationProgressStep} / ${uiState.generationProgressSteps} 步"
-          } else {
-            "正在加载模型"
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          SectionTitle("提示词优化管理")
+          OutlinedButton(onClick = { showPromptOptimizationManagement = !showPromptOptimizationManagement }) {
+            Text(if (showPromptOptimizationManagement) "收起" else "展开")
           }
-        } else {
-          "生成图片"
         }
-      )
+        if (showPromptOptimizationManagement) {
+          if (promptOptimizerModels.isEmpty()) {
+            Text(
+              text = "没有检测到已下载的本地文本模型。请先在 AI 对话、提示词实验室或智能体对话任务下载一个支持多语言的文本模型。",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          } else {
+            Text(
+              text =
+                "当前优化模型：${
+                  selectedPromptOptimizerModel?.let { it.displayName.ifBlank { it.name } } ?: "未选择"
+                }",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              promptOptimizerModels.take(6).forEach { model ->
+                AssistChip(
+                  onClick = { viewModel.selectPromptOptimizerModel(model.name) },
+                  label = { Text(model.displayName.ifBlank { model.name }) },
+                )
+              }
+            }
+          }
+          OutlinedTextField(
+            value = uiState.customPromptOptimizerSystemPrompt,
+            onValueChange = viewModel::updateCustomPromptOptimizerSystemPrompt,
+            label = { Text("自定义提示词优化任务") },
+            minLines = 4,
+            modifier = Modifier.fillMaxWidth(),
+            enabled =
+              !uiState.isOptimizingPrompt &&
+                uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+          )
+          Text(
+            text = uiState.promptOptimizationStatusText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
     }
 
     if (uiState.submittedPrompt.isNotBlank()) {

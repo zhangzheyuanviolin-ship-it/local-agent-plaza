@@ -40,6 +40,14 @@ class ImageGenerationModelRegistryTest {
         "chillout-mix-mnn-cpu",
         "cute-yuki-mix-mnn-cpu",
         "qtea-mix-mnn-cpu",
+        "sdxl-base-qnn-8gen3",
+        "illustrious-v16-qnn-8gen3",
+        "illustrious-v16-dmd2-qnn-8gen3",
+        "realvis-xl-v5-qnn-8gen3",
+        "juggernaut-xl-qnn-8gen3",
+        "cyber-realistic-v10-qnn-8gen3",
+        "wai-illustrious-v170-dmd2-qnn-8gen3",
+        "intorealism-ultra-v11-qnn-8gen3",
       ),
       modelIds,
     )
@@ -91,6 +99,24 @@ class ImageGenerationModelRegistryTest {
   }
 
   @Test
+  fun sdxlModelDeclaresLocalDreamQnn8Gen3Metadata() {
+    val model = ImageGenerationModelRegistry.requireModel("sdxl-base-qnn-8gen3")
+
+    assertEquals("SDXL Base 1.0 QNN 8gen3", model.displayName)
+    assertEquals(ImageGenerationBackend.LOCAL_DREAM_QNN_MNN, model.backend)
+    assertEquals("QNN SDXL ZIP", model.format)
+    assertEquals("Local Dream SDXL QNN", model.family)
+    assertEquals(1024, model.recommendedWidth)
+    assertEquals(1024, model.recommendedHeight)
+    assertEquals(1280, model.localDreamTextEmbeddingSize)
+    assertEquals(16, model.minMemoryGb)
+    assertEquals("sdxl_base_qnn2.28_8gen3.zip", model.requiredFiles.single().fileName)
+    assertEquals(3_753_226_114L, model.totalSizeInBytes)
+    assertTrue(model.requiredFiles.single().downloadUrl.startsWith("https://huggingface.co/xororz/sdxl-qnn/"))
+    assertEquals("sdxl-base-qnn-8gen3-2026-06-20", model.localVersion)
+  }
+
+  @Test
   fun oldStableDiffusionCppModelsAreNotInDefaultDownloadList() {
     val modelIds = ImageGenerationModelRegistry.recommendedModels.map { it.modelId }
 
@@ -104,7 +130,7 @@ class ImageGenerationModelRegistryTest {
     val models = createVisualCreationImageModels()
 
     assertEquals("absolute-reality-qnn-8gen2", models.first().name)
-    assertEquals(12, models.size)
+    assertEquals(20, models.size)
     val model = models.first()
     assertEquals("AbsoluteReality_qnn2.28_8gen2.zip", model.downloadFileName)
     assertTrue(model.url.endsWith("/AbsoluteReality_qnn2.28_8gen2.zip"))

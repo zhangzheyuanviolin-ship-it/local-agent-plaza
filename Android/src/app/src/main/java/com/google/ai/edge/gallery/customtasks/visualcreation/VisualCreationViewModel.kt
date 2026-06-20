@@ -403,6 +403,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
                 steps = settings.steps,
                 cfgScale = settings.cfgScale,
                 seed = seed,
+                textEmbeddingSize = modelInfo.localDreamTextEmbeddingSize,
               )
           } else {
             NativeImageGenerationBridge.generateImage(
@@ -714,6 +715,7 @@ private fun defaultSettingsForModel(
     "Z-Image" -> base.copy(steps = 8, cfgScale = 1.0f)
     "Stable Diffusion 1.5" -> base.copy(steps = 28, cfgScale = 7.0f)
     "Absolute Reality SD1.5" -> base.copy(steps = 28, cfgScale = 7.0f)
+    "Local Dream SDXL QNN" -> base.copy(steps = 28, cfgScale = 7.0f)
     else -> base
   }
 }

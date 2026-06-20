@@ -53,7 +53,13 @@ class LocalDreamBackendService : Service() {
         if (modelPath.isNullOrBlank()) {
           Log.e(TAG, "Missing model path")
           stopSelf()
-        } else if (startBackend(File(modelPath), intent.getBooleanExtra(EXTRA_USE_GPU, false))) {
+        } else if (
+          startBackend(
+            modelDir = File(modelPath),
+            useGpu = intent.getBooleanExtra(EXTRA_USE_GPU, false),
+            textEmbeddingSize = intent.getIntExtra(EXTRA_TEXT_EMBEDDING_SIZE, DEFAULT_TEXT_EMBEDDING_SIZE),
+          )
+        ) {
           updateNotification("本地图像生成后端运行中")
         } else {
           updateNotification("本地图像生成后端启动失败")
@@ -110,7 +116,7 @@ class LocalDreamBackendService : Service() {
     }
   }
 
-  private fun startBackend(modelDir: File, useGpu: Boolean): Boolean {
+  private fun startBackend(modelDir: File, useGpu: Boolean, textEmbeddingSize: Int): Boolean {
     return try {
       stopBackendProcessOnly()
       killOrphanBackendProcesses()
@@ -129,7 +135,7 @@ class LocalDreamBackendService : Service() {
         appendDiagnostic("Executable not found: ${executable.absolutePath}", isError = true)
         return false
       }
-      val command = buildCommand(executable, actualDir, modelType, useGpu)
+      val command = buildCommand(executable, actualDir, modelType, useGpu, textEmbeddingSize)
       val env = buildEnvironment()
       appendDiagnostic("Starting Local Dream backend: ${command.joinToString(" ")}")
       appendDiagnostic("LD_LIBRARY_PATH=${env["LD_LIBRARY_PATH"]}")
@@ -140,7 +146,7 @@ class LocalDreamBackendService : Service() {
           .redirectErrorStream(true)
           .apply { environment().putAll(env) }
           .start()
-      setActiveModelPath(this, modelDir.absolutePath)
+      setActiveBackendState(this, modelDir.absolutePath, textEmbeddingSize)
       startMonitorThread()
       true
     } catch (e: Throwable) {
@@ -154,6 +160,7 @@ class LocalDreamBackendService : Service() {
     modelDir: File,
     modelType: LocalDreamModelType,
     useGpu: Boolean,
+    textEmbeddingSize: Int,
   ): List<String> {
     val clipFile =
       when {
@@ -191,7 +198,7 @@ class LocalDreamBackendService : Service() {
         "--port",
         LOCAL_DREAM_PORT.toString(),
         "--text_embedding_size",
-        "768",
+        textEmbeddingSize.toString(),
       )
 
     val vaeEncoderFile =
@@ -380,15 +387,24 @@ class LocalDreamBackendService : Service() {
     private const val ACTION_STOP = "com.localagent.plaza.visualcreation.LOCAL_DREAM_STOP"
     private const val EXTRA_MODEL_PATH = "model_path"
     private const val EXTRA_USE_GPU = "use_gpu"
+    private const val EXTRA_TEXT_EMBEDDING_SIZE = "text_embedding_size"
     private const val PREFS_NAME = "local_dream_backend"
     private const val KEY_ACTIVE_MODEL_PATH = "active_model_path"
+    private const val KEY_ACTIVE_TEXT_EMBEDDING_SIZE = "active_text_embedding_size"
+    private const val DEFAULT_TEXT_EMBEDDING_SIZE = 768
 
-    fun start(context: Context, modelPath: String, useGpu: Boolean = false) {
+    fun start(
+      context: Context,
+      modelPath: String,
+      useGpu: Boolean = false,
+      textEmbeddingSize: Int = 768,
+    ) {
       val intent =
         Intent(context, LocalDreamBackendService::class.java).apply {
           action = ACTION_START
           putExtra(EXTRA_MODEL_PATH, modelPath)
           putExtra(EXTRA_USE_GPU, useGpu)
+          putExtra(EXTRA_TEXT_EMBEDDING_SIZE, textEmbeddingSize)
         }
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         context.startForegroundService(intent)
@@ -407,16 +423,28 @@ class LocalDreamBackendService : Service() {
       return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_ACTIVE_MODEL_PATH, null)
     }
 
-    private fun setActiveModelPath(context: Context, modelPath: String) {
+    fun getActiveTextEmbeddingSize(context: Context): Int {
+      return context
+        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getInt(KEY_ACTIVE_TEXT_EMBEDDING_SIZE, DEFAULT_TEXT_EMBEDDING_SIZE)
+    }
+
+    private fun setActiveBackendState(context: Context, modelPath: String, textEmbeddingSize: Int) {
       context
         .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .edit()
         .putString(KEY_ACTIVE_MODEL_PATH, File(modelPath).absolutePath)
+        .putInt(KEY_ACTIVE_TEXT_EMBEDDING_SIZE, textEmbeddingSize)
         .apply()
     }
 
     private fun clearActiveModelPath(context: Context) {
-      context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(KEY_ACTIVE_MODEL_PATH).apply()
+      context
+        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .remove(KEY_ACTIVE_MODEL_PATH)
+        .remove(KEY_ACTIVE_TEXT_EMBEDDING_SIZE)
+        .apply()
     }
   }
 }

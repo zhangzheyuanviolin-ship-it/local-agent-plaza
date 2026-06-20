@@ -223,6 +223,25 @@ class VisualCreationDomainTest {
   }
 
   @Test
+  fun viewModelSyncsSdxlModelWithLargeCanvasDefaults() {
+    val viewModel = VisualCreationViewModel()
+
+    viewModel.syncSelectedImageGenerationModel(
+      Model(
+        name = "sdxl-base-qnn-8gen3",
+        displayName = "SDXL Base 1.0 QNN 8gen3",
+        downloadFileName = "sdxl_base_qnn2.28_8gen3.zip",
+      )
+    )
+
+    assertEquals("sdxl-base-qnn-8gen3", viewModel.uiState.value.selectedImageGenerationModelId)
+    assertEquals(1024, viewModel.uiState.value.settings.width)
+    assertEquals(1024, viewModel.uiState.value.settings.height)
+    assertEquals(28, viewModel.uiState.value.settings.steps)
+    assertEquals(7.0f, viewModel.uiState.value.settings.cfgScale)
+  }
+
+  @Test
   fun resolveNativeFileNamesLeavesLocalDreamArchiveToDirectoryBackend() {
     val modelInfo = ImageGenerationModelRegistry.requireModel("dreamshaper-v8-qnn-8gen2")
 
@@ -241,6 +260,8 @@ class VisualCreationDomainTest {
         healthCheckSuccessful = true,
         currentModelPath = "/models/absolute",
         requestedModelPath = "/models/absolute",
+        currentTextEmbeddingSize = 768,
+        requestedTextEmbeddingSize = 768,
       )
 
     assertEquals(LocalDreamBackendStartupAction.REUSE_RUNNING_BACKEND, policy)
@@ -254,6 +275,8 @@ class VisualCreationDomainTest {
         healthCheckSuccessful = false,
         currentModelPath = "/models/absolute",
         requestedModelPath = "/models/absolute",
+        currentTextEmbeddingSize = 768,
+        requestedTextEmbeddingSize = 768,
       ),
     )
     assertEquals(
@@ -262,6 +285,18 @@ class VisualCreationDomainTest {
         healthCheckSuccessful = true,
         currentModelPath = "/models/absolute",
         requestedModelPath = "/models/dreamshaper",
+        currentTextEmbeddingSize = 768,
+        requestedTextEmbeddingSize = 768,
+      ),
+    )
+    assertEquals(
+      LocalDreamBackendStartupAction.START_OR_RESTART_BACKEND,
+      LocalDreamBackendStartupPolicy.decide(
+        healthCheckSuccessful = true,
+        currentModelPath = "/models/sdxl",
+        requestedModelPath = "/models/sdxl",
+        currentTextEmbeddingSize = 768,
+        requestedTextEmbeddingSize = 1280,
       ),
     )
   }
