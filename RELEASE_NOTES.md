@@ -8,8 +8,11 @@
 - versionName：`1.0.13-plaza.visual.1`
 - versionCode：`101`
 - 包名：`com.localagent.plaza`
-- 构建基线：合并 `feature/local-visual-creation` 到 `main`，合并提交 `75d79124`
+- 构建基线：合并 `feature/local-visual-creation` 到 `main`，合并提交 `75d79124`；源 commit `1afa60a`
 - ABI：仅 `arm64-v8a`（图像生成原生层要求）
+- APK SHA-256：`823bc3c600d1be491b69213a524e905048ab0e5d7726099c49466b6343439797`
+- APK 大小：约 145 MB（152128106 字节）
+- APK 下载：[local-agent-plaza-1.0.13-plaza.visual.1.apk](https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/v1.0.0-plaza.visual.1/local-agent-plaza-1.0.13-plaza.visual.1.apk)
 
 **新增功能**
 - **本地视觉创作工作台**：支持 SD 1.5 / SDXL / Z-Image 三类基础图像生成模型
