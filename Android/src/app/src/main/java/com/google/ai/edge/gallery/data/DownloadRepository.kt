@@ -101,7 +101,7 @@ class DefaultDownloadRepository(
   ) {
     // Create input data.
     val builder = Data.Builder()
-    val totalBytes = model.totalBytes + model.extraDataFiles.sumOf { it.sizeInBytes }
+    val totalBytes = model.sizeInBytes + model.extraDataFiles.sumOf { it.sizeInBytes }
     val inputDataBuilder =
       builder
         .putString(KEY_MODEL_NAME, model.name)

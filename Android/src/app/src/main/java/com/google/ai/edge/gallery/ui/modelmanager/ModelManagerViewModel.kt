@@ -29,8 +29,10 @@ import com.google.ai.edge.gallery.common.ProjectConfig
 import com.google.ai.edge.gallery.common.SystemPromptHelper
 import com.google.ai.edge.gallery.common.getJsonResponse
 import com.google.ai.edge.gallery.common.isAICoreSupported
-import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NARRATION
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
+import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NARRATION
+import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_LOCAL_VISUAL_CREATION
+import com.google.ai.edge.gallery.customtasks.visualcreation.createVisualCreationImageModels
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
@@ -286,8 +288,23 @@ constructor(
     }
   }
 
+  private fun restoreLocalVisualCreationModels(tasks: Collection<Task>) {
+    val task = tasks.firstOrNull { it.id == TASK_ID_LOCAL_VISUAL_CREATION } ?: return
+    var changed = false
+    for (model in createVisualCreationImageModels()) {
+      if (task.models.none { it.name == model.name }) {
+        task.models.add(model)
+        changed = true
+      }
+    }
+    if (changed) {
+      task.updateTrigger.value = System.currentTimeMillis()
+    }
+  }
+
   fun processTasks() {
     val curTasks = getActiveCustomTasks().map { it.task }
+    restoreLocalVisualCreationModels(curTasks)
     for (task in curTasks) {
       for (model in task.models) {
         model.preProcess()
@@ -950,6 +967,7 @@ constructor(
       try {
         val curTasks = getActiveCustomTasks().map { it.task }
         clearNonImportedModelsFromTasks(curTasks)
+        restoreLocalVisualCreationModels(curTasks)
 
         // Clear existing allowlist models.
         _allowlistModels.clear()
@@ -1165,9 +1183,15 @@ constructor(
     }
 
     // A model is partially downloaded when the tmp file exists.
-    val tmpFilePath =
-      model.getPath(context = context, fileName = "${model.downloadFileName}.$TMP_FILE_EXT")
-    return File(tmpFilePath).exists()
+    return getModelDownloadTempFile(model).exists()
+  }
+
+  private fun getModelDownloadTempFile(model: Model): File {
+    return File(
+      externalFilesDir,
+      listOf(model.normalizedName, model.version, "${model.downloadFileName}.$TMP_FILE_EXT")
+        .joinToString(File.separator),
+    )
   }
 
   private fun createEmptyUiState(): ModelManagerUiState {
@@ -1182,6 +1206,7 @@ constructor(
   private fun createBootstrapUiState(): ModelManagerUiState {
     val activeTasks = getActiveCustomTasks().map { it.task }
     clearAllModelsFromTasks(activeTasks)
+    restoreLocalVisualCreationModels(activeTasks)
 
     val modelDownloadStatus: MutableMap<String, ModelDownloadStatus> = mutableMapOf()
     val modelInstances: MutableMap<String, ModelInitializationStatus> = mutableMapOf()
@@ -1541,20 +1566,19 @@ constructor(
     var receivedBytes = 0L
     var totalBytes = 0L
 
+    // Fully downloaded. Check this before partial download because zip models resolve getPath() to
+    // the unzipped directory once extracted.
+    if (isModelDownloaded(model = model)) {
+      status = ModelDownloadStatusType.SUCCEEDED
+      Log.d(TAG, "${model.name} has been downloaded.")
+    }
     // Partially downloaded.
-    if (isModelPartiallyDownloaded(model = model)) {
+    else if (isModelPartiallyDownloaded(model = model)) {
       status = ModelDownloadStatusType.PARTIALLY_DOWNLOADED
-      val tmpFilePath =
-        model.getPath(context = context, fileName = "${model.downloadFileName}.$TMP_FILE_EXT")
-      val tmpFile = File(tmpFilePath)
+      val tmpFile = getModelDownloadTempFile(model)
       receivedBytes = tmpFile.length()
       totalBytes = model.totalBytes
       Log.d(TAG, "${model.name} is partially downloaded. $receivedBytes/$totalBytes")
-    }
-    // Fully downloaded.
-    else if (isModelDownloaded(model = model)) {
-      status = ModelDownloadStatusType.SUCCEEDED
-      Log.d(TAG, "${model.name} has been downloaded.")
     }
     // Not downloaded.
     else {

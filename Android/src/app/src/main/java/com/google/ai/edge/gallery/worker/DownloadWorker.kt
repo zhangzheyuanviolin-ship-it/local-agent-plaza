@@ -281,11 +281,19 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
 
               while (zipEntry != null) {
                 val filePath = destDir.absolutePath + File.separator + zipEntry.name
+                val targetFile = File(filePath)
+                if (!targetFile.canonicalPath.startsWith(destDir.canonicalPath + File.separator)) {
+                  Log.w(TAG, "Skipping unsafe zip entry: ${zipEntry.name}")
+                  zipIn.closeEntry()
+                  zipEntry = zipIn.nextEntry
+                  continue
+                }
 
                 // Extract files.
                 if (!zipEntry.isDirectory) {
                   // extract file
-                  val bos = FileOutputStream(filePath)
+                  targetFile.parentFile?.mkdirs()
+                  val bos = FileOutputStream(targetFile)
                   bos.use { curBos ->
                     var len: Int
                     while (zipIn.read(unzipBuffer).also { len = it } > 0) {
@@ -295,8 +303,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
                 }
                 // Create dir.
                 else {
-                  val dir = File(filePath)
-                  dir.mkdirs()
+                  targetFile.mkdirs()
                 }
 
                 zipIn.closeEntry()

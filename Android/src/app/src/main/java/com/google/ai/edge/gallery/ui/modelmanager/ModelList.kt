@@ -336,7 +336,7 @@ fun ModelList(
             onBenchmarkClicked = onBenchmarkClicked,
             expanded = expanded,
             onExpanded = { modelItemExpandedStates[model.name] = it },
-            showBenchmarkButton = true,
+            showBenchmarkButton = model.showBenchmarkButton,
             modifier =
               Modifier.graphicsLayer {
                 alpha = modelListProgress
@@ -373,7 +373,7 @@ fun ModelList(
             modelManagerViewModel = modelManagerViewModel,
             onModelClicked = onModelClicked,
             onBenchmarkClicked = onBenchmarkClicked,
-            showBenchmarkButton = true,
+            showBenchmarkButton = model.showBenchmarkButton,
             modifier =
               Modifier.graphicsLayer {
                 alpha = modelListProgress
