@@ -139,6 +139,31 @@ internal fun defaultPromptOptimizerSystemPrompt(mode: PromptOptimizationMode): S
   }
 }
 
+internal fun defaultVisualProcessSystemPrompt(
+  mode: VisualProcessMode,
+  originalImagePrompt: String,
+  customPrompt: String,
+): String {
+  return when (mode) {
+    VisualProcessMode.DESCRIBE_IMAGE ->
+      "请用中文详细描述这张图片中的所有画面元素、主体、背景、颜色、光影、构图、风格、质感和可见细节。如果图片中出现文字、数字、标志或界面信息，也请逐项转写并说明其位置。只基于图片内容回答，不要编造看不见的信息。"
+    VisualProcessMode.REVIEW_IMAGE ->
+      """
+      请扮演严谨的 AI 图像评审员，用中文评审这张生成图片与用户原始提示词的匹配程度。
+      用户原始提示词：$originalImagePrompt
+      请输出：一，总分 0 到 100 分；二，提示词遵循度；三，主体和构图是否准确；四，画面质量、清晰度、畸变、文字错误和明显瑕疵；五，最需要改进的提示词建议。请直接给出评审，不要输出无关寒暄。
+      """
+        .trimIndent()
+    VisualProcessMode.EXPAND_TO_STORY ->
+      "请以这张图片的整体画面、人物或物体关系、场景气氛和潜在叙事为起点，用中文创作一篇约 800 字的短篇故事。题材请根据画面随机选择现实、科幻、奇幻、都市、悬疑、历史、穿越、冒险或温情等方向之一。故事要有标题、开端、转折和结尾，不要解释你看到了什么。"
+    VisualProcessMode.CUSTOM_PROMPT -> customPrompt.ifBlank { "请根据用户自定义要求处理这张图片，并用中文回答。" }
+    VisualProcessMode.EXPAND_TO_CAPTION ->
+      "请根据这张图片生成一段中文社交媒体配文，包含画面亮点、情绪氛围和适合发布的简短文案。"
+    VisualProcessMode.EXPAND_TO_SCRIPT ->
+      "请根据这张图片生成一段中文画面解说词，适合用于短视频旁白，语气自然、细节具体。"
+  }
+}
+
 data class VisualCreationSession(
   val sessionId: String,
   val createdAtMs: Long,

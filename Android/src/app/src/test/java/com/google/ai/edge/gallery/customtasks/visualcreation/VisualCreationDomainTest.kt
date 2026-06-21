@@ -152,6 +152,42 @@ class VisualCreationDomainTest {
   }
 
   @Test
+  fun visualProcessPromptsMatchExpectedTaskIntent() {
+    val describePrompt =
+      defaultVisualProcessSystemPrompt(
+        mode = VisualProcessMode.DESCRIBE_IMAGE,
+        originalImagePrompt = "A cat on the table",
+        customPrompt = "",
+      )
+    val reviewPrompt =
+      defaultVisualProcessSystemPrompt(
+        mode = VisualProcessMode.REVIEW_IMAGE,
+        originalImagePrompt = "A cat on the table",
+        customPrompt = "",
+      )
+    val storyPrompt =
+      defaultVisualProcessSystemPrompt(
+        mode = VisualProcessMode.EXPAND_TO_STORY,
+        originalImagePrompt = "A cat on the table",
+        customPrompt = "",
+      )
+    val customPrompt =
+      defaultVisualProcessSystemPrompt(
+        mode = VisualProcessMode.CUSTOM_PROMPT,
+        originalImagePrompt = "A cat on the table",
+        customPrompt = "请检查画面构图。",
+      )
+
+    assertTrue(describePrompt.contains("中文"))
+    assertTrue(describePrompt.contains("详细描述"))
+    assertTrue(reviewPrompt.contains("A cat on the table"))
+    assertTrue(reviewPrompt.contains("评分"))
+    assertTrue(storyPrompt.contains("800"))
+    assertTrue(storyPrompt.contains("短篇故事"))
+    assertEquals("请检查画面构图。", customPrompt)
+  }
+
+  @Test
   fun viewModelSyncsSelectedModelFromModelManagerInsteadOfDefaultingToFirstModel() {
     val viewModel = VisualCreationViewModel()
 

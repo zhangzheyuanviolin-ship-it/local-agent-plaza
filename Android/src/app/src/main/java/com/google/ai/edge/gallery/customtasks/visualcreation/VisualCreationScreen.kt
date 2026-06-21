@@ -84,9 +84,22 @@ fun VisualCreationScreen(
             ModelDownloadStatusType.SUCCEEDED
       }
       .distinctBy { it.name }
+  val visualLanguageModels =
+    modelManagerUiState.tasks
+      .flatMap { it.models }
+      .filter { model ->
+        model.isLlm &&
+          model.llmSupportImage &&
+          modelManagerUiState.modelDownloadStatus[model.name]?.status ==
+            ModelDownloadStatusType.SUCCEEDED
+      }
+      .distinctBy { it.name }
   val selectedPromptOptimizerModel =
     promptOptimizerModels.firstOrNull { it.name == uiState.selectedPromptOptimizerModelName }
       ?: promptOptimizerModels.firstOrNull()
+  val selectedVisualLanguageModel =
+    visualLanguageModels.firstOrNull { it.name == uiState.selectedVlmModelName }
+      ?: visualLanguageModels.firstOrNull()
   var showAdvancedSettings by remember { mutableStateOf(false) }
   var showVisualProcessing by remember { mutableStateOf(false) }
   var showPromptOptimizationManagement by remember { mutableStateOf(false) }
@@ -101,6 +114,12 @@ fun VisualCreationScreen(
         selectedPromptOptimizerModel?.name != null
     ) {
       viewModel.selectPromptOptimizerModel(selectedPromptOptimizerModel.name)
+    }
+  }
+
+  LaunchedEffect(selectedVisualLanguageModel?.name) {
+    if (uiState.selectedVlmModelName == null && selectedVisualLanguageModel?.name != null) {
+      viewModel.selectVlmModel(selectedVisualLanguageModel.name)
     }
   }
 
@@ -173,7 +192,8 @@ fun VisualCreationScreen(
             promptOptimizerModels.isNotEmpty() &&
               uiState.prompt.isNotBlank() &&
               !uiState.isOptimizingPrompt &&
-              uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+              uiState.status != VisualCreationStatus.GENERATING_IMAGE &&
+              !uiState.isVisualProcessing,
           modifier = Modifier.fillMaxWidth(),
         ) {
           Text(if (uiState.isOptimizingPrompt) "正在优化提示词" else "优化提示词")
@@ -183,7 +203,8 @@ fun VisualCreationScreen(
           enabled =
             uiState.prompt.isNotBlank() &&
               !uiState.isOptimizingPrompt &&
-              uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+              uiState.status != VisualCreationStatus.GENERATING_IMAGE &&
+              !uiState.isVisualProcessing,
           modifier = Modifier.fillMaxWidth(),
         ) {
           Text(
@@ -237,7 +258,8 @@ fun VisualCreationScreen(
             modifier = Modifier.fillMaxWidth(),
             enabled =
               !uiState.isOptimizingPrompt &&
-                uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+                uiState.status != VisualCreationStatus.GENERATING_IMAGE &&
+                !uiState.isVisualProcessing,
           )
           Text(
             text = uiState.promptOptimizationStatusText,
@@ -376,7 +398,8 @@ fun VisualCreationScreen(
             onClick = { viewModel.saveGeneratedImageToGallery(context) },
             enabled =
               !uiState.generatedImagePath.isNullOrBlank() &&
-                uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+                uiState.status != VisualCreationStatus.GENERATING_IMAGE &&
+                !uiState.isVisualProcessing,
           ) {
             Text("保存到相册")
           }
@@ -384,7 +407,8 @@ fun VisualCreationScreen(
             onClick = { viewModel.saveGeneratedImageToLocalFolder(context) },
             enabled =
               !uiState.generatedImagePath.isNullOrBlank() &&
-                uiState.status != VisualCreationStatus.GENERATING_IMAGE,
+                uiState.status != VisualCreationStatus.GENERATING_IMAGE &&
+                !uiState.isVisualProcessing,
           ) {
             Text("保存到本地文件夹")
           }
@@ -403,8 +427,16 @@ fun VisualCreationScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
-        OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
-          Text("发送给视觉模型处理")
+        OutlinedButton(
+          onClick = { viewModel.processGeneratedImageWithVlm(context, selectedVisualLanguageModel) },
+          enabled =
+            !uiState.generatedImagePath.isNullOrBlank() &&
+              selectedVisualLanguageModel != null &&
+              uiState.status != VisualCreationStatus.GENERATING_IMAGE &&
+              !uiState.isVisualProcessing,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text(if (uiState.isVisualProcessing) "视觉模型正在处理图片" else "发送给视觉模型处理")
         }
       }
     }
@@ -418,12 +450,33 @@ fun VisualCreationScreen(
           }
         }
         if (showVisualProcessing) {
-          Text("当前视觉语言模型：${uiState.selectedVlmModelName ?: "未选择"}")
+          Text(
+            "当前视觉语言模型：${
+              selectedVisualLanguageModel?.let { it.displayName.ifBlank { it.name } } ?: "未选择"
+            }"
+          )
+          if (visualLanguageModels.isEmpty()) {
+            Text(
+              text = "没有检测到已下载且支持图片输入的本地视觉语言模型。请先在视觉旁白、问图片或 AI 对话相关任务里下载支持图片输入的模型，外部导入模型需要开启图片输入能力。",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          } else {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              visualLanguageModels.take(8).forEach { model ->
+                AssistChip(
+                  onClick = { viewModel.selectVlmModel(model.name) },
+                  label = { Text(model.displayName.ifBlank { model.name }) },
+                )
+              }
+            }
+          }
           FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(
                 VisualProcessMode.DESCRIBE_IMAGE,
                 VisualProcessMode.REVIEW_IMAGE,
                 VisualProcessMode.EXPAND_TO_STORY,
+                VisualProcessMode.CUSTOM_PROMPT,
               )
               .forEach { mode ->
                 AssistChip(
@@ -432,8 +485,29 @@ fun VisualCreationScreen(
                 )
               }
           }
-          OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
-            Text("选择视觉语言模型")
+          if (uiState.selectedVisualProcessMode == VisualProcessMode.CUSTOM_PROMPT) {
+            OutlinedTextField(
+              value = uiState.customVisualProcessPrompt,
+              onValueChange = viewModel::updateCustomVisualProcessPrompt,
+              label = { Text("自定义后续处理任务") },
+              placeholder = { Text("例如：请分析这张图片的构图、色彩和商业海报可用性。") },
+              minLines = 4,
+              modifier = Modifier.fillMaxWidth(),
+              enabled =
+                uiState.status != VisualCreationStatus.GENERATING_IMAGE &&
+                  !uiState.isVisualProcessing,
+            )
+          }
+          Button(
+            onClick = { viewModel.processGeneratedImageWithVlm(context, selectedVisualLanguageModel) },
+            enabled =
+              !uiState.generatedImagePath.isNullOrBlank() &&
+                selectedVisualLanguageModel != null &&
+                uiState.status != VisualCreationStatus.GENERATING_IMAGE &&
+                !uiState.isVisualProcessing,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text(if (uiState.isVisualProcessing) "正在处理图片" else "执行后续处理")
           }
           Text(
             text = uiState.visualProcessResult.ifBlank { "生成图片后，可在后续阶段把图片发送给本地视觉语言模型进行描述、评审或文本创作。" },

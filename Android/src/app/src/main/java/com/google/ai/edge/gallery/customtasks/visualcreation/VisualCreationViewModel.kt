@@ -19,6 +19,7 @@ package com.google.ai.edge.gallery.customtasks.visualcreation
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
@@ -61,7 +62,9 @@ data class VisualCreationUiState(
   val savedLocalFileUri: String? = null,
   val selectedVisualProcessMode: VisualProcessMode = VisualProcessMode.DESCRIBE_IMAGE,
   val selectedVlmModelName: String? = null,
+  val customVisualProcessPrompt: String = "",
   val visualProcessResult: String = "",
+  val isVisualProcessing: Boolean = false,
   val selectedPromptOptimizerModelName: String? = null,
   val promptOptimizationMode: PromptOptimizationMode = PromptOptimizationMode.ENGLISH_DEFAULT,
   val customPromptOptimizerSystemPrompt: String =
@@ -110,6 +113,10 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
 
   fun selectPromptOptimizerModel(modelName: String?) {
     _uiState.update { it.copy(selectedPromptOptimizerModelName = modelName) }
+  }
+
+  fun selectVlmModel(modelName: String?) {
+    _uiState.update { it.copy(selectedVlmModelName = modelName) }
   }
 
   fun updatePromptOptimizationMode(mode: PromptOptimizationMode) {
@@ -162,6 +169,10 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
 
   fun updateVisualProcessMode(mode: VisualProcessMode) {
     _uiState.update { it.copy(selectedVisualProcessMode = mode) }
+  }
+
+  fun updateCustomVisualProcessPrompt(prompt: String) {
+    _uiState.update { it.copy(customVisualProcessPrompt = prompt) }
   }
 
   fun optimizePromptWithLocalLlm(context: Context, model: Model?) {
@@ -550,6 +561,107 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     }
   }
 
+  fun processGeneratedImageWithVlm(context: Context, model: Model?) {
+    val current = uiState.value
+    val imagePath = current.generatedImagePath
+    if (imagePath.isNullOrBlank() || !File(imagePath).exists()) {
+      _uiState.update {
+        it.copy(status = VisualCreationStatus.ERROR, statusText = "当前没有可发送给视觉模型处理的图片")
+      }
+      return
+    }
+    if (model == null || !model.isLlm || !model.llmSupportImage) {
+      _uiState.update {
+        it.copy(
+          status = VisualCreationStatus.ERROR,
+          statusText = "请先选择一个已下载且支持图片输入的本地视觉语言模型",
+          visualProcessResult = "图片后续处理未运行：没有可用视觉语言模型",
+        )
+      }
+      return
+    }
+    val processPrompt =
+      defaultVisualProcessSystemPrompt(
+        mode = current.selectedVisualProcessMode,
+        originalImagePrompt = current.submittedPrompt.ifBlank { current.prompt },
+        customPrompt = current.customVisualProcessPrompt,
+      )
+    if (
+      current.selectedVisualProcessMode == VisualProcessMode.CUSTOM_PROMPT &&
+        current.customVisualProcessPrompt.isBlank()
+    ) {
+      _uiState.update {
+        it.copy(
+          status = VisualCreationStatus.ERROR,
+          statusText = "请先填写自定义后续处理任务",
+          visualProcessResult = "图片后续处理未运行：自定义任务为空",
+        )
+      }
+      return
+    }
+
+    _uiState.update {
+      it.copy(
+        status = VisualCreationStatus.VLM_PROCESSING,
+        statusText = "正在使用 ${model.displayName.ifBlank { model.name }} 处理生成图片",
+        selectedVlmModelName = model.name,
+        isVisualProcessing = true,
+        visualProcessResult = "正在发送图片给视觉语言模型处理",
+      )
+    }
+
+    viewModelScope.launch(Dispatchers.Default) {
+      var bitmap: Bitmap? = null
+      try {
+        bitmap = BitmapFactory.decodeFile(imagePath) ?: error("无法读取生成图片：$imagePath")
+        val initError =
+          initializeVisualProcessor(context = context, model = model, systemPrompt = processPrompt)
+        if (!initError.isNullOrBlank()) {
+          _uiState.update {
+            it.copy(
+              status = VisualCreationStatus.ERROR,
+              statusText = "视觉语言模型初始化失败：$initError",
+              isVisualProcessing = false,
+              visualProcessResult = "图片后续处理失败：$initError",
+            )
+          }
+          return@launch
+        }
+        model.runtimeHelper.resetConversation(
+          model = model,
+          supportImage = true,
+          supportAudio = false,
+          systemInstruction = Contents.of(processPrompt),
+        )
+        val result =
+          runVisualProcessor(
+            model = model,
+            bitmap = bitmap,
+            processPrompt = processPrompt,
+          )
+        _uiState.update {
+          it.copy(
+            status = VisualCreationStatus.VLM_RESULT_READY,
+            statusText = "视觉模型后续处理完成",
+            isVisualProcessing = false,
+            visualProcessResult = result.ifBlank { "视觉模型没有返回有效内容" },
+          )
+        }
+      } catch (e: Throwable) {
+        _uiState.update {
+          it.copy(
+            status = VisualCreationStatus.ERROR,
+            statusText = "图片后续处理失败：${e.message ?: e::class.java.simpleName}",
+            isVisualProcessing = false,
+            visualProcessResult = "图片后续处理失败：${e.message ?: e::class.java.simpleName}",
+          )
+        }
+      } finally {
+        bitmap?.recycle()
+      }
+    }
+  }
+
   private fun buildLoadingStatusText(
     modelName: String,
     prompt: String,
@@ -651,6 +763,33 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
       ?: "初始化本地文本模型超时"
   }
 
+  private suspend fun initializeVisualProcessor(
+    context: Context,
+    model: Model,
+    systemPrompt: String,
+  ): String? {
+    if (model.instance != null) {
+      return null
+    }
+    val initResult = CompletableDeferred<String>()
+    model.runtimeHelper.initialize(
+      context = context,
+      model = model,
+      taskId = TASK_ID_LOCAL_VISUAL_CREATION,
+      supportImage = true,
+      supportAudio = false,
+      systemInstruction = Contents.of(systemPrompt),
+      coroutineScope = viewModelScope,
+      onDone = { message ->
+        if (!initResult.isCompleted) {
+          initResult.complete(message)
+        }
+      },
+    )
+    return withTimeoutOrNull(180_000L) { initResult.await() }
+      ?: "初始化本地视觉语言模型超时"
+  }
+
   private suspend fun runPromptOptimizer(
     model: Model,
     sourcePrompt: String,
@@ -687,6 +826,43 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
 
     return withTimeoutOrNull(180_000L) { result.await().getOrThrow() }
       ?: error("本地文本模型生成提示词超时")
+  }
+
+  private suspend fun runVisualProcessor(
+    model: Model,
+    bitmap: Bitmap,
+    processPrompt: String,
+  ): String {
+    val result = CompletableDeferred<Result<String>>()
+    val rawResponse = StringBuilder()
+    model.runtimeHelper.runInference(
+      model = model,
+      input = processPrompt,
+      images = listOf(bitmap),
+      resultListener = { partialResult, done, _ ->
+        rawResponse.append(partialResult)
+        val cleaned = sanitizeVisualProcessOutput(rawResponse.toString())
+        _uiState.update {
+          if (it.isVisualProcessing) {
+            it.copy(visualProcessResult = cleaned.ifBlank { "视觉模型正在生成后续处理结果" })
+          } else {
+            it
+          }
+        }
+        if (done && !result.isCompleted) {
+          result.complete(Result.success(cleaned))
+        }
+      },
+      cleanUpListener = {},
+      onError = { message ->
+        if (!result.isCompleted) {
+          result.complete(Result.failure(IllegalStateException(message)))
+        }
+      },
+      coroutineScope = viewModelScope,
+    )
+    return withTimeoutOrNull(300_000L) { result.await().getOrThrow() }
+      ?: error("本地视觉语言模型处理图片超时")
   }
 }
 
@@ -752,6 +928,12 @@ private fun sanitizePromptOptimizerOutput(raw: String): String {
     .filter { it.isNotBlank() }
     .joinToString(" ")
     .replace(Regex("\\s+"), " ")
+    .trim()
+}
+
+private fun sanitizeVisualProcessOutput(raw: String): String {
+  return processLlmResponse(raw)
+    .replace("```", "")
     .trim()
 }
 
