@@ -1,5 +1,43 @@
 # Release Notes · 版本历史
 
+## v1.0.13-plaza.visual.1 · 2026-06-22
+
+第二个正式版本。在 v1.0.13-plaza.1 基础上集成 **本地图像生成** 与 **VLM 对生成图后处理** 两大新功能模块，全部经真机功能测试通过，零功能回退。
+
+**版本标识**
+- versionName：`1.0.13-plaza.visual.1`
+- versionCode：`101`
+- 包名：`com.localagent.plaza`
+- 构建基线：合并 `feature/local-visual-creation` 到 `main`，合并提交 `75d79124`
+- ABI：仅 `arm64-v8a`（图像生成原生层要求）
+
+**新增功能**
+- **本地视觉创作工作台**：支持 SD 1.5 / SDXL / Z-Image 三类基础图像生成模型
+- **Local Dream 推理后端**：CMake 原生层（`visual_creation_jni.cpp`）+ `LocalDreamBackendService` 启动并管理本地 SDXL 后端服务
+- **QNN HTP NPU 加速**：集成 Qualcomm QNN HTP 系列原生库（V68 / V69 / V73 / V75 / V79 / V81），覆盖骁龙主流 SoC NPU
+- **VLM 后处理链路**：生成完成的图像可送回本地视觉模型做语义识别 / 描述，与现有视觉旁白能力打通
+- **多模型注册表**：`ImageGenerationModelRegistry` 支持挂接多个图像生成模型，复用现有 LLM 的 ModelManager / DownloadWorker 下载与管理基础设施
+- **release keystore 环境变量化**：通过 `ANDROID_RELEASE_KEYSTORE_PATH` 等环境变量支持正式签名构建（未配置时回退到 debug 签名）
+
+**关键代码变更（相对 1.0.13-plaza.1）**
+- 新增 Kotlin 业务代码 7 个文件，约 2655 行（VisualCreationScreen / ViewModel / Task / Models / Registry / LocalDreamBackendService / LocalDreamImageGenerationClient / NativeImageGenerationBridge）
+- 新增 CMake 原生构建段（C++ JNI 桥 270 行）
+- 新增 SDXL cvtbase 资产（tokenizer、unet、vae、clip_skip）
+- 新增 QNN HTP 全档原生库（arm64-v8a）
+- AndroidManifest.xml：新增 Local Dream 后台服务声明
+- 适配 ModelManagerViewModel / DownloadWorker / DownloadRepository 以支持图像生成模型类型
+
+**推理引擎链路**
+- LLM / VLM：LiteRT-LM 0.12.0（不变，仍领先上游 0.11.0 一个小版本）
+- 图像生成：Local Dream 自研后端 + QNN HTP NPU 加速（独立于 Google 官方推理引擎，上游 google-ai-edge/gallery 本身无图像生成能力）
+
+**已知限制**
+- 图像生成路径仅支持 arm64-v8a，不支持 32 位 ABI 与 x86
+- QNN HTP NPU 加速需要骁龙设备，非高通 SoC 将回退到 CPU/GPU
+- 默认 debug 签名（仅供开发与个人分发），如需正式签名请通过环境变量配置 keystore
+
+---
+
 ## v1.0.13-plaza.1 · 2026-06-06
 
 首个对外正式稳定版。功能与上游 1.0.13 完全一致，零功能回退。
