@@ -50,40 +50,46 @@ jobs:
           REF_TYPE="${GITHUB_REF_TYPE}"
           echo "Triggered by ref_name=${REF_NAME} ref_type=${REF_TYPE}"
           if [ "$REF_TYPE" = "tag" ]; then
-            # tag 触发：使用 tag 名（去掉前缀 v）作为版本名
             VNAME="${REF_NAME#v}"
             CHANNEL="tag"
+            SUFFIX=""
           else
             BRANCH="${REF_NAME}"
             case "$BRANCH" in
               main)
                 VNAME="1.0.13-plaza.main.$GITHUB_RUN_NUMBER"
                 CHANNEL="main"
+                SUFFIX=""
                 ;;
               feature/local-visual-creation)
                 VNAME="1.0.13-plaza.visual.$GITHUB_RUN_NUMBER"
                 CHANNEL="visual"
+                SUFFIX=""
                 ;;
               feature/upstream-sync-and-mcp-20260622)
                 VNAME="1.0.13-plaza.mcp.$GITHUB_RUN_NUMBER"
                 CHANNEL="mcp"
+                SUFFIX=".mcp"
                 ;;
               feature/*)
-                # 其余 feature 分支：用分支名的尾段做 channel
                 SAFE="$(echo \"$BRANCH\" | sed 's|^feature/||; s|[^a-zA-Z0-9.-]|-|g')"
                 VNAME="1.0.13-plaza.${SAFE}.$GITHUB_RUN_NUMBER"
                 CHANNEL="$SAFE"
+                SUFFIX=".${SAFE}"
                 ;;
               *)
                 VNAME="1.0.13-plaza.dev.$GITHUB_RUN_NUMBER"
                 CHANNEL="dev"
+                SUFFIX=".dev"
                 ;;
             esac
           fi
           echo "LOCAL_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
           echo "LOCAL_VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "APPLICATION_ID_SUFFIX=$SUFFIX" >> "$GITHUB_ENV"
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "vname=$VNAME" >> "$GITHUB_OUTPUT"
+          echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
       - name: Prepare release signing
         run: |
           test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
@@ -101,21 +107,19 @@ jobs:
       - name: Rename APK to channel-aware filename
         id: rename
         run: |
-          OUT="Android/src/app/build/outputs/apk/release/app-release.apk"
-          NEW="Android/src/app/build/outputs/apk/release/local-agent-plaza-${{ steps.channel.outputs.vname }}.apk"
-          cp "$GITHUB_WORKSPACE/$OUT" "$GITHUB_WORKSPACE/$NEW"
-          sha256sum "$GITHUB_WORKSPACE/$NEW" | awk '{print $1}' > "$GITHUB_WORKSPACE/$NEW.sha256"
-          echo "apk_path=$NEW" >> "$GITHUB_OUTPUT"
-          echo "sha256_path=$NEW.sha256" >> "$GITHUB_OUTPUT"
-          echo "apk_name=local-agent-plaza-${{ steps.channel.outputs.vname }}.apk" >> "$GITHUB_OUTPUT"
-        working-directory: ${{ github.workspace }}
+          OUT="app/build/outputs/apk/release/app-release.apk"
+          NEW="local-agent-plaza-${{ steps.channel.outputs.vname }}.apk"
+          cp "$OUT" "$NEW"
+          sha256sum "$NEW" | awk '{print $1}' > "$NEW.sha256"
+          echo "apk_name=$NEW" >> "$GITHUB_OUTPUT"
+          echo "sha256_name=$NEW.sha256" >> "$GITHUB_OUTPUT"
       - name: Upload APK artifact (短保留：3 天，节省云端存储)
         uses: actions/upload-artifact@v4
         with:
           name: local-agent-plaza-${{ steps.channel.outputs.channel }}-${{ github.run_number }}
           path: |
-            ${{ steps.rename.outputs.apk_path }}
-            ${{ steps.rename.outputs.sha256_path }}
+            Android/src/${{ steps.rename.outputs.apk_name }}
+            Android/src/${{ steps.rename.outputs.sha256_name }}
           if-no-files-found: error
           retention-days: 3
       - name: Publish APK to GitHub Release (仅当 tag 触发)
@@ -124,8 +128,8 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           files: |
-            ${{ steps.rename.outputs.apk_path }}
-            ${{ steps.rename.outputs.sha256_path }}
+            Android/src/${{ steps.rename.outputs.apk_name }}
+            Android/src/${{ steps.rename.outputs.sha256_name }}
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
