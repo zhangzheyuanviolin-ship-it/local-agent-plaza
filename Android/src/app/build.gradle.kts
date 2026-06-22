@@ -32,7 +32,11 @@ android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
 
-  val appApplicationId = "com.localagent.plaza"
+  // 允许通过环境变量 APPLICATION_ID_SUFFIX 为非主线渠道（如 mcp、experimental）追加包名后缀，
+  // 使新构件可与已安装的稳定版（com.localagent.plaza）在同一台设备并行安装而互不覆盖。
+  val appApplicationIdSuffix =
+    providers.environmentVariable("APPLICATION_ID_SUFFIX").orNull ?: ""
+  val appApplicationId = "com.localagent.plaza${appApplicationIdSuffix}"
   val localVersionCode =
     providers.environmentVariable("LOCAL_VERSION_CODE").orNull?.toIntOrNull() ?: 101
   val localVersionName =
