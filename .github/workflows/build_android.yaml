@@ -49,10 +49,38 @@ jobs:
           REF_NAME="${GITHUB_REF_NAME}"
           REF_TYPE="${GITHUB_REF_TYPE}"
           echo "Triggered by ref_name=${REF_NAME} ref_type=${REF_TYPE}"
+          IS_PRERELEASE="false"
           if [ "$REF_TYPE" = "tag" ]; then
             VNAME="${REF_NAME#v}"
-            CHANNEL="tag"
-            SUFFIX=""
+            # tag 关键字 → 渠道与包名后缀（保证可与稳定版 com.localagent.plaza 并行安装）
+            case "$REF_NAME" in
+              *mcp*)
+                CHANNEL="mcp"
+                SUFFIX=".mcp"
+                ;;
+              *experimental*)
+                CHANNEL="experimental"
+                SUFFIX=".experimental"
+                ;;
+              *visual*)
+                CHANNEL="visual"
+                SUFFIX=""
+                ;;
+              v1.0.[0-9]*-plaza.[0-9]*|v1.0.[0-9]*|v[0-9]*.[0-9]*.[0-9]*)
+                CHANNEL="release"
+                SUFFIX=""
+                ;;
+              *)
+                CHANNEL="tag"
+                SUFFIX=".dev"
+                ;;
+            esac
+            # prerelease 判定：含 smoketest/alpha/beta/rc/dev 等关键字
+            case "$REF_NAME" in
+              *smoketest*|*alpha*|*beta*|*rc*|*dev*|*experimental*)
+                IS_PRERELEASE="true"
+                ;;
+            esac
           else
             BRANCH="${REF_NAME}"
             case "$BRANCH" in
@@ -90,6 +118,7 @@ jobs:
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "vname=$VNAME" >> "$GITHUB_OUTPUT"
           echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
       - name: Prepare release signing
         run: |
           test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
@@ -127,6 +156,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          prerelease: ${{ steps.channel.outputs.prerelease }}
           files: |
             Android/src/${{ steps.rename.outputs.apk_name }}
             Android/src/${{ steps.rename.outputs.sha256_name }}
