@@ -51,28 +51,38 @@ jobs:
           echo "Triggered by ref_name=${REF_NAME} ref_type=${REF_TYPE}"
           IS_PRERELEASE="false"
           if [ "$REF_TYPE" = "tag" ]; then
-            VNAME="${REF_NAME#v}"
+            RAW_VNAME="${REF_NAME#v}"
             # tag 关键字 → 渠道与包名后缀（保证可与稳定版 com.localagent.plaza 并行安装）
+            # 注意：VNAME 的基底必须是已经发布到 google-ai-edge/gallery/model_allowlists 的版本，
+            # 因为应用会通过 BuildConfig.VERSION_NAME.substringBefore("-").replace(".", "_") 去拉
+            # https://raw.githubusercontent.com/google-ai-edge/gallery/refs/heads/main/model_allowlists/{base}.json
+            # 当前可用基底版本上限为 1.0.14（截至 2025-06 校验）。
+            ALLOWLIST_BASE="1.0.14"
             case "$REF_NAME" in
               *mcp*)
                 CHANNEL="mcp"
                 SUFFIX=".mcp"
+                VNAME="${ALLOWLIST_BASE}-mcp.${GITHUB_RUN_NUMBER}"
                 ;;
               *experimental*)
                 CHANNEL="experimental"
                 SUFFIX=".experimental"
+                VNAME="${ALLOWLIST_BASE}-experimental.${GITHUB_RUN_NUMBER}"
                 ;;
               *visual*)
                 CHANNEL="visual"
                 SUFFIX=""
+                VNAME="${RAW_VNAME}"
                 ;;
               v1.0.[0-9]*-plaza.[0-9]*|v1.0.[0-9]*|v[0-9]*.[0-9]*.[0-9]*)
                 CHANNEL="release"
                 SUFFIX=""
+                VNAME="${RAW_VNAME}"
                 ;;
               *)
                 CHANNEL="tag"
                 SUFFIX=".dev"
+                VNAME="${ALLOWLIST_BASE}-dev.${GITHUB_RUN_NUMBER}"
                 ;;
             esac
             # prerelease 判定：含 smoketest/alpha/beta/rc/dev 等关键字
