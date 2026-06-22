@@ -7,10 +7,15 @@ on:
     paths:
       - 'Android/**'
       - '.github/workflows/build_android.yaml'
+    tags:
+      - 'v*'
   pull_request:
     branches: [ "main" ]
     paths:
       - 'Android/**'
+
+permissions:
+  contents: write
 
 jobs:
   build_apk:
@@ -38,7 +43,48 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-      - name: Prepare release signing and test version
+      - name: Derive branch-aware version channel
+        id: channel
+        run: |
+          REF_NAME="${GITHUB_REF_NAME}"
+          REF_TYPE="${GITHUB_REF_TYPE}"
+          echo "Triggered by ref_name=${REF_NAME} ref_type=${REF_TYPE}"
+          if [ "$REF_TYPE" = "tag" ]; then
+            # tag 触发：使用 tag 名（去掉前缀 v）作为版本名
+            VNAME="${REF_NAME#v}"
+            CHANNEL="tag"
+          else
+            BRANCH="${REF_NAME}"
+            case "$BRANCH" in
+              main)
+                VNAME="1.0.13-plaza.main.$GITHUB_RUN_NUMBER"
+                CHANNEL="main"
+                ;;
+              feature/local-visual-creation)
+                VNAME="1.0.13-plaza.visual.$GITHUB_RUN_NUMBER"
+                CHANNEL="visual"
+                ;;
+              feature/upstream-sync-and-mcp-20260622)
+                VNAME="1.0.13-plaza.mcp.$GITHUB_RUN_NUMBER"
+                CHANNEL="mcp"
+                ;;
+              feature/*)
+                # 其余 feature 分支：用分支名的尾段做 channel
+                SAFE="$(echo \"$BRANCH\" | sed 's|^feature/||; s|[^a-zA-Z0-9.-]|-|g')"
+                VNAME="1.0.13-plaza.${SAFE}.$GITHUB_RUN_NUMBER"
+                CHANNEL="$SAFE"
+                ;;
+              *)
+                VNAME="1.0.13-plaza.dev.$GITHUB_RUN_NUMBER"
+                CHANNEL="dev"
+                ;;
+            esac
+          fi
+          echo "LOCAL_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
+          echo "LOCAL_VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "vname=$VNAME" >> "$GITHUB_OUTPUT"
+      - name: Prepare release signing
         run: |
           test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
           test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
@@ -46,17 +92,40 @@ jobs:
           test -n "$ANDROID_RELEASE_KEY_PASSWORD"
           printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
           echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
-          echo "LOCAL_VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "LOCAL_VERSION_NAME=1.0.13-plaza.visual.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
       - name: Build
         run: ./gradlew assembleRelease
       - name: Verify APK signing and version
         run: |
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/aapt" dump badging app/build/outputs/apk/release/app-release.apk | head -n 1
-      - name: Upload APK
+      - name: Rename APK to channel-aware filename
+        id: rename
+        run: |
+          OUT="Android/src/app/build/outputs/apk/release/app-release.apk"
+          NEW="Android/src/app/build/outputs/apk/release/local-agent-plaza-${{ steps.channel.outputs.vname }}.apk"
+          cp "$GITHUB_WORKSPACE/$OUT" "$GITHUB_WORKSPACE/$NEW"
+          sha256sum "$GITHUB_WORKSPACE/$NEW" | awk '{print $1}' > "$GITHUB_WORKSPACE/$NEW.sha256"
+          echo "apk_path=$NEW" >> "$GITHUB_OUTPUT"
+          echo "sha256_path=$NEW.sha256" >> "$GITHUB_OUTPUT"
+          echo "apk_name=local-agent-plaza-${{ steps.channel.outputs.vname }}.apk" >> "$GITHUB_OUTPUT"
+        working-directory: ${{ github.workspace }}
+      - name: Upload APK artifact (短保留：3 天，节省云端存储)
         uses: actions/upload-artifact@v4
         with:
-          name: local-agent-plaza-release
-          path: Android/src/app/build/outputs/apk/release/app-release.apk
+          name: local-agent-plaza-${{ steps.channel.outputs.channel }}-${{ github.run_number }}
+          path: |
+            ${{ steps.rename.outputs.apk_path }}
+            ${{ steps.rename.outputs.sha256_path }}
           if-no-files-found: error
+          retention-days: 3
+      - name: Publish APK to GitHub Release (仅当 tag 触发)
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            ${{ steps.rename.outputs.apk_path }}
+            ${{ steps.rename.outputs.sha256_path }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
