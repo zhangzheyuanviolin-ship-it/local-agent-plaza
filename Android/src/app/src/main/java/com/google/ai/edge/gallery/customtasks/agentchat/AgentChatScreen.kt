@@ -124,14 +124,17 @@ fun AgentChatScreen(
   agentTools: AgentTools,
   viewModel: LlmChatViewModel = hiltViewModel(),
   skillManagerViewModel: SkillManagerViewModel = hiltViewModel(),
+  mcpManagerViewModel: McpManagerViewModel = hiltViewModel(),
 ) {
   val context = LocalContext.current
   agentTools.context = context
   agentTools.skillManagerViewModel = skillManagerViewModel
+  agentTools.mcpManagerViewModel = mcpManagerViewModel
   val density = LocalDensity.current
   val windowInfo = LocalWindowInfo.current
   val screenWidthDp = remember { with(density) { windowInfo.containerSize.width.toDp() } }
   var showSkillManagerBottomSheet by remember { mutableStateOf(false) }
+  var showMcpManagerBottomSheet by remember { mutableStateOf(false) }
   var showAskInfoDialog by remember { mutableStateOf(false) }
   var currentAskInfoAction by remember { mutableStateOf<AskInfoAgentAction?>(null) }
   var askInfoInputValue by remember { mutableStateOf("") }
@@ -376,6 +379,9 @@ fun AgentChatScreen(
       )
     },
     onSkillClicked = { showSkillManagerBottomSheet = true },
+    onMcpClicked = { showMcpManagerBottomSheet = true },
+    skillCount = skillManagerViewModel.uiState.collectAsState().value.skills.count { it.skill.selected },
+    mcpCount = mcpManagerViewModel.uiState.collectAsState().value.mcpServers.count { it.mcpServer.enabled },
     showImagePicker = true,
     showAudioPicker = true,
     getActiveSkills = {
@@ -805,6 +811,14 @@ fun AgentChatScreen(
     )
   }
 
+  if (showMcpManagerBottomSheet) {
+    McpManagerBottomSheet(
+      mcpManagerViewModel = mcpManagerViewModel,
+      onDismiss = { _ ->
+        showMcpManagerBottomSheet = false
+      },
+    )
+  }
   if (showAlertForDisabledSkill) {
     AlertDialog(
       onDismissRequest = { showAlertForDisabledSkill = false },

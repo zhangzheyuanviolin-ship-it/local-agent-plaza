@@ -30,10 +30,15 @@ import com.google.ai.edge.litertlm.ToolParam
 import com.google.ai.edge.litertlm.ToolSet
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
+import io.modelcontextprotocol.kotlin.sdk.CallToolRequest
+import io.modelcontextprotocol.kotlin.sdk.TextContent
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -43,6 +48,9 @@ private const val MAX_LIST_SUMMARY_ENTRIES = 12
 open class AgentTools() : ToolSet {
   lateinit var context: Context
   lateinit var skillManagerViewModel: SkillManagerViewModel
+  lateinit var mcpManagerViewModel: McpManagerViewModel
+
+  fun isMcpInitialized(): Boolean = ::mcpManagerViewModel.isInitialized
 
   private val _actionChannel = Channel<AgentAction>(Channel.UNLIMITED)
   val actionChannel: ReceiveChannel<AgentAction> = _actionChannel
@@ -689,6 +697,100 @@ open class AgentTools() : ToolSet {
           )
       }
     return CompatToolExecutionResult(toolName = normalizedToolName, result = result)
+  }
+
+  @Tool(description = "Run a MCP tool")
+  fun runMcpTool(
+    @ToolParam(description = "The name of the tool to run.") toolName: String,
+    @ToolParam(description = "The parameters passed to tool as input") input: String,
+  ): Map<String, String> {
+    Log.d(TAG, "Run MCP tool:\n- name: $toolName\n- input: $input")
+
+    return runBlocking(Dispatchers.IO) {
+      if (!::mcpManagerViewModel.isInitialized) {
+        return@runBlocking mapOf("error" to "MCP not initialized", "status" to "failed")
+      }
+      val serverState =
+        mcpManagerViewModel.uiState.value.mcpServers.find { serverState ->
+          serverState.mcpServer.toolsList.any { it.name == toolName }
+        }
+
+      if (serverState == null) {
+        Log.w(TAG, "MCP server or tool not found for: $toolName")
+        return@runBlocking mapOf("error" to "Tool not found", "status" to "failed")
+      }
+
+      val client =
+        serverState.client
+          ?: return@runBlocking mapOf("error" to "Client not initialized", "status" to "failed")
+      try {
+        _actionChannel.send(
+          SkillProgressAgentAction(
+            label = "Calling MCP tool \"$toolName\"",
+            inProgress = true,
+            addItemTitle = "Call MCP tool: \"$toolName\"",
+            addItemDescription = "- Input: $input",
+          )
+        )
+        val result =
+          client.callTool(
+            request =
+              CallToolRequest(
+                CallToolRequestParams(
+                  name = toolName,
+                  arguments = Json.parseToJsonElement(input).jsonObject,
+                )
+              )
+          )
+
+        if (result == null) {
+          _actionChannel.send(
+            SkillProgressAgentAction(
+              label = "Failed to call MCP tool \"$toolName\"",
+              inProgress = false,
+            )
+          )
+          return@runBlocking mapOf("error" to "Null result", "status" to "failed")
+        }
+
+        if (result.isError == true) {
+          val errorText =
+            result.content.filterIsInstance<TextContent>().joinToString("\n") { it.text ?: "" }
+          _actionChannel.send(
+            SkillProgressAgentAction(
+              label = "Failed to call MCP tool \"$toolName\"",
+              addItemTitle = "Call MCP tool \"$toolName\" failed",
+              addItemDescription = errorText,
+              inProgress = false,
+            )
+          )
+          return@runBlocking mapOf("error" to errorText, "status" to "failed")
+        } else {
+          val successText =
+            result.content.filterIsInstance<TextContent>().joinToString("\n") { it.text ?: "" }
+          _actionChannel.send(
+            SkillProgressAgentAction(
+              label = "Succeeded calling MCP tool \"$toolName\"",
+              inProgress = true,
+              addItemTitle = "Call MCP tool \"$toolName\" succeeded",
+              addItemDescription = successText,
+            )
+          )
+          return@runBlocking mapOf("result" to successText, "status" to "succeeded")
+        }
+      } catch (e: Exception) {
+        Log.e(TAG, "Error calling MCP tool", e)
+        _actionChannel.send(
+          SkillProgressAgentAction(
+            label = "Error calling MCP tool \"$toolName\"",
+            inProgress = false,
+            addItemTitle = "Call MCP tool \"$toolName\" failed",
+            addItemDescription = e.message ?: "Unknown error",
+          )
+        )
+        return@runBlocking mapOf("error" to (e.message ?: "Unknown error"), "status" to "failed")
+      }
+    }
   }
 
   fun sendAgentAction(action: AgentAction) {

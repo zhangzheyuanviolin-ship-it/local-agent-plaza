@@ -15,9 +15,11 @@
  */
 
 package com.google.ai.edge.gallery.customtasks.agentchat
-
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.datastore.core.DataStore
+import androidx.datastore.core.DataStoreFactory
+import androidx.datastore.dataStoreFile
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
 import com.google.ai.edge.gallery.customtasks.common.CustomTaskDataForBuiltinTask
@@ -25,14 +27,17 @@ import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Category
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.proto.McpServers
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import com.google.ai.edge.litertlm.Contents
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 
 class AgentChatTask @Inject constructor() : CustomTask {
@@ -86,6 +91,29 @@ class AgentChatTask @Inject constructor() : CustomTask {
           baseSystemPrompt = systemPrompt,
           skillManagerViewModel = agentTools.skillManagerViewModel,
         )
+      // Inject MCP tools prompt if any are enabled.
+      val mcpToolsPrompt =
+        runCatching {
+          if (agentTools.isMcpInitialized()) {
+            agentTools.mcpManagerViewModel.getToolsPrompt()
+          } else ""
+        }.getOrDefault("")
+      val finalSystemInstruction =
+        if (mcpToolsPrompt.isNotBlank() && sessionConfig.systemInstruction != null) {
+          val baseText = sessionConfig.systemInstruction.toString()
+          Contents.of(
+            buildString {
+              append(baseText)
+              append("\n\n--- MCP TOOLS ---\n")
+              append(mcpToolsPrompt)
+              append(
+                "\n\nWhen the user request matches an MCP tool above, call the tool `runMcpTool` with parameters `toolName` and `input` (JSON-encoded arguments)."
+              )
+            }
+          )
+        } else {
+          sessionConfig.systemInstruction
+        }
       LlmChatModelHelper.initialize(
         context = context,
         model = model,
@@ -93,7 +121,7 @@ class AgentChatTask @Inject constructor() : CustomTask {
         supportImage = false,
         supportAudio = false,
         onDone = onDone,
-        systemInstruction = sessionConfig.systemInstruction,
+        systemInstruction = finalSystemInstruction,
         tools = if (sessionConfig.useNativeTools) listOf(com.google.ai.edge.litertlm.tool(agentTools)) else listOf(),
         enableConversationConstrainedDecoding = sessionConfig.enableConversationConstrainedDecoding,
       )
@@ -128,5 +156,14 @@ internal object AgentChatTaskModule {
   @IntoSet
   fun provideTask(): CustomTask {
     return AgentChatTask()
+  }
+
+  @Provides
+  @Singleton
+  fun provideMcpServersDataStore(@ApplicationContext context: Context): DataStore<McpServers> {
+    return DataStoreFactory.create(
+      serializer = McpServersSerializer,
+      produceFile = { context.dataStoreFile("mcp_servers.pb") },
+    )
   }
 }

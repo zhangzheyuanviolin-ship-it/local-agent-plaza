@@ -359,7 +359,9 @@ fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String,
 
   Column(modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
     // Field label.
-    Text(config.key.label, style = MaterialTheme.typography.titleSmall)
+    val minStr = getTextFieldDisplayValue(config.valueType, config.sliderMin)
+    val maxStr = getTextFieldDisplayValue(config.valueType, config.sliderMax)
+    Text("${config.key.label} ($minStr-$maxStr)", style = MaterialTheme.typography.titleSmall)
 
     // Controls row.
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -375,14 +377,8 @@ fun NumberSliderRow(config: NumberSliderConfig, values: SnapshotStateMap<String,
       // Number slider.
       val sliderValue = getSliderStoredValue(values, config)
 
-      Text(
-        text = getTextFieldDisplayValue(config.valueType, config.sliderMin),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-
       Slider(
-        modifier = Modifier.height(24.dp).weight(1f).padding(horizontal = 8.dp),
+        modifier = Modifier.height(24.dp).weight(1f).padding(end = 8.dp),
         value = sliderValue,
         valueRange = config.sliderMin..config.sliderMax,
         onValueChange = {
