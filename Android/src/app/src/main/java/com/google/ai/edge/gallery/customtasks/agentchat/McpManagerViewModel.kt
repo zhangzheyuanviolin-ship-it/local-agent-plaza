@@ -65,6 +65,10 @@ constructor(
 
   private val httpClient = HttpClient(Android) { install(SSE) }
 
+  init {
+    viewModelScope.launch { loadMcpServers() }
+  }
+
   /**
    * Loads the persisted MCP servers from the DataStore and initializes their client connections.
    */

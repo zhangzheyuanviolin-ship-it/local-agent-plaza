@@ -710,10 +710,24 @@ open class AgentTools() : ToolSet {
       if (!::mcpManagerViewModel.isInitialized) {
         return@runBlocking mapOf("error" to "MCP not initialized", "status" to "failed")
       }
-      val serverState =
-        mcpManagerViewModel.uiState.value.mcpServers.find { serverState ->
-          serverState.mcpServer.toolsList.any { it.name == toolName }
+      val matchingServerStates =
+        mcpManagerViewModel.uiState.value.mcpServers.filter { serverState ->
+          serverState.mcpServer.enabled &&
+            serverState.client != null &&
+            serverState.mcpServer.toolsList.any { it.enabled && it.name == toolName }
         }
+
+      if (matchingServerStates.size > 1) {
+        val serverUrls = matchingServerStates.joinToString { it.mcpServer.url }
+        Log.w(TAG, "Ambiguous MCP tool name \"$toolName\" on: $serverUrls")
+        return@runBlocking mapOf(
+          "error" to
+            "More than one enabled MCP server exposes tool \"$toolName\". Disable duplicate tools or servers first: $serverUrls",
+          "status" to "failed",
+        )
+      }
+
+      val serverState = matchingServerStates.singleOrNull()
 
       if (serverState == null) {
         Log.w(TAG, "MCP server or tool not found for: $toolName")
@@ -738,7 +752,7 @@ open class AgentTools() : ToolSet {
               CallToolRequest(
                 CallToolRequestParams(
                   name = toolName,
-                  arguments = Json.parseToJsonElement(input).jsonObject,
+                  arguments = Json.parseToJsonElement(input.ifBlank { "{}" }).jsonObject,
                 )
               )
           )

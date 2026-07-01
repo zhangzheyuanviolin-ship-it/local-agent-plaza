@@ -27,7 +27,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material3.AlertDialog
@@ -65,7 +67,14 @@ import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.proto.McpAuth
 import java.net.URI
 
-private val APPROVED_MCP_HOSTS = listOf("googleapis.com")
+private val APPROVED_MCP_HOSTS =
+  listOf(
+    "context7.com",
+    "deepwiki.com",
+    "gitmcp.io",
+    "googleapis.com",
+    "learn.microsoft.com",
+  )
 
 /** A dialog composable for adding a new MCP server by entering its URL. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,7 +130,7 @@ fun AddMcpServerFromUrlDialog(
       shape = RoundedCornerShape(16.dp),
     ) {
       Column(
-        modifier = Modifier.padding(20.dp),
+        modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
         // Dialog Title
@@ -130,6 +139,37 @@ fun AddMcpServerFromUrlDialog(
           style = MaterialTheme.typography.titleMedium,
           modifier = Modifier.padding(bottom = 8.dp),
         )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("预设 MCP 服务器", style = MaterialTheme.typography.labelMedium)
+          DEFAULT_MCP_PRESET_SERVERS.forEach { preset ->
+            OutlinedButton(
+              modifier = Modifier.fillMaxWidth(),
+              onClick = {
+                textFieldValue =
+                  TextFieldValue(
+                    text = preset.url,
+                    selection = TextRange(preset.url.length),
+                  )
+                authType = McpAuth.AuthMethodCase.NONE
+                mcpManagerViewModel.clearError()
+              },
+            ) {
+              Column(modifier = Modifier.fillMaxWidth()) {
+                Text(preset.name, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                  preset.description,
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                  preset.authHint,
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+            }
+          }
+        }
         // Container for input label and text field
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
           Text(

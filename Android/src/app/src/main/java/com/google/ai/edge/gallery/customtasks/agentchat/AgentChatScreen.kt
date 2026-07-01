@@ -102,6 +102,7 @@ import com.google.ai.edge.gallery.ui.llmchat.LlmChatScreen
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Message
 import java.lang.Exception
 import java.net.HttpURLConnection
@@ -375,6 +376,7 @@ fun AgentChatScreen(
         task,
         curSystemPrompt,
         agentTools,
+        mcpManagerViewModel,
         initialMessages = initialMessages,
       )
     },
@@ -805,6 +807,7 @@ fun AgentChatScreen(
             task,
             curSystemPrompt,
             agentTools,
+            mcpManagerViewModel,
           )
         }
       },
@@ -814,8 +817,20 @@ fun AgentChatScreen(
   if (showMcpManagerBottomSheet) {
     McpManagerBottomSheet(
       mcpManagerViewModel = mcpManagerViewModel,
-      onDismiss = { _ ->
+      onDismiss = { selectedMcpsAndToolsChanged ->
         showMcpManagerBottomSheet = false
+        if (selectedMcpsAndToolsChanged) {
+          Log.d(TAG, "Selected MCPs or tools changed. Resetting conversation.")
+          resetSessionWithCurrentSkills(
+            viewModel,
+            modelManagerViewModel,
+            skillManagerViewModel,
+            task,
+            curSystemPrompt,
+            agentTools,
+            mcpManagerViewModel,
+          )
+        }
       },
     )
   }
@@ -876,6 +891,7 @@ private fun resetSessionWithCurrentSkills(
   task: Task,
   curSystemPrompt: String,
   agentTools: AgentTools,
+  mcpManagerViewModel: McpManagerViewModel,
   onDone: (Model) -> Unit = {},
   initialMessages: List<ChatMessage> = listOf(),
 ) {
@@ -896,10 +912,27 @@ private fun resetSessionWithCurrentSkills(
       baseSystemPrompt = curSystemPrompt,
       skillManagerViewModel = skillManagerViewModel,
     )
+  val mcpToolsPrompt = mcpManagerViewModel.getToolsPrompt()
+  val finalSystemInstruction =
+    if (mcpToolsPrompt.isNotBlank() && sessionConfig.systemInstruction != null) {
+      val baseText = sessionConfig.systemInstruction.toString()
+      Contents.of(
+        buildString {
+          append(baseText)
+          append("\n\n--- MCP TOOLS ---\n")
+          append(mcpToolsPrompt)
+          append(
+            "\n\nWhen the user request matches an MCP tool above, call the tool `runMcpTool` with parameters `toolName` and `input` (JSON-encoded arguments)."
+          )
+        }
+      )
+    } else {
+      sessionConfig.systemInstruction
+    }
   viewModel.resetSession(
     task = task,
     model = model,
-    systemInstruction = sessionConfig.systemInstruction,
+    systemInstruction = finalSystemInstruction,
     tools = if (sessionConfig.useNativeTools) listOf(com.google.ai.edge.litertlm.tool(agentTools)) else listOf(),
     supportImage = false,
     supportAudio = false,
