@@ -110,10 +110,13 @@ jobs:
                 SUFFIX=".mcp"
                 ;;
               feature/*)
-                SAFE="$(echo \"$BRANCH\" | sed 's|^feature/||; s|[^a-zA-Z0-9.-]|-|g')"
-                VNAME="1.0.13-plaza.${SAFE}.$GITHUB_RUN_NUMBER"
-                CHANNEL="$SAFE"
-                SUFFIX=".${SAFE}"
+                SAFE_VERSION="$(printf '%s' "$BRANCH" | sed 's|^feature/||; s|[^a-zA-Z0-9.-]|-|g; s|^-*||; s|-*$||')"
+                SAFE_PACKAGE="$(printf '%s' "$BRANCH" | sed 's|^feature/||; s|[^a-zA-Z0-9_]|_|g; s|^_*||; s|_*$||')"
+                [ -n "$SAFE_VERSION" ] || SAFE_VERSION="feature"
+                [ -n "$SAFE_PACKAGE" ] || SAFE_PACKAGE="feature"
+                VNAME="1.0.13-plaza.${SAFE_VERSION}.$GITHUB_RUN_NUMBER"
+                CHANNEL="$SAFE_VERSION"
+                SUFFIX=".${SAFE_PACKAGE}"
                 ;;
               *)
                 VNAME="1.0.13-plaza.dev.$GITHUB_RUN_NUMBER"
