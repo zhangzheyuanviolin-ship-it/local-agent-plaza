@@ -234,6 +234,14 @@ fun AgentChatScreen(
     if (resolveAgentToolMode(model) == ResolvedAgentToolMode.COMPAT && lastAgentText != null) {
       val parsedToolCall = parseCompatToolCall(lastAgentText.content)
       if (parsedToolCall != null) {
+        val originalUserRequest =
+          (viewModel.getLastMessageWithTypeAndSide(
+            model = model,
+            type = ChatMessageType.TEXT,
+            side = ChatSide.USER,
+          ) as? ChatMessageText)
+            ?.content
+            .orEmpty()
         val currentSteps = compatToolStepsByModel[model.name] ?: 0
         if (currentSteps >= MAX_COMPAT_TOOL_STEPS) {
           viewModel.removeLastMessage(model = model)
@@ -288,12 +296,29 @@ fun AgentChatScreen(
             screenWidthDp = screenWidthDp.value,
           )
           updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
-          continueCompatConversation?.invoke(
-            model,
-            buildCompatToolResultPrompt(
-              toolName = executionResult.toolName,
-              result = executionResult.result,
-            ),
+          val sessionConfig =
+            createAgentSessionConfig(
+              model = model,
+              baseSystemPrompt = curSystemPrompt,
+              skillManagerViewModel = skillManagerViewModel,
+            )
+          viewModel.resetRuntimeConversationOnly(
+            model = model,
+            systemInstruction = sessionConfig.systemInstruction,
+            tools = listOf(),
+            supportImage = false,
+            supportAudio = false,
+            enableConversationConstrainedDecoding = false,
+            onDone = {
+              continueCompatConversation?.invoke(
+                model,
+                buildCompatToolResultPrompt(
+                  toolName = executionResult.toolName,
+                  result = executionResult.result,
+                  originalUserRequest = originalUserRequest,
+                ),
+              )
+            },
           )
         }
         return@handleGenerationDone

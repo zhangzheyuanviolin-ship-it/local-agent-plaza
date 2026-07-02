@@ -23,13 +23,14 @@ import org.json.JSONObject
 
 private const val TOOL_CALL_OPEN_TAG = "<tool_call>"
 private const val TOOL_CALL_CLOSE_TAG = "</tool_call>"
+private const val THINK_OPEN_TAG = "<think>"
+private const val THINK_CLOSE_TAG = "</think>"
 const val MAX_COMPAT_TOOL_STEPS = 8
 
 object AgentToolModeValues {
-  const val AUTO = "自动"
   const val NATIVE = "原生"
   const val COMPAT = "兼容"
-  val options = listOf(AUTO, NATIVE, COMPAT)
+  val options = listOf(NATIVE, COMPAT)
 }
 
 enum class ResolvedAgentToolMode {
@@ -57,32 +58,28 @@ object AgentConfigKeys {
 fun getConfiguredAgentToolMode(model: Model): String {
   return model.getStringConfigValue(
     key = AgentConfigKeys.TOOL_MODE,
-    defaultValue = AgentToolModeValues.AUTO,
+    defaultValue = defaultAgentToolMode(model),
   )
 }
 
 fun supportsNativeAgentTools(model: Model): Boolean {
-  if (!model.imported) {
-    return true
-  }
   val normalizedName = model.name.lowercase()
-  return normalizedName.contains("functiongemma") ||
+  return normalizedName.contains("gemma-4") ||
+    normalizedName.contains("functiongemma") ||
     normalizedName.contains("function-gemma") ||
     normalizedName.contains("function_gemma") ||
     normalizedName.contains("tiny_garden")
+}
+
+fun defaultAgentToolMode(model: Model): String {
+  return if (supportsNativeAgentTools(model)) AgentToolModeValues.NATIVE else AgentToolModeValues.COMPAT
 }
 
 fun resolveAgentToolMode(model: Model): ResolvedAgentToolMode {
   return when (getConfiguredAgentToolMode(model)) {
     AgentToolModeValues.NATIVE -> ResolvedAgentToolMode.NATIVE
     AgentToolModeValues.COMPAT -> ResolvedAgentToolMode.COMPAT
-    else -> {
-      if (supportsNativeAgentTools(model)) {
-        ResolvedAgentToolMode.NATIVE
-      } else {
-        ResolvedAgentToolMode.COMPAT
-      }
-    }
+    else -> if (supportsNativeAgentTools(model)) ResolvedAgentToolMode.NATIVE else ResolvedAgentToolMode.COMPAT
   }
 }
 
@@ -147,17 +144,22 @@ $continuationPayload
     .trimIndent()
 }
 
-fun buildCompatToolResultPrompt(toolName: String, result: Map<String, Any?>): String {
+fun buildCompatToolResultPrompt(
+  toolName: String,
+  result: Map<String, Any?>,
+  originalUserRequest: String = "",
+): String {
   val resultJson = JSONObject()
   result.forEach { (key, value) -> resultJson.put(key, JSONObject.wrap(value)) }
   return """
 TOOL_RESULT
+original_user_request: $originalUserRequest
 tool: $toolName
 payload:
 $resultJson
 
 You are in compatibility tool mode.
-Use this tool result to continue the task.
+Use this tool result to continue the task. Do not output $THINK_OPEN_TAG or $THINK_CLOSE_TAG.
 If another tool is required, reply with exactly one $TOOL_CALL_OPEN_TAG...$TOOL_CALL_CLOSE_TAG block and nothing else.
 Otherwise, answer the user directly in natural language.
 """
@@ -200,7 +202,8 @@ fun parseCompatToolCall(rawText: String): ParsedCompatToolCall? {
       .removePrefix("```")
       .removeSuffix("```")
       .trim()
-  val json = runCatching { JSONObject(payload) }.getOrNull() ?: return null
+  val balancedPayload = extractFirstJsonObject(payload) ?: return null
+  val json = runCatching { JSONObject(balancedPayload) }.getOrNull() ?: return null
   val toolName =
     json.optString("tool").ifBlank {
       json.optString("name")
@@ -208,11 +211,66 @@ fun parseCompatToolCall(rawText: String): ParsedCompatToolCall? {
   if (toolName.isBlank()) {
     return null
   }
-  val arguments = json.optJSONObject("arguments") ?: JSONObject()
+  val arguments = json.optJSONObject("arguments") ?: json.optJSONObject("parameters") ?: JSONObject()
   return ParsedCompatToolCall(toolName = toolName.trim(), arguments = arguments)
 }
 
-private fun buildCompatAgentInstructionPayload(
+fun stripCompatThinkingText(rawText: String): String {
+  var text = rawText
+  while (true) {
+    val start = text.indexOf(THINK_OPEN_TAG, ignoreCase = true)
+    if (start < 0) {
+      return text.trim()
+    }
+    val end = text.indexOf(THINK_CLOSE_TAG, startIndex = start, ignoreCase = true)
+    text =
+      if (end >= start) {
+        text.removeRange(start, end + THINK_CLOSE_TAG.length)
+      } else {
+        text.substring(0, start)
+      }
+  }
+}
+
+private fun extractFirstJsonObject(text: String): String? {
+  val start = text.indexOf('{')
+  if (start < 0) {
+    return null
+  }
+  var depth = 0
+  var inString = false
+  var escaping = false
+  for (index in start until text.length) {
+    val char = text[index]
+    if (escaping) {
+      escaping = false
+      continue
+    }
+    if (char == '\\' && inString) {
+      escaping = true
+      continue
+    }
+    if (char == '"') {
+      inString = !inString
+      continue
+    }
+    if (inString) {
+      continue
+    }
+    when (char) {
+      '{' -> depth++
+      '}' -> {
+        depth--
+        if (depth == 0) {
+          return text.substring(start, index + 1)
+        }
+      }
+    }
+  }
+  return null
+}
+
+internal fun buildCompatAgentInstructionPayload(
   baseSystemPrompt: String,
   selectedSkills: List<Skill>,
 ): String {
@@ -220,28 +278,50 @@ private fun buildCompatAgentInstructionPayload(
     selectedSkills.joinToString(separator = "\n") { "- ${it.name}: ${it.description}" }
       .ifBlank { "- 暂无已启用技能。" }
   val basePromptWithSkills = injectSelectedSkills(baseSystemPrompt = baseSystemPrompt, selectedSkills = selectedSkills)
+  return buildCompatAgentInstructionPayloadFromSummary(
+    basePromptWithSkills = basePromptWithSkills,
+    selectedSkillsList = selectedSkillsList,
+  )
+}
+
+internal fun buildCompatAgentInstructionPayloadForTest(
+  baseSystemPrompt: String,
+  selectedSkillSummaries: List<String>,
+): String {
+  return buildCompatAgentInstructionPayloadFromSummary(
+    basePromptWithSkills = baseSystemPrompt,
+    selectedSkillsList = selectedSkillSummaries.joinToString("\n") { "- $it" },
+  )
+}
+
+private fun buildCompatAgentInstructionPayloadFromSummary(
+  basePromptWithSkills: String,
+  selectedSkillsList: String,
+): String {
   return """
 $basePromptWithSkills
 
-You are currently running in compatibility tool mode because this model is not using Google native tool calling for this session.
+You are running in Qwen-compatible tool mode.
 
-When you need to use a tool, reply with exactly one tool call block and nothing else:
+When you need a tool, reply with exactly one tool call block and nothing else:
 $TOOL_CALL_OPEN_TAG
-{"tool":"load_skill","arguments":{"skill_name":"tavily-search"}}
+{"name":"exa-search","arguments":{"query":"2026 World Cup news"}}
 $TOOL_CALL_CLOSE_TAG
 
 Compatibility mode rules:
 - Never mix natural language with a tool call block.
 - Only request one tool per assistant turn.
 - After a tool result is returned, either request the next tool in the same format or answer the user directly.
-- Prefer calling load_skill first when a relevant skill exists.
 - Only load or use skills that are enabled in this session.
+- Do not output $THINK_OPEN_TAG, $THINK_CLOSE_TAG, hidden reasoning, or analysis text.
+- Use "arguments" or "parameters" as a JSON object. Both are accepted.
 
 Available compatibility tools:
-- load_skill arguments: {"skill_name":"..."} . Loads the selected skill instructions.
-- run_js arguments: {"skill_name":"...","script_name":"index.html","data":"..."} . Runs a JS skill script.
-- run_intent arguments: {"intent":"...","parameters":"{...}"} . Runs an Android intent tool.
-- run_configured_intent arguments: {"skill_name":"...","intent":"...","parameters":"{...}"} . Runs an intent with saved skill configuration.
+- exa-search arguments: {"query":"..."} . Searches the web with Exa when exa-search is enabled.
+- tavily-search arguments: {"query":"..."} . Searches the web with Tavily when tavily-search is enabled.
+- langsearch-search arguments: {"query":"..."} . Searches the web with LangSearch when langsearch-search is enabled.
+- search_web arguments: {"query":"...","skill_name":"exa-search"} . Searches the web using an enabled search skill.
+- list_workspace arguments: {"path":"."} . Lists files in the mounted workspace.
 - write_workspace_text_file arguments: {"path":"notes/output.md","content":"..."} . Writes the full final text into the workspace.
 
 Enabled skills for this session:

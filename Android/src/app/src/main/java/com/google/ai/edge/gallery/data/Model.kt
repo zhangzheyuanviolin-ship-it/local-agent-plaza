@@ -17,6 +17,8 @@
 package com.google.ai.edge.gallery.data
 
 import android.content.Context
+import com.google.ai.edge.gallery.customtasks.agentchat.AgentConfigKeys
+import com.google.ai.edge.gallery.customtasks.agentchat.defaultAgentToolMode
 import com.google.gson.annotations.SerializedName
 import java.io.File
 
@@ -343,7 +345,12 @@ data class Model(
   fun preProcess() {
     val configValues: MutableMap<String, Any> = mutableMapOf()
     for (config in this.configs) {
-      configValues[config.key.label] = config.defaultValue
+      configValues[config.key.label] =
+        if (config.key == AgentConfigKeys.TOOL_MODE) {
+          defaultAgentToolMode(this)
+        } else {
+          config.defaultValue
+        }
     }
     this.configValues = configValues
     this.totalBytes = this.sizeInBytes + this.extraDataFiles.sumOf { it.sizeInBytes }

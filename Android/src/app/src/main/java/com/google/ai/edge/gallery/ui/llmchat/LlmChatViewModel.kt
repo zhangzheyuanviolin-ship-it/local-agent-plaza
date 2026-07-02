@@ -403,6 +403,34 @@ open class LlmChatViewModelBase(
     }
   }
 
+  fun resetRuntimeConversationOnly(
+    model: Model,
+    systemInstruction: Contents? = null,
+    tools: List<ToolProvider> = listOf(),
+    supportImage: Boolean = false,
+    supportAudio: Boolean = false,
+    onDone: () -> Unit = {},
+    enableConversationConstrainedDecoding: Boolean = false,
+    initialMessages: List<Message> = listOf(),
+  ) {
+    viewModelScope.launch(Dispatchers.Default) {
+      try {
+        model.runtimeHelper.resetConversation(
+          model = model,
+          supportImage = supportImage,
+          supportAudio = supportAudio,
+          systemInstruction = systemInstruction,
+          tools = tools,
+          enableConversationConstrainedDecoding = enableConversationConstrainedDecoding,
+          initialMessages = initialMessages,
+        )
+      } catch (e: Exception) {
+        Log.d(TAG, "Failed to reset runtime-only conversation", e)
+      }
+      onDone()
+    }
+  }
+
   fun runAgain(
     model: Model,
     message: ChatMessageText,

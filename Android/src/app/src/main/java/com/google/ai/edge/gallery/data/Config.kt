@@ -364,7 +364,7 @@ fun createLlmChatConfigs(
   configs.add(
     SegmentedButtonConfig(
       key = AgentConfigKeys.TOOL_MODE,
-      defaultValue = AgentToolModeValues.AUTO,
+      defaultValue = AgentToolModeValues.COMPAT,
       options = AgentToolModeValues.options,
     )
   )

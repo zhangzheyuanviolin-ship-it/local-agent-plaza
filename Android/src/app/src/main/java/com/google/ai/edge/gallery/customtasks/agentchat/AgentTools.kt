@@ -675,6 +675,49 @@ open class AgentTools() : ToolSet {
                 ),
             )
             .mapValues { it.value }
+        TAVILY_SEARCH_SKILL_NAME,
+        EXA_SEARCH_SKILL_NAME,
+        LANGSEARCH_SEARCH_SKILL_NAME ->
+          runSearchCompatTool(skillName = normalizedToolName, arguments = arguments)
+        "search_web",
+        "web_search" ->
+          runSearchCompatTool(
+            skillName =
+              getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("skill_name", "skillName", "engine", "provider"),
+                  defaultValue = preferredEnabledSearchSkillName(),
+                )
+                .lowercase(),
+            arguments = arguments,
+          )
+        "list_workspace" ->
+          runConfiguredIntent(
+              skillName = FILE_WORKSPACE_SKILL_NAME,
+              intent = IntentAction.FILE_WORKSPACE.action,
+              parameters =
+                JSONObject(arguments.toString())
+                  .apply {
+                    put("operation", "list")
+                    if (!has("path")) {
+                      put("path", ".")
+                    }
+                  }
+                  .toString(),
+            )
+            .mapValues { it.value }
+        "read_workspace_text_file" ->
+          runConfiguredIntent(
+              skillName = FILE_WORKSPACE_SKILL_NAME,
+              intent = IntentAction.FILE_WORKSPACE.action,
+              parameters =
+                JSONObject(arguments.toString())
+                  .apply {
+                    put("operation", "read_text")
+                  }
+                  .toString(),
+            )
+            .mapValues { it.value }
         "write_workspace_text_file" ->
           writeWorkspaceTextFile(
               path =
@@ -693,10 +736,65 @@ open class AgentTools() : ToolSet {
           mapOf(
             "status" to "failed",
             "error" to "Unknown compatibility tool \"$toolName\".",
-            "recovery_hint" to "Retry with one of: load_skill, run_js, run_intent, run_configured_intent, write_workspace_text_file.",
+            "recovery_hint" to "Retry with one of: exa-search, tavily-search, langsearch-search, search_web, list_workspace, read_workspace_text_file, write_workspace_text_file, run_js, run_configured_intent.",
           )
       }
     return CompatToolExecutionResult(toolName = normalizedToolName, result = result)
+  }
+
+  private fun runSearchCompatTool(skillName: String, arguments: JSONObject): Map<String, Any?> {
+    val normalizedSkillName = skillName.trim().lowercase()
+    if (!isSearchSkill(normalizedSkillName)) {
+      return mapOf(
+        "status" to "failed",
+        "error" to "Unsupported search skill \"$skillName\".",
+        "recovery_hint" to "Use exa-search, tavily-search, langsearch-search, or search_web.",
+      )
+    }
+    val selectedSkill = skillManagerViewModel.getSelectedSkills().find { it.name == normalizedSkillName }
+    if (selectedSkill == null) {
+      return mapOf(
+        "status" to "failed",
+        "error" to "Skill \"$normalizedSkillName\" is not enabled in this session.",
+        "recovery_hint" to "Enable $normalizedSkillName in the skill manager or call another enabled search tool.",
+      )
+    }
+    val query =
+      getOptionalStringArgument(
+        arguments = arguments,
+        names = listOf("query", "search_query", "searchQuery", "q", "input", "topic"),
+        defaultValue = "",
+      )
+    if (query.isBlank()) {
+      return mapOf(
+        "status" to "failed",
+        "error" to "Search query is required.",
+        "recovery_hint" to "Retry with arguments {\"query\":\"...\"}.",
+      )
+    }
+    val data =
+      JSONObject(arguments.toString())
+        .apply {
+          put("query", query)
+          remove("skill_name")
+          remove("skillName")
+          remove("engine")
+          remove("provider")
+        }
+        .toString()
+    return runJs(
+        skillName = normalizedSkillName,
+        scriptName = "index.html",
+        data = data,
+      )
+      .mapValues { it.value }
+  }
+
+  private fun preferredEnabledSearchSkillName(): String {
+    val selected = skillManagerViewModel.getSelectedSkills().map { it.name }.toSet()
+    return listOf(EXA_SEARCH_SKILL_NAME, TAVILY_SEARCH_SKILL_NAME, LANGSEARCH_SEARCH_SKILL_NAME)
+      .firstOrNull { selected.contains(it) }
+      ?: EXA_SEARCH_SKILL_NAME
   }
 
   @Tool(description = "Run a MCP tool")
