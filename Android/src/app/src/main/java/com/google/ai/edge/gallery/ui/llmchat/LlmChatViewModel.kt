@@ -438,6 +438,7 @@ open class LlmChatViewModelBase(
     message: ChatMessageText,
     onError: (String) -> Unit,
     allowThinking: Boolean = false,
+    extraContextOverride: Map<String, String>? = null,
   ) {
     viewModelScope.launch(Dispatchers.Default) {
       // Wait for model to be initialized.
@@ -454,6 +455,7 @@ open class LlmChatViewModelBase(
         input = message.content,
         onError = onError,
         allowThinking = allowThinking,
+        extraContextOverride = extraContextOverride,
       )
     }
   }
