@@ -86,6 +86,7 @@ fun LlmChatScreen(
   showAudioPicker: Boolean = false,
   getActiveSkills: () -> List<String> = { emptyList() },
   transformOutgoingText: (Model, String) -> String = { _, text -> text },
+  extraContextForModel: (Model) -> Map<String, String>? = { null },
 ) {
   ChatViewWrapper(
     viewModel = viewModel,
@@ -113,6 +114,7 @@ fun LlmChatScreen(
     showAudioPicker = showAudioPicker,
     getActiveSkills = getActiveSkills,
     transformOutgoingText = transformOutgoingText,
+    extraContextForModel = extraContextForModel,
   )
 }
 
@@ -233,6 +235,7 @@ fun ChatViewWrapper(
   showAudioPicker: Boolean = false,
   getActiveSkills: () -> List<String> = { emptyList() },
   transformOutgoingText: (Model, String) -> String = { _, text -> text },
+  extraContextForModel: (Model) -> Map<String, String>? = { null },
 ) {
   val context = LocalContext.current
   val task = modelManagerViewModel.getTaskById(id = taskId)!!
@@ -296,6 +299,7 @@ fun ChatViewWrapper(
             )
           },
           allowThinking = task.allowCapability(ModelCapability.LLM_THINKING, model),
+          extraContextOverride = extraContextForModel(model),
           onInterceptPartialResult = onInterceptPartialResult,
         )
 
@@ -345,6 +349,7 @@ fun ChatViewWrapper(
             )
           },
           allowThinking = task.allowCapability(ModelCapability.LLM_THINKING, model),
+          extraContextOverride = extraContextForModel(model),
         )
       }
     },

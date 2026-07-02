@@ -80,12 +80,43 @@ class AgentToolingTest {
   fun compatPromptAdvertisesDirectSearchToolsAndNoLoadSkillRequirement() {
     val prompt =
       buildCompatAgentInstructionPayloadForTest(
-        baseSystemPrompt = "base",
+        baseSystemPrompt =
+          """
+          You MUST use load_skill before every task.
+          {"name":"exa-search","arguments":{"query":"2026 World Cup news"}}
+          """.trimIndent(),
         selectedSkillSummaries = listOf("exa-search: search the web"),
       )
 
     assertTrue(prompt.contains("exa-search"))
     assertTrue(prompt.contains("search_web"))
-    assertFalse(prompt.contains("Prefer calling load_skill first"))
+    assertFalse(prompt.contains("You MUST use load_skill before every task"))
+    assertFalse(prompt.contains("2026 World Cup news"))
+  }
+
+  @Test
+  fun compatToolResultPromptCompactsRawSearchPayloadForModel() {
+    val prompt =
+      buildCompatToolResultPrompt(
+        toolName = "langsearch-search",
+        originalUserRequest = "搜索美国和伊朗谈判",
+        result =
+          mapOf(
+            "status" to "succeeded",
+            "result" to
+              """
+              Search query: 美国和伊朗谈判的最新相关新闻\nSources: [1] 美伊谈判,最新消息进展
+              URL: https:\/\/example.com\/a
+
+
+              ${"Published: 2026-06-03  ".repeat(600)}
+              """.trimIndent(),
+          ),
+      )
+
+    assertTrue(prompt.contains("status: succeeded"))
+    assertTrue(prompt.contains("美伊谈判"))
+    assertFalse(prompt.contains("\\/"))
+    assertTrue(prompt.length < 8000)
   }
 }

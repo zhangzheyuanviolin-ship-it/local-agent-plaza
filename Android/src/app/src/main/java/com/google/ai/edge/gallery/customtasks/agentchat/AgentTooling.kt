@@ -26,6 +26,7 @@ private const val TOOL_CALL_CLOSE_TAG = "</tool_call>"
 private const val THINK_OPEN_TAG = "<think>"
 private const val THINK_CLOSE_TAG = "</think>"
 const val MAX_COMPAT_TOOL_STEPS = 8
+private const val MAX_COMPAT_MODEL_TOOL_RESULT_CHARS = 6000
 
 object AgentToolModeValues {
   const val NATIVE = "原生"
@@ -126,6 +127,7 @@ COMPAT_AGENT_INSTRUCTIONS
 $compatInstructionPayload
 
 USER_REQUEST
+/no_think
 $userInput
 """
     .trimIndent()
@@ -139,6 +141,7 @@ fun buildCompatContinuationInput(
 COMPAT_AGENT_INSTRUCTIONS
 $compatInstructionPayload
 
+/no_think
 $continuationPayload
 """
     .trimIndent()
@@ -149,14 +152,13 @@ fun buildCompatToolResultPrompt(
   result: Map<String, Any?>,
   originalUserRequest: String = "",
 ): String {
-  val resultJson = JSONObject()
-  result.forEach { (key, value) -> resultJson.put(key, JSONObject.wrap(value)) }
+  val compactPayload = compactCompatToolResultForModel(result)
   return """
 TOOL_RESULT
 original_user_request: $originalUserRequest
 tool: $toolName
 payload:
-$resultJson
+$compactPayload
 
 You are in compatibility tool mode.
 Use this tool result to continue the task. Do not output $THINK_OPEN_TAG or $THINK_CLOSE_TAG.
@@ -164,6 +166,49 @@ If another tool is required, reply with exactly one $TOOL_CALL_OPEN_TAG...$TOOL_
 Otherwise, answer the user directly in natural language.
 """
     .trimIndent()
+}
+
+fun compactCompatToolResultForModel(result: Map<String, Any?>): String {
+  val status = result["status"]?.toString().orEmpty()
+  val resultText =
+    listOf("result", "summary", "content", "text", "output")
+      .asSequence()
+      .mapNotNull { key -> result[key]?.toString()?.takeIf { it.isNotBlank() } }
+      .firstOrNull()
+      .orEmpty()
+  val error = result["error"]?.toString().orEmpty()
+  val recoveryHint = result["recovery_hint"]?.toString().orEmpty()
+  val normalizedResult =
+    resultText
+      .replace("\\n", "\n")
+      .replace("\\/", "/")
+      .lines()
+      .map { it.trim() }
+      .filter { it.isNotBlank() }
+      .joinToString("\n")
+      .take(MAX_COMPAT_MODEL_TOOL_RESULT_CHARS)
+  return buildString {
+    if (status.isNotBlank()) {
+      append("status: ")
+      append(status)
+      append('\n')
+    }
+    if (normalizedResult.isNotBlank()) {
+      append("result:\n")
+      append(normalizedResult)
+      append('\n')
+    }
+    if (error.isNotBlank()) {
+      append("error: ")
+      append(error.take(1000))
+      append('\n')
+    }
+    if (recoveryHint.isNotBlank()) {
+      append("recovery_hint: ")
+      append(recoveryHint.take(1000))
+      append('\n')
+    }
+  }.trim()
 }
 
 fun summarizeCompatToolResult(result: Map<String, Any?>): String {
@@ -277,9 +322,7 @@ internal fun buildCompatAgentInstructionPayload(
   val selectedSkillsList =
     selectedSkills.joinToString(separator = "\n") { "- ${it.name}: ${it.description}" }
       .ifBlank { "- 暂无已启用技能。" }
-  val basePromptWithSkills = injectSelectedSkills(baseSystemPrompt = baseSystemPrompt, selectedSkills = selectedSkills)
   return buildCompatAgentInstructionPayloadFromSummary(
-    basePromptWithSkills = basePromptWithSkills,
     selectedSkillsList = selectedSkillsList,
   )
 }
@@ -289,23 +332,20 @@ internal fun buildCompatAgentInstructionPayloadForTest(
   selectedSkillSummaries: List<String>,
 ): String {
   return buildCompatAgentInstructionPayloadFromSummary(
-    basePromptWithSkills = baseSystemPrompt,
     selectedSkillsList = selectedSkillSummaries.joinToString("\n") { "- $it" },
   )
 }
 
 private fun buildCompatAgentInstructionPayloadFromSummary(
-  basePromptWithSkills: String,
   selectedSkillsList: String,
 ): String {
   return """
-$basePromptWithSkills
-
-You are running in Qwen-compatible tool mode.
+You are running in Qwen-compatible tool mode. Reply in the user's language unless the user asks otherwise.
+Thinking is disabled for tool mode. Do not output $THINK_OPEN_TAG, $THINK_CLOSE_TAG, hidden reasoning, analysis text, or scratchpad text.
 
 When you need a tool, reply with exactly one tool call block and nothing else:
 $TOOL_CALL_OPEN_TAG
-{"name":"exa-search","arguments":{"query":"2026 World Cup news"}}
+{"name":"langsearch-search","arguments":{"query":"用户要搜索的关键词"}}
 $TOOL_CALL_CLOSE_TAG
 
 Compatibility mode rules:
@@ -313,8 +353,10 @@ Compatibility mode rules:
 - Only request one tool per assistant turn.
 - After a tool result is returned, either request the next tool in the same format or answer the user directly.
 - Only load or use skills that are enabled in this session.
-- Do not output $THINK_OPEN_TAG, $THINK_CLOSE_TAG, hidden reasoning, or analysis text.
 - Use "arguments" or "parameters" as a JSON object. Both are accepted.
+- Do not call load_skill unless the user explicitly asks to inspect a skill. Prefer direct compatibility tools.
+- If exactly one search tool is enabled, use that search tool. If multiple search tools are enabled and the user does not name one, prefer langsearch-search for Chinese queries and exa-search for English queries.
+- After search results are returned, summarize the sources directly. Do not repeat raw JSON, dates, URL fragments, or punctuation noise.
 
 Available compatibility tools:
 - exa-search arguments: {"query":"..."} . Searches the web with Exa when exa-search is enabled.
@@ -328,22 +370,4 @@ Enabled skills for this session:
 $selectedSkillsList
 """
     .trimIndent()
-}
-
-private fun injectSelectedSkills(baseSystemPrompt: String, selectedSkills: List<Skill>): String {
-  val selectedSkillsNamesAndDescriptions =
-    selectedSkills.joinToString(separator = "\n") { "- ${it.name}: ${it.description}" }
-      .ifBlank { "- 暂无已启用技能。" }
-  return if (baseSystemPrompt.contains("___SKILLS___")) {
-    baseSystemPrompt.replace("___SKILLS___", selectedSkillsNamesAndDescriptions)
-  } else {
-    buildString {
-      append(baseSystemPrompt)
-      if (baseSystemPrompt.isNotBlank()) {
-        append("\n\n")
-      }
-      append("可用技能:\n")
-      append(selectedSkillsNamesAndDescriptions)
-    }
-  }
 }

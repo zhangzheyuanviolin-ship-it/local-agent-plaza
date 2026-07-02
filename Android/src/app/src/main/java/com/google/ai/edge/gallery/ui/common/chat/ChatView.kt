@@ -318,9 +318,11 @@ fun ChatView(
                     context = context,
                     task = task,
                     model = prevModel,
+                    onDone = { modelManagerViewModel.selectModel(model = curModel) },
                   )
+                } else {
+                  modelManagerViewModel.selectModel(model = curModel)
                 }
-                modelManagerViewModel.selectModel(model = curModel)
               },
               allowEditingSystemPrompt = allowEditingSystemPrompt,
               curSystemPrompt = curSystemPrompt,

@@ -130,6 +130,7 @@ open class LlmChatViewModelBase(
     onDone: () -> Unit = {},
     onError: (String) -> Unit,
     allowThinking: Boolean = false,
+    extraContextOverride: Map<String, String>? = null,
     onInterceptPartialResult: (Model, String, Boolean, String?) -> Boolean = { _, _, _, _ -> false },
   ) {
     val accelerator = model.getStringConfigValue(key = ConfigKeys.ACCELERATOR, defaultValue = "")
@@ -335,7 +336,8 @@ open class LlmChatViewModelBase(
         val enableThinking =
           allowThinking &&
             model.getBooleanConfigValue(key = ConfigKeys.ENABLE_THINKING, defaultValue = false)
-        val extraContext = if (enableThinking) mapOf("enable_thinking" to "true") else null
+        val extraContext =
+          extraContextOverride ?: if (enableThinking) mapOf("enable_thinking" to "true") else null
 
         model.runtimeHelper.runInference(
           model = model,

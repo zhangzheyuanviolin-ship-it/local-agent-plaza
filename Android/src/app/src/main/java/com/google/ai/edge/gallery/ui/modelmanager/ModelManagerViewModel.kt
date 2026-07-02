@@ -489,6 +489,11 @@ constructor(
       }
 
       // Clean up.
+      for (activeModel in task.models) {
+        if (activeModel.name != model.name && activeModel.instance != null) {
+          cleanupModel(context = context, task = task, model = activeModel)
+        }
+      }
       cleanupModel(context = context, task = task, model = model)
 
       // Start initialization.
@@ -577,6 +582,8 @@ constructor(
           "Model '${model.name}' is still initializing.. Will clean up after it is done initializing",
         )
         model.cleanUpAfterInit = true
+      } else {
+        onDone()
       }
     }
   }

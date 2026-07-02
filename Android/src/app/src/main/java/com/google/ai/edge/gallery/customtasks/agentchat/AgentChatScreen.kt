@@ -81,7 +81,6 @@ import com.google.ai.edge.gallery.common.LOCAL_URL_BASE
 import com.google.ai.edge.gallery.common.SkillProgressAgentAction
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Model
-import com.google.ai.edge.gallery.data.ModelCapability
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.ui.common.BaseGalleryWebViewClient
@@ -232,7 +231,38 @@ fun AgentChatScreen(
     )
 
     if (resolveAgentToolMode(model) == ResolvedAgentToolMode.COMPAT && lastAgentText != null) {
-      val parsedToolCall = parseCompatToolCall(lastAgentText.content)
+      val visibleCompatText = stripCompatThinkingText(lastAgentText.content)
+      if (visibleCompatText != lastAgentText.content) {
+        viewModel.removeLastMessage(model = model)
+        if (visibleCompatText.isNotBlank()) {
+          viewModel.addMessage(
+            model = model,
+            message =
+              ChatMessageText(
+                content = visibleCompatText,
+                side = lastAgentText.side,
+                latencyMs = lastAgentText.latencyMs,
+                isMarkdown = lastAgentText.isMarkdown,
+                llmBenchmarkResult = lastAgentText.llmBenchmarkResult,
+                accelerator = lastAgentText.accelerator,
+                hideSenderLabel = lastAgentText.hideSenderLabel,
+                data = lastAgentText.data,
+              ),
+          )
+        } else {
+          viewModel.addMessage(
+            model = model,
+            message =
+              ChatMessageInfo(
+                content = "兼容工具调用已停止：模型只输出了思考内容，没有生成可展示的最终回复。请降低单轮输出长度或换用 Qwen3-4B-Instruct-2507。"
+              ),
+          )
+          compatToolStepsByModel.remove(model.name)
+          updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
+          return@handleGenerationDone
+        }
+      }
+      val parsedToolCall = parseCompatToolCall(visibleCompatText)
       if (parsedToolCall != null) {
         val originalUserRequest =
           (viewModel.getLastMessageWithTypeAndSide(
@@ -346,7 +376,8 @@ fun AgentChatScreen(
       onFirstToken = handleFirstToken,
       onDone = { handleGenerationDone(model) },
       onError = { errorMessage -> handleCompatError(model, errorMessage) },
-      allowThinking = task.allowCapability(ModelCapability.LLM_THINKING, model),
+      allowThinking = false,
+      extraContextOverride = mapOf("enable_thinking" to "false"),
       onInterceptPartialResult = interceptPartialResult,
     )
   }
@@ -414,6 +445,13 @@ fun AgentChatScreen(
     getActiveSkills = {
       skillManagerViewModel.getSelectedSkills().map { skill ->
         skillManagerViewModel.getSkillShortId(skill)
+      }
+    },
+    extraContextForModel = { model ->
+      if (resolveAgentToolMode(model) == ResolvedAgentToolMode.COMPAT) {
+        mapOf("enable_thinking" to "false")
+      } else {
+        null
       }
     },
     composableBelowMessageList = { model ->
