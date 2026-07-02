@@ -277,13 +277,117 @@
       ]
     },
     {
+      "name": "Qwen3-1.7B",
+      "modelId": "litert-community/Qwen3-1.7B",
+      "modelFile": "Qwen3_1.7B.litertlm",
+      "description": "Qwen3 1.7B LiteRT-LM model from litert-community. A small Chinese-capable baseline for chat, prompt lab, and agent tool-calling smoke tests.",
+      "sizeInBytes": 2056729520,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "462cad2169f2022dfd56079e75acd8183ebb0555",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen2.5-Coder-3B-Instruct",
+      "modelId": "litert-community/Qwen2.5-Coder-3B-Instruct",
+      "modelFile": "Qwen2.5_Coder_3B_It.litertlm",
+      "description": "Qwen2.5 Coder 3B Instruct LiteRT-LM model from litert-community. Candidate for workspace writing, code-oriented tool calls, and Chinese coding assistance.",
+      "sizeInBytes": 3433083824,
+      "minDeviceMemoryInGb": 10,
+      "commitHash": "a32e9f082c3fee8adcbe71990eae1eaca3eb0eb9",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3-4B-Thinking-2507",
+      "modelId": "litert-community/Qwen3-4B-Thinking-2507",
+      "modelFile": "model.litertlm",
+      "description": "Qwen3 4B Thinking 2507 LiteRT-LM model from litert-community. Experimental Chinese reasoning candidate for agent tasks on high-memory Android devices.",
+      "sizeInBytes": 2474357680,
+      "minDeviceMemoryInGb": 10,
+      "commitHash": "78616fa434463090d2f6d64bed83ee5d8c6bae61",
+      "capabilities": [
+        "llm_thinking"
+      ],
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_prompt_lab",
+          "llm_agent_chat"
+        ]
+      }
+    },
+    {
+      "name": "DeepSeek-R1-Distill-Qwen-7B",
+      "modelId": "litert-community/DeepSeek-R1-Distill-Qwen-7B",
+      "modelFile": "DeepSeek-R1-Distill-Qwen-7B_q4_block32_ekv4096.litertlm",
+      "description": "DeepSeek R1 Distill Qwen 7B LiteRT-LM model from litert-community. Experimental reasoning model for high-memory devices; useful as a Chinese reasoning baseline.",
+      "sizeInBytes": 4531978224,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "ab1a8fad8088987df0f74fe0b66547d276e90ebd",
+      "capabilities": [
+        "llm_thinking"
+      ],
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_prompt_lab",
+          "llm_agent_chat"
+        ]
+      }
+    },
+    {
       "name": "Gemma-4-12B-it (experimental)",
       "modelId": "litert-community/gemma-4-12B-it-litert-lm",
       "modelFile": "gemma-4-12B-it.litertlm",
       "description": "Experimental Gemma 4 12B (text-only) in LiteRT-LM format. **Android support is NOT officially declared** by the LiteRT team (model card lists macOS/Linux only). For 24GB+ RAM devices to validate large-parameter feasibility on Snapdragon 8 Gen3 class hardware.",
       "sizeInBytes": 8500000000,
       "minDeviceMemoryInGb": 16,
-      "commitHash": "",
+      "commitHash": "44cf85a326f79b814fa86a60af414c042755b43a",
       "defaultConfig": {
         "topK": 64,
         "topP": 0.95,
@@ -303,7 +407,7 @@
       "description": "Qwen3 4B (Alibaba) — strong native Chinese capability. INT4 mixed-precision for mobile deployment.",
       "sizeInBytes": 2800000000,
       "minDeviceMemoryInGb": 8,
-      "commitHash": "",
+      "commitHash": "84cc5a35c9c65cd18fcd65bb1f3a7d77a4acfe6e",
       "defaultConfig": {
         "topK": 20,
         "topP": 0.8,
@@ -324,7 +428,7 @@
       "description": "Qwen3 4B improved instruct release (2507). Strong Chinese, INT4 only.",
       "sizeInBytes": 2800000000,
       "minDeviceMemoryInGb": 8,
-      "commitHash": "",
+      "commitHash": "a7385088ed97778d7cf91a0b541fa1f95735f768",
       "defaultConfig": {
         "topK": 20,
         "topP": 0.8,
@@ -345,7 +449,7 @@
       "description": "Qwen3 8B (Alibaba) — stronger Chinese reasoning. INT4 mixed-precision for mobile.",
       "sizeInBytes": 5500000000,
       "minDeviceMemoryInGb": 12,
-      "commitHash": "",
+      "commitHash": "71ff705588319d52d374977eff3da4eee0c0d26e",
       "defaultConfig": {
         "topK": 20,
         "topP": 0.8,
@@ -366,7 +470,7 @@
       "description": "Qwen3 14B (Alibaba) — densest LiteRT-LM model with strong Chinese. INT4. Requires 24GB+ RAM. LiteRT-LM does not yet support MoE/sparse architecture, so this is the largest dense Chinese option.",
       "sizeInBytes": 9500000000,
       "minDeviceMemoryInGb": 16,
-      "commitHash": "",
+      "commitHash": "e4122fd370cec85c61467274b180e0954e4f422d",
       "defaultConfig": {
         "topK": 20,
         "topP": 0.8,
@@ -387,7 +491,7 @@
       "description": "Uncensored fine-tune of Gemma 4 E4B via abliteration (refusal direction removed). Source base Jiunsong/supergemma4-e4b-abliterated derived from google/gemma-4-E4B-it. Multimodal capabilities theoretically inherited from base (vision/audio) but not explicitly validated by uploader. INT8 quantization, 3.65GB.",
       "sizeInBytes": 3920000000,
       "minDeviceMemoryInGb": 12,
-      "commitHash": "",
+      "commitHash": "50a1b03dd955fe876d7d6466e86192be04ee1e80",
       "llmSupportImage": true,
       "llmSupportAudio": true,
       "defaultConfig": {
@@ -412,7 +516,7 @@
       "description": "Gemma 4 E4B fine-tuned for 128K context length with Multi-Token Prediction. Long-document scenarios. Text-only.",
       "sizeInBytes": 3700000000,
       "minDeviceMemoryInGb": 12,
-      "commitHash": "",
+      "commitHash": "49adb2050e18e9e6db798b0255aa84a3e2d81c58",
       "defaultConfig": {
         "topK": 64,
         "topP": 0.95,

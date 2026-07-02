@@ -58,6 +58,7 @@ import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.data.ValueType
 import com.google.ai.edge.gallery.data.createLlmChatConfigs
 import com.google.ai.edge.gallery.data.convertValueToTargetType
+import com.google.ai.edge.gallery.data.modelAllowlistUrls
 import com.google.ai.edge.gallery.data.normalizeContextWindowAndMaxTokens
 import com.google.ai.edge.gallery.proto.AccessTokenData
 import com.google.ai.edge.gallery.proto.ImportedModel
@@ -90,8 +91,6 @@ private const val TEXT_INPUT_HISTORY_MAX_SIZE = 50
 private const val MODEL_CONFIG_SECRET_PREFIX = "model_config___"
 private const val MODEL_ALLOWLIST_FILENAME = "model_allowlist.json"
 private const val MODEL_ALLOWLIST_TEST_FILENAME = "model_allowlist_test.json"
-private const val ALLOWLIST_BASE_URL =
-  "https://raw.githubusercontent.com/google-ai-edge/gallery/refs/heads/main/model_allowlists"
 
 private const val TEST_MODEL_ALLOW_LIST = ""
 
@@ -995,17 +994,24 @@ constructor(
           // Custom downstream builds may append a local suffix such as "-ala.1".
           // The upstream allowlist files are versioned only by the base semantic version.
           val version = BuildConfig.VERSION_NAME.substringBefore("-").replace(".", "_")
-          val url = getAllowlistUrl(version)
-          Log.d(TAG, "Loading model allowlist from internet. Url: $url")
-          val data = getJsonResponse<ModelAllowlist>(url = url)
-          modelAllowlist = data?.jsonObj
+          var modelAllowlistContent = ""
+          for (url in modelAllowlistUrls(version)) {
+            Log.d(TAG, "Loading model allowlist from internet. Url: $url")
+            val data = getJsonResponse<ModelAllowlist>(url = url)
+            if (data?.jsonObj != null) {
+              modelAllowlist = data.jsonObj
+              modelAllowlistContent = data.textContent
+              Log.d(TAG, "Done: loading model allowlist from internet: $url")
+              break
+            }
+            Log.w(TAG, "Failed to load model allowlist from internet: $url")
+          }
 
           if (modelAllowlist == null) {
             Log.w(TAG, "Failed to load model allowlist from internet. Trying to load it from disk")
             modelAllowlist = readModelAllowlistFromDisk()
           } else {
-            Log.d(TAG, "Done: loading model allowlist from internet")
-            saveModelAllowlistToDisk(modelAllowlistContent = data?.textContent ?: "{}")
+            saveModelAllowlistToDisk(modelAllowlistContent = modelAllowlistContent.ifBlank { "{}" })
           }
         }
 
@@ -1708,8 +1714,4 @@ constructor(
 
     return downloadedFileExists || unzippedDirectoryExists
   }
-}
-
-private fun getAllowlistUrl(version: String): String {
-  return "$ALLOWLIST_BASE_URL/${version}.json"
 }

@@ -75,8 +75,7 @@ data class AllowedModel(
     // Construct HF download url.
     var version = commitHash
     var downloadedFileName = modelFile
-    var downloadUrl =
-      url ?: "https://huggingface.co/$modelId/resolve/$commitHash/$modelFile?download=true"
+    var downloadUrl = url ?: huggingFaceModelFileUrl(modelId, commitHash, modelFile)
     var sizeInBytes = sizeInBytes
 
     // Handle per-soc model files.
@@ -88,7 +87,11 @@ data class AllowedModel(
           downloadedFileName = info.modelFile ?: "-"
           downloadUrl =
             info.url
-              ?: "https://huggingface.co/$modelId/resolve/${info.commitHash}/${info.modelFile}?download=true"
+              ?: huggingFaceModelFileUrl(
+                modelId = modelId,
+                revision = info.commitHash,
+                modelFile = info.modelFile ?: "-",
+              )
           sizeInBytes = info.sizeInBytes ?: -1
         }
       }
