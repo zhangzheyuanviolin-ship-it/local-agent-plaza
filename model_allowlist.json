@@ -201,10 +201,10 @@
       "minDeviceMemoryInGb": 6,
       "commitHash": "19edb84c69a0212f29a6ef17ba0d6f278b6a1614",
       "defaultConfig": {
-        "topK": 20,
-        "topP": 0.8,
-        "temperature": 0.7,
-        "maxTokens": 4096,
+        "topK": 5,
+        "topP": 0.6,
+        "temperature": 0.2,
+        "maxTokens": 1536,
         "accelerators": "gpu,cpu"
       },
       "taskTypes": [
@@ -285,10 +285,10 @@
       "minDeviceMemoryInGb": 8,
       "commitHash": "462cad2169f2022dfd56079e75acd8183ebb0555",
       "defaultConfig": {
-        "topK": 20,
-        "topP": 0.8,
-        "temperature": 0.7,
-        "maxTokens": 4096,
+        "topK": 5,
+        "topP": 0.6,
+        "temperature": 0.2,
+        "maxTokens": 1536,
         "accelerators": "gpu,cpu",
         "maxContextLength": 32000
       },
@@ -332,10 +332,10 @@
         "llm_thinking"
       ],
       "defaultConfig": {
-        "topK": 20,
-        "topP": 0.8,
-        "temperature": 0.7,
-        "maxTokens": 4096,
+        "topK": 5,
+        "topP": 0.6,
+        "temperature": 0.2,
+        "maxTokens": 1536,
         "accelerators": "gpu,cpu",
         "maxContextLength": 32000
       },
@@ -364,10 +364,10 @@
         "llm_thinking"
       ],
       "defaultConfig": {
-        "topK": 20,
-        "topP": 0.8,
-        "temperature": 0.7,
-        "maxTokens": 4096,
+        "topK": 5,
+        "topP": 0.6,
+        "temperature": 0.2,
+        "maxTokens": 1536,
         "accelerators": "gpu,cpu",
         "maxContextLength": 32000
       },
@@ -413,10 +413,10 @@
       "minDeviceMemoryInGb": 8,
       "commitHash": "84cc5a35c9c65cd18fcd65bb1f3a7d77a4acfe6e",
       "defaultConfig": {
-        "topK": 20,
-        "topP": 0.8,
-        "temperature": 0.7,
-        "maxTokens": 4096,
+        "topK": 5,
+        "topP": 0.6,
+        "temperature": 0.2,
+        "maxTokens": 1536,
         "accelerators": "gpu,cpu",
         "maxContextLength": 32000
       },
@@ -435,10 +435,10 @@
       "minDeviceMemoryInGb": 8,
       "commitHash": "a7385088ed97778d7cf91a0b541fa1f95735f768",
       "defaultConfig": {
-        "topK": 20,
-        "topP": 0.8,
-        "temperature": 0.7,
-        "maxTokens": 4096,
+        "topK": 5,
+        "topP": 0.6,
+        "temperature": 0.2,
+        "maxTokens": 1536,
         "accelerators": "gpu,cpu",
         "maxContextLength": 32000
       },
@@ -457,10 +457,10 @@
       "minDeviceMemoryInGb": 12,
       "commitHash": "71ff705588319d52d374977eff3da4eee0c0d26e",
       "defaultConfig": {
-        "topK": 20,
-        "topP": 0.8,
-        "temperature": 0.7,
-        "maxTokens": 4096,
+        "topK": 5,
+        "topP": 0.6,
+        "temperature": 0.2,
+        "maxTokens": 1536,
         "accelerators": "gpu,cpu",
         "maxContextLength": 32000
       },
@@ -479,10 +479,10 @@
       "minDeviceMemoryInGb": 16,
       "commitHash": "e4122fd370cec85c61467274b180e0954e4f422d",
       "defaultConfig": {
-        "topK": 20,
-        "topP": 0.8,
-        "temperature": 0.7,
-        "maxTokens": 4096,
+        "topK": 5,
+        "topP": 0.6,
+        "temperature": 0.2,
+        "maxTokens": 1536,
         "accelerators": "gpu,cpu",
         "maxContextLength": 32000
       },

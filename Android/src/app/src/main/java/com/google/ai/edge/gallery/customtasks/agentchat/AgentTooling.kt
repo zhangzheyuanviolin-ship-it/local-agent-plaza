@@ -127,7 +127,6 @@ COMPAT_AGENT_INSTRUCTIONS
 $compatInstructionPayload
 
 USER_REQUEST
-/no_think
 $userInput
 """
     .trimIndent()
@@ -141,7 +140,6 @@ fun buildCompatContinuationInput(
 COMPAT_AGENT_INSTRUCTIONS
 $compatInstructionPayload
 
-/no_think
 $continuationPayload
 """
     .trimIndent()
@@ -161,9 +159,8 @@ payload:
 $compactPayload
 
 You are in compatibility tool mode.
-Use this tool result to continue the task. Do not output $THINK_OPEN_TAG or $THINK_CLOSE_TAG.
-If another tool is required, reply with exactly one $TOOL_CALL_OPEN_TAG...$TOOL_CALL_CLOSE_TAG block and nothing else.
-Otherwise, answer the user directly in natural language.
+Use this tool result to answer the original user request directly in Chinese. Do not output $THINK_OPEN_TAG, $THINK_CLOSE_TAG, hidden reasoning, analysis text, scratchpad text, raw JSON, or another tool call unless the result explicitly says the tool failed.
+Keep the answer concise and stop after the answer is complete.
 """
     .trimIndent()
 }
@@ -343,10 +340,7 @@ private fun buildCompatAgentInstructionPayloadFromSummary(
 You are running in Qwen-compatible tool mode. Reply in the user's language unless the user asks otherwise.
 Thinking is disabled for tool mode. Do not output $THINK_OPEN_TAG, $THINK_CLOSE_TAG, hidden reasoning, analysis text, or scratchpad text.
 
-When you need a tool, reply with exactly one tool call block and nothing else:
-$TOOL_CALL_OPEN_TAG
-{"name":"langsearch-search","arguments":{"query":"用户要搜索的关键词"}}
-$TOOL_CALL_CLOSE_TAG
+When you need a tool, reply with exactly one tool call block and nothing else. The block must start with $TOOL_CALL_OPEN_TAG and end with $TOOL_CALL_CLOSE_TAG. Inside the block, output one JSON object with a tool name and an arguments object. Put the user's actual request keywords in the query field.
 
 Compatibility mode rules:
 - Never mix natural language with a tool call block.
@@ -357,6 +351,7 @@ Compatibility mode rules:
 - Do not call load_skill unless the user explicitly asks to inspect a skill. Prefer direct compatibility tools.
 - If exactly one search tool is enabled, use that search tool. If multiple search tools are enabled and the user does not name one, prefer langsearch-search for Chinese queries and exa-search for English queries.
 - After search results are returned, summarize the sources directly. Do not repeat raw JSON, dates, URL fragments, or punctuation noise.
+- Stop after a concise final answer. Do not continue with repeated phrases, punctuation, or filler.
 
 Available compatibility tools:
 - exa-search arguments: {"query":"..."} . Searches the web with Exa when exa-search is enabled.

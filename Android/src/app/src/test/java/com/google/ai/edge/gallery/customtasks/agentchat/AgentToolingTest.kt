@@ -92,6 +92,8 @@ class AgentToolingTest {
     assertTrue(prompt.contains("search_web"))
     assertFalse(prompt.contains("You MUST use load_skill before every task"))
     assertFalse(prompt.contains("2026 World Cup news"))
+    assertFalse(prompt.contains("用户要搜索的关键词"))
+    assertFalse(prompt.contains("{\"name\""))
   }
 
   @Test

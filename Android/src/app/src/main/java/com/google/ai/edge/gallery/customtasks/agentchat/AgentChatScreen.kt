@@ -231,8 +231,9 @@ fun AgentChatScreen(
     )
 
     if (resolveAgentToolMode(model) == ResolvedAgentToolMode.COMPAT && lastAgentText != null) {
+      val parsedToolCall = parseCompatToolCall(lastAgentText.content)
       val visibleCompatText = stripCompatThinkingText(lastAgentText.content)
-      if (visibleCompatText != lastAgentText.content) {
+      if (parsedToolCall == null && visibleCompatText != lastAgentText.content) {
         viewModel.removeLastMessage(model = model)
         if (visibleCompatText.isNotBlank()) {
           viewModel.addMessage(
@@ -262,7 +263,6 @@ fun AgentChatScreen(
           return@handleGenerationDone
         }
       }
-      val parsedToolCall = parseCompatToolCall(visibleCompatText)
       if (parsedToolCall != null) {
         val originalUserRequest =
           (viewModel.getLastMessageWithTypeAndSide(

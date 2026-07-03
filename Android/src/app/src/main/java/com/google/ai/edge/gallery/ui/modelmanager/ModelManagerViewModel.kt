@@ -74,7 +74,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import javax.inject.Inject
 import kotlin.collections.sortedWith
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -488,26 +490,53 @@ constructor(
         return@launch
       }
 
-      // Clean up.
-      for (activeModel in task.models) {
-        if (activeModel.name != model.name && activeModel.instance != null) {
-          cleanupModel(context = context, task = task, model = activeModel)
+      val initializeTargetModel: suspend () -> String = {
+        val result = CompletableDeferred<String>()
+        val systemPrompt = SystemPromptHelper.getEffectiveSystemPrompt(systemPromptRepository, task)
+        val customTask = getCustomTaskByTaskId(id = task.id)
+        if (customTask == null) {
+          result.complete("No custom task found for ${task.id}")
+        } else {
+          customTask.initializeModelFn(
+            context = context,
+            coroutineScope = viewModelScope,
+            model = model,
+            systemInstruction = Contents.of(systemPrompt),
+            onDone = { error -> result.complete(error) },
+          )
         }
+        result.await()
       }
-      cleanupModel(context = context, task = task, model = model)
 
-      // Start initialization.
-      Log.d(TAG, "Initializing model '${model.name}'...")
-      model.initializing = true
-      updateModelInitializationStatus(
-        model = model,
-        status = ModelInitializationStatusType.INITIALIZING,
-      )
+      var lastError = ""
+      repeat(2) { attempt ->
+        var cleanedAnyModel = false
+        for (activeModel in task.models) {
+          if (activeModel.instance != null || activeModel.initializing) {
+            cleanedAnyModel = true
+            cleanupModelAndWait(context = context, task = task, model = activeModel)
+          }
+        }
+        if (cleanedAnyModel) {
+          System.gc()
+          delay(900)
+        } else if (attempt > 0) {
+          delay(600)
+        }
 
-      val onDoneFn: (error: String) -> Unit = { error ->
+        // Start initialization only after previous LiteRT-LM engines have actually closed.
+        Log.d(TAG, "Initializing model '${model.name}'... attempt=${attempt + 1}")
+        model.initializing = true
+        updateModelInitializationStatus(
+          model = model,
+          status = ModelInitializationStatusType.INITIALIZING,
+        )
+
+        val error = initializeTargetModel()
+        lastError = error
         model.initializing = false
         if (model.instance != null) {
-          Log.d(TAG, "Model '${model.name}' initialized successfully")
+          Log.d(TAG, "Model '${model.name}' initialized successfully on attempt ${attempt + 1}")
           updateModelInitializationStatus(
             model = model,
             status = ModelInitializationStatusType.INITIALIZED,
@@ -517,27 +546,58 @@ constructor(
             cleanupModel(context = context, task = task, model = model)
           }
           onDone()
-        } else if (error.isNotEmpty()) {
-          Log.d(TAG, "Model '${model.name}' failed to initialize")
+          return@launch
+        }
+
+        if (error.isNotEmpty()) {
+          Log.d(TAG, "Model '${model.name}' failed to initialize on attempt ${attempt + 1}: $error")
+          if (attempt == 0 && shouldRetryAfterLiteRtEngineCreateFailure(error)) {
+            updateModelInitializationStatus(
+              model = model,
+              status = ModelInitializationStatusType.NOT_INITIALIZED,
+            )
+            System.gc()
+            delay(1200)
+            return@repeat
+          }
           updateModelInitializationStatus(
             model = model,
             status = ModelInitializationStatusType.ERROR,
             error = error,
           )
+          return@launch
         }
       }
 
-      // Call the model initialization function.
-      val systemPrompt = SystemPromptHelper.getEffectiveSystemPrompt(systemPromptRepository, task)
-      getCustomTaskByTaskId(id = task.id)
-        ?.initializeModelFn(
-          context = context,
-          coroutineScope = viewModelScope,
+      if (model.instance == null) {
+        updateModelInitializationStatus(
           model = model,
-          systemInstruction = Contents.of(systemPrompt),
-          onDone = onDoneFn,
+          status = ModelInitializationStatusType.ERROR,
+          error = lastError.ifBlank { "Model initialization failed." },
         )
+      }
     }
+  }
+
+  private suspend fun cleanupModelAndWait(context: Context, task: Task, model: Model) {
+    if (model.initializing && model.instance == null) {
+      model.cleanUpAfterInit = true
+      while (model.initializing) {
+        delay(100)
+      }
+    }
+    if (model.instance == null) {
+      return
+    }
+    val result = CompletableDeferred<Unit>()
+    cleanupModel(context = context, task = task, model = model, onDone = { result.complete(Unit) })
+    result.await()
+  }
+
+  private fun shouldRetryAfterLiteRtEngineCreateFailure(error: String): Boolean {
+    return error.contains("Failed to create engine", ignoreCase = true) ||
+      error.contains("litert_compiled_model", ignoreCase = true) ||
+      error.contains("llm_litert_compiled_model_executor", ignoreCase = true)
   }
 
   fun cleanupModel(
