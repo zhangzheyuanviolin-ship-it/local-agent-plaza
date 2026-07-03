@@ -179,6 +179,8 @@ object LlmChatModelHelper : LlmModelHelper {
       ExperimentalFlags.enableConversationConstrainedDecoding = false
       model.instance = LlmModelInstance(engine = engine, conversation = conversation)
     } catch (e: Exception) {
+      ExperimentalFlags.enableSpeculativeDecoding = false
+      ExperimentalFlags.enableConversationConstrainedDecoding = false
       onDone(cleanUpMediapipeTaskErrorMessage(e.message ?: "Unknown error"))
       return
     }
@@ -240,6 +242,7 @@ object LlmChatModelHelper : LlmModelHelper {
 
       Log.d(TAG, "Resetting done")
     } catch (e: Exception) {
+      ExperimentalFlags.enableConversationConstrainedDecoding = false
       Log.d(TAG, "Failed to reset conversation", e)
     }
   }

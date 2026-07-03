@@ -77,6 +77,31 @@ class AgentToolingTest {
   }
 
   @Test
+  fun parserAcceptsQwenQueryOnlySearchCall() {
+    val parsed =
+      parseCompatToolCall(
+        """<tool_call>{"query":"美国和伊朗谈判的最新相关新闻"}</tool_call>"""
+      )
+
+    assertEquals("search_web", parsed?.toolName)
+    assertEquals("美国和伊朗谈判的最新相关新闻", parsed?.arguments?.getString("query"))
+  }
+
+  @Test
+  fun parserAcceptsQwenToolNameAndUnclosedTag() {
+    val parsed =
+      parseCompatToolCall(
+        """
+        To search, I will call the tool.
+        <tool_call> {"tool_name":"exa-search","arguments":{"query":"latest news on US and Iran negotiations"}}
+        """.trimIndent()
+      )
+
+    assertEquals("exa-search", parsed?.toolName)
+    assertEquals("latest news on US and Iran negotiations", parsed?.arguments?.getString("query"))
+  }
+
+  @Test
   fun compatPromptAdvertisesDirectSearchToolsAndNoLoadSkillRequirement() {
     val prompt =
       buildCompatAgentInstructionPayloadForTest(

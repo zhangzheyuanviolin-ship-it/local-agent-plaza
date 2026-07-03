@@ -686,7 +686,15 @@ open class AgentTools() : ToolSet {
               getOptionalStringArgument(
                   arguments = arguments,
                   names = listOf("skill_name", "skillName", "engine", "provider"),
-                  defaultValue = preferredEnabledSearchSkillName(),
+                  defaultValue =
+                    preferredEnabledSearchSkillName(
+                      query =
+                        getOptionalStringArgument(
+                          arguments = arguments,
+                          names = listOf("query", "search_query", "searchQuery", "q", "input", "topic"),
+                          defaultValue = "",
+                        )
+                    ),
                 )
                 .lowercase(),
             arguments = arguments,
@@ -790,9 +798,15 @@ open class AgentTools() : ToolSet {
       .mapValues { it.value }
   }
 
-  private fun preferredEnabledSearchSkillName(): String {
+  private fun preferredEnabledSearchSkillName(query: String = ""): String {
     val selected = skillManagerViewModel.getSelectedSkills().map { it.name }.toSet()
-    return listOf(EXA_SEARCH_SKILL_NAME, TAVILY_SEARCH_SKILL_NAME, LANGSEARCH_SEARCH_SKILL_NAME)
+    val preferredOrder =
+      if (query.any { it in '\u4e00'..'\u9fff' }) {
+        listOf(LANGSEARCH_SEARCH_SKILL_NAME, EXA_SEARCH_SKILL_NAME, TAVILY_SEARCH_SKILL_NAME)
+      } else {
+        listOf(EXA_SEARCH_SKILL_NAME, TAVILY_SEARCH_SKILL_NAME, LANGSEARCH_SEARCH_SKILL_NAME)
+      }
+    return preferredOrder
       .firstOrNull { selected.contains(it) }
       ?: EXA_SEARCH_SKILL_NAME
   }

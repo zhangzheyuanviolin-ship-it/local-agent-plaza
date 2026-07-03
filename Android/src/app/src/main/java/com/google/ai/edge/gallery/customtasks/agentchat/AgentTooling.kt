@@ -232,10 +232,11 @@ fun summarizeCompatToolResult(result: Map<String, Any?>): String {
 
 fun parseCompatToolCall(rawText: String): ParsedCompatToolCall? {
   val startIndex = rawText.indexOf(TOOL_CALL_OPEN_TAG)
-  val endIndex = rawText.indexOf(TOOL_CALL_CLOSE_TAG)
-  if (startIndex < 0 || endIndex <= startIndex) {
+  if (startIndex < 0) {
     return null
   }
+  val closingTagIndex = rawText.indexOf(TOOL_CALL_CLOSE_TAG, startIndex = startIndex)
+  val endIndex = if (closingTagIndex > startIndex) closingTagIndex else rawText.length
   val payload =
     rawText
       .substring(startIndex + TOOL_CALL_OPEN_TAG.length, endIndex)
@@ -248,13 +249,24 @@ fun parseCompatToolCall(rawText: String): ParsedCompatToolCall? {
   val json = runCatching { JSONObject(balancedPayload) }.getOrNull() ?: return null
   val toolName =
     json.optString("tool").ifBlank {
-      json.optString("name")
+      json.optString("name").ifBlank { json.optString("tool_name") }
     }
-  if (toolName.isBlank()) {
+  val arguments =
+    json.optJSONObject("arguments") ?: json.optJSONObject("parameters") ?: buildCompatArgumentsFromRoot(json)
+  val resolvedToolName =
+    toolName.ifBlank {
+      when {
+        getOptionalStringFromJson(arguments, listOf("query", "search_query", "searchQuery", "q", "input", "topic"))
+          .isNotBlank() -> "search_web"
+        arguments.has("path") && !arguments.has("content") -> "list_workspace"
+        arguments.has("path") && arguments.has("content") -> "write_workspace_text_file"
+        else -> ""
+      }
+    }
+  if (resolvedToolName.isBlank()) {
     return null
   }
-  val arguments = json.optJSONObject("arguments") ?: json.optJSONObject("parameters") ?: JSONObject()
-  return ParsedCompatToolCall(toolName = toolName.trim(), arguments = arguments)
+  return ParsedCompatToolCall(toolName = resolvedToolName.trim(), arguments = arguments)
 }
 
 fun stripCompatThinkingText(rawText: String): String {
@@ -310,6 +322,26 @@ private fun extractFirstJsonObject(text: String): String? {
     }
   }
   return null
+}
+
+private fun buildCompatArgumentsFromRoot(json: JSONObject): JSONObject {
+  return JSONObject().also { arguments ->
+    json.keys().forEach { key ->
+      if (key != "tool" && key != "name" && key != "tool_name") {
+        arguments.put(key, json.get(key))
+      }
+    }
+  }
+}
+
+private fun getOptionalStringFromJson(json: JSONObject, names: List<String>): String {
+  for (name in names) {
+    val value = json.optString(name)
+    if (value.isNotBlank()) {
+      return value
+    }
+  }
+  return ""
 }
 
 internal fun buildCompatAgentInstructionPayload(

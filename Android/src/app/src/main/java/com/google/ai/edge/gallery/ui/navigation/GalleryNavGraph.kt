@@ -530,19 +530,21 @@ private fun CustomTaskScreen(
           onModelSelected = { prevModel, newSelectedModel ->
             val instanceToCleanUp = prevModel.instance
             scope.launch(Dispatchers.Default) {
-              // Clean up prev model.
               if (prevModel.name != newSelectedModel.name) {
                 modelManagerViewModel.cleanupModel(
                   context = context,
                   task = task,
                   model = prevModel,
                   instanceToCleanUp = instanceToCleanUp,
+                  onDone = {
+                    Log.d(TAG, "from model picker after cleanup. new: ${newSelectedModel.name}")
+                    modelManagerViewModel.selectModel(model = newSelectedModel)
+                  },
                 )
+              } else {
+                Log.d(TAG, "from model picker. new: ${newSelectedModel.name}")
+                modelManagerViewModel.selectModel(model = newSelectedModel)
               }
-
-              // Update selected model.
-              Log.d(TAG, "from model picker. new: ${newSelectedModel.name}")
-              modelManagerViewModel.selectModel(model = newSelectedModel)
             }
           },
         )
