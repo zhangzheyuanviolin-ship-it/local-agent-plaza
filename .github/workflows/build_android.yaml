@@ -109,6 +109,11 @@ jobs:
                 CHANNEL="mcp"
                 SUFFIX=".mcp"
                 ;;
+              feature/mcp-presets-and-runtime-fixes-20260701)
+                VNAME="1.0.14-mcp.$GITHUB_RUN_NUMBER"
+                CHANNEL="mcp"
+                SUFFIX=".mcp"
+                ;;
               feature/*)
                 SAFE_VERSION="$(printf '%s' "$BRANCH" | sed 's|^feature/||; s|[^a-zA-Z0-9.-]|-|g; s|^-*||; s|-*$||')"
                 SAFE_PACKAGE="$(printf '%s' "$BRANCH" | sed 's|^feature/||; s|[^a-zA-Z0-9_]|_|g; s|^_*||; s|_*$||')"
