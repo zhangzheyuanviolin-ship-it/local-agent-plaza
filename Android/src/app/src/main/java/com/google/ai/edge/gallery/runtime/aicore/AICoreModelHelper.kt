@@ -240,6 +240,7 @@ object AICoreModelHelper : LlmModelHelper {
   override fun runInference(
     model: Model,
     input: String,
+    message: Message?,
     resultListener: ResultListener,
     cleanUpListener: CleanUpListener,
     onError: (message: String) -> Unit,

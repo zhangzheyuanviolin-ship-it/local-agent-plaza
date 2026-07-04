@@ -744,7 +744,7 @@ open class AgentTools() : ToolSet {
           mapOf(
             "status" to "failed",
             "error" to "Unknown compatibility tool \"$toolName\".",
-            "recovery_hint" to "Retry with one of: exa-search, tavily-search, langsearch-search, search_web, list_workspace, read_workspace_text_file, write_workspace_text_file, run_js, run_configured_intent.",
+            "recovery_hint" to "Retry with an enabled compatibility tool such as search_web, list_workspace, read_workspace_text_file, write_workspace_text_file, run_js, or run_configured_intent.",
           )
       }
     return CompatToolExecutionResult(toolName = normalizedToolName, result = result)

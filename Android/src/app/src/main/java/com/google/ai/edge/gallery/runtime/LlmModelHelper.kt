@@ -107,6 +107,7 @@ interface LlmModelHelper {
   fun runInference(
     model: Model,
     input: String,
+    message: Message? = null,
     resultListener: ResultListener,
     cleanUpListener: CleanUpListener,
     onError: (message: String) -> Unit = {},

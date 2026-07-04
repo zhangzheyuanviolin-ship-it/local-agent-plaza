@@ -284,6 +284,7 @@ object LlmChatModelHelper : LlmModelHelper {
   override fun runInference(
     model: Model,
     input: String,
+    message: Message?,
     resultListener: ResultListener,
     cleanUpListener: CleanUpListener,
     onError: (message: String) -> Unit,
@@ -305,20 +306,25 @@ object LlmChatModelHelper : LlmModelHelper {
 
     val conversation = instance.conversation
 
-    val contents = mutableListOf<Content>()
-    for (image in images) {
-      contents.add(Content.ImageBytes(image.toPngByteArray()))
-    }
-    for (audioClip in audioClips) {
-      contents.add(Content.AudioBytes(audioClip))
-    }
-    // add the text after image and audio for the accurate last token
-    if (input.trim().isNotEmpty()) {
-      contents.add(Content.Text(input))
-    }
+    val messageToSend =
+      message
+        ?: run {
+          val contents = mutableListOf<Content>()
+          for (image in images) {
+            contents.add(Content.ImageBytes(image.toPngByteArray()))
+          }
+          for (audioClip in audioClips) {
+            contents.add(Content.AudioBytes(audioClip))
+          }
+          // add the text after image and audio for the accurate last token
+          if (input.trim().isNotEmpty()) {
+            contents.add(Content.Text(input))
+          }
+          Message.user(Contents.of(contents))
+        }
 
     conversation.sendMessageAsync(
-      Contents.of(contents),
+      messageToSend,
       object : MessageCallback {
         override fun onMessage(message: Message) {
           resultListener(message.toString(), false, message.channels["thought"])

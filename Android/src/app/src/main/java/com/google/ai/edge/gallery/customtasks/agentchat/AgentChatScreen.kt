@@ -101,6 +101,7 @@ import com.google.ai.edge.gallery.ui.llmchat.LlmChatScreen
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Message
 import java.lang.Exception
@@ -194,7 +195,7 @@ fun AgentChatScreen(
       modelManagerViewModel = modelManagerViewModel,
     )
   }
-  var continueCompatConversation: ((Model, String) -> Unit)? = null
+  var continueCompatConversation: ((Model, Message) -> Unit)? = null
   val handleGenerationDone: (Model) -> Unit = handleGenerationDone@ { model ->
     val lastAgentText =
       viewModel.getLastMessageWithTypeAndSide(
@@ -326,29 +327,23 @@ fun AgentChatScreen(
             screenWidthDp = screenWidthDp.value,
           )
           updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
-          val sessionConfig =
-            createAgentSessionConfig(
-              model = model,
-              baseSystemPrompt = curSystemPrompt,
-              skillManagerViewModel = skillManagerViewModel,
-            )
-          viewModel.resetRuntimeConversationOnly(
-            model = model,
-            systemInstruction = sessionConfig.systemInstruction,
-            tools = listOf(),
-            supportImage = false,
-            supportAudio = false,
-            enableConversationConstrainedDecoding = false,
-            onDone = {
-              continueCompatConversation?.invoke(
-                model,
-                buildCompatToolResultPrompt(
-                  toolName = executionResult.toolName,
-                  result = executionResult.result,
-                  originalUserRequest = originalUserRequest,
-                ),
+          continueCompatConversation?.invoke(
+            model,
+            Message.tool(
+              Contents.of(
+                Content.ToolResponse(
+                  executionResult.toolName,
+                  JSONObject(
+                      buildCompatToolResultPayload(
+                        toolName = executionResult.toolName,
+                        result = executionResult.result,
+                        originalUserRequest = originalUserRequest,
+                      )
+                    )
+                    .toString(),
+                )
               )
-            },
+            ),
           )
         }
         return@handleGenerationDone
@@ -358,21 +353,11 @@ fun AgentChatScreen(
     compatToolStepsByModel.remove(model.name)
     updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
   }
-  continueCompatConversation = { model, input ->
-    val compatInstructionPayload = buildCompatInstructionPayload(model)
+  continueCompatConversation = { model, message ->
     viewModel.generateResponse(
       model = model,
-      input =
-        if (resolveAgentToolMode(model) == ResolvedAgentToolMode.COMPAT &&
-          compatInstructionPayload.isNotBlank()
-        ) {
-          buildCompatContinuationInput(
-            continuationPayload = input,
-            compatInstructionPayload = compatInstructionPayload,
-          )
-        } else {
-          input
-        },
+      input = "",
+      inputMessage = message,
       onFirstToken = handleFirstToken,
       onDone = { handleGenerationDone(model) },
       onError = { errorMessage -> handleCompatError(model, errorMessage) },

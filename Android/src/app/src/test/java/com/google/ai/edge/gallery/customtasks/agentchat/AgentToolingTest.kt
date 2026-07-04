@@ -102,7 +102,7 @@ class AgentToolingTest {
   }
 
   @Test
-  fun compatPromptAdvertisesDirectSearchToolsAndNoLoadSkillRequirement() {
+  fun compatPromptAdvertisesOnlyEnabledGenericSearchAndNoLoadSkillRequirement() {
     val prompt =
       buildCompatAgentInstructionPayloadForTest(
         baseSystemPrompt =
@@ -113,8 +113,9 @@ class AgentToolingTest {
         selectedSkillSummaries = listOf("exa-search: search the web"),
       )
 
-    assertTrue(prompt.contains("exa-search"))
     assertTrue(prompt.contains("search_web"))
+    assertFalse(prompt.contains("- langsearch-search arguments"))
+    assertFalse(prompt.contains("- tavily-search arguments"))
     assertFalse(prompt.contains("You MUST use load_skill before every task"))
     assertFalse(prompt.contains("2026 World Cup news"))
     assertFalse(prompt.contains("用户要搜索的关键词"))

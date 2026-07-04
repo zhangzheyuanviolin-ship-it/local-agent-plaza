@@ -124,6 +124,7 @@ open class LlmChatViewModelBase(
   fun generateResponse(
     model: Model,
     input: String,
+    inputMessage: Message? = null,
     images: List<Bitmap> = listOf(),
     audioMessages: List<ChatMessageAudioClip> = listOf(),
     onFirstToken: (Model) -> Unit = {},
@@ -342,6 +343,7 @@ open class LlmChatViewModelBase(
         model.runtimeHelper.runInference(
           model = model,
           input = input,
+          message = inputMessage,
           images = images,
           audioClips = audioClips,
           resultListener = resultListener,

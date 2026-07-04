@@ -26,7 +26,7 @@ private const val TOOL_CALL_CLOSE_TAG = "</tool_call>"
 private const val THINK_OPEN_TAG = "<think>"
 private const val THINK_CLOSE_TAG = "</think>"
 const val MAX_COMPAT_TOOL_STEPS = 8
-private const val MAX_COMPAT_MODEL_TOOL_RESULT_CHARS = 6000
+private const val MAX_COMPAT_MODEL_TOOL_RESULT_CHARS = 2400
 
 object AgentToolModeValues {
   const val NATIVE = "原生"
@@ -150,19 +150,40 @@ fun buildCompatToolResultPrompt(
   result: Map<String, Any?>,
   originalUserRequest: String = "",
 ): String {
-  val compactPayload = compactCompatToolResultForModel(result)
+  val compactPayload =
+    buildCompatToolResultPayload(
+      toolName = toolName,
+      result = result,
+      originalUserRequest = originalUserRequest,
+    )
   return """
 TOOL_RESULT
-original_user_request: $originalUserRequest
-tool: $toolName
+original_user_request: ${compactPayload["original_user_request"]}
+tool: ${compactPayload["tool"]}
+status: ${compactPayload["status"]}
 payload:
-$compactPayload
+${compactPayload["result"]}
 
 You are in compatibility tool mode.
 Use this tool result to answer the original user request directly in Chinese. Do not output $THINK_OPEN_TAG, $THINK_CLOSE_TAG, hidden reasoning, analysis text, scratchpad text, raw JSON, or another tool call unless the result explicitly says the tool failed.
 Keep the answer concise and stop after the answer is complete.
 """
     .trimIndent()
+}
+
+fun buildCompatToolResultPayload(
+  toolName: String,
+  result: Map<String, Any?>,
+  originalUserRequest: String = "",
+): Map<String, Any?> {
+  return mapOf(
+    "original_user_request" to originalUserRequest,
+    "tool" to toolName,
+    "status" to (result["status"]?.toString().orEmpty().ifBlank { "succeeded" }),
+    "result" to compactCompatToolResultForModel(result),
+    "instruction" to
+      "请基于这个工具结果，用中文直接回答原始用户请求；不要输出思考过程、工具调用、原始JSON或无关重复内容。",
+  )
 }
 
 fun compactCompatToolResultForModel(result: Map<String, Any?>): String {
@@ -351,8 +372,10 @@ internal fun buildCompatAgentInstructionPayload(
   val selectedSkillsList =
     selectedSkills.joinToString(separator = "\n") { "- ${it.name}: ${it.description}" }
       .ifBlank { "- 暂无已启用技能。" }
+  val selectedSkillNames = selectedSkills.map { it.name.trim().lowercase() }.toSet()
   return buildCompatAgentInstructionPayloadFromSummary(
     selectedSkillsList = selectedSkillsList,
+    availableToolsList = buildAvailableCompatToolsList(selectedSkillNames),
   )
 }
 
@@ -360,13 +383,16 @@ internal fun buildCompatAgentInstructionPayloadForTest(
   baseSystemPrompt: String,
   selectedSkillSummaries: List<String>,
 ): String {
+  val selectedSkillNames = selectedSkillSummaries.map { it.substringBefore(":").trim().lowercase() }.toSet()
   return buildCompatAgentInstructionPayloadFromSummary(
     selectedSkillsList = selectedSkillSummaries.joinToString("\n") { "- $it" },
+    availableToolsList = buildAvailableCompatToolsList(selectedSkillNames),
   )
 }
 
 private fun buildCompatAgentInstructionPayloadFromSummary(
   selectedSkillsList: String,
+  availableToolsList: String,
 ): String {
   return """
 You are running in Qwen-compatible tool mode. Reply in the user's language unless the user asks otherwise.
@@ -381,20 +407,34 @@ Compatibility mode rules:
 - Only load or use skills that are enabled in this session.
 - Use "arguments" or "parameters" as a JSON object. Both are accepted.
 - Do not call load_skill unless the user explicitly asks to inspect a skill. Prefer direct compatibility tools.
-- If exactly one search tool is enabled, use that search tool. If multiple search tools are enabled and the user does not name one, prefer langsearch-search for Chinese queries and exa-search for English queries.
+- For web search, call search_web only. The app will route it to an enabled search provider.
 - After search results are returned, summarize the sources directly. Do not repeat raw JSON, dates, URL fragments, or punctuation noise.
 - Stop after a concise final answer. Do not continue with repeated phrases, punctuation, or filler.
 
 Available compatibility tools:
-- exa-search arguments: {"query":"..."} . Searches the web with Exa when exa-search is enabled.
-- tavily-search arguments: {"query":"..."} . Searches the web with Tavily when tavily-search is enabled.
-- langsearch-search arguments: {"query":"..."} . Searches the web with LangSearch when langsearch-search is enabled.
-- search_web arguments: {"query":"...","skill_name":"exa-search"} . Searches the web using an enabled search skill.
-- list_workspace arguments: {"path":"."} . Lists files in the mounted workspace.
-- write_workspace_text_file arguments: {"path":"notes/output.md","content":"..."} . Writes the full final text into the workspace.
+$availableToolsList
 
 Enabled skills for this session:
 $selectedSkillsList
 """
     .trimIndent()
+}
+
+private fun buildAvailableCompatToolsList(selectedSkillNames: Set<String>): String {
+  val tools = mutableListOf<String>()
+  if (
+    selectedSkillNames.contains(EXA_SEARCH_SKILL_NAME) ||
+      selectedSkillNames.contains(TAVILY_SEARCH_SKILL_NAME) ||
+      selectedSkillNames.contains(LANGSEARCH_SEARCH_SKILL_NAME)
+  ) {
+    tools += "- search_web arguments: {\"query\":\"...\"} . Searches the web using an enabled search skill selected by the app."
+  }
+  if (selectedSkillNames.contains(FILE_WORKSPACE_SKILL_NAME)) {
+    tools += "- list_workspace arguments: {\"path\":\".\"} . Lists files in the mounted workspace."
+    tools += "- read_workspace_text_file arguments: {\"path\":\"notes/input.txt\"} . Reads a text file from the mounted workspace."
+  }
+  if (selectedSkillNames.contains(LONG_TEXT_WRITER_SKILL_NAME)) {
+    tools += "- write_workspace_text_file arguments: {\"path\":\"notes/output.md\",\"content\":\"...\"} . Writes the full final text into the workspace."
+  }
+  return tools.joinToString("\n").ifBlank { "- No compatibility tools are enabled. Answer directly without tool calls." }
 }
