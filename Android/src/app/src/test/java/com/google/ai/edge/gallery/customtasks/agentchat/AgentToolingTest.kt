@@ -43,6 +43,10 @@ class AgentToolingTest {
       ResolvedAgentToolMode.NATIVE,
       resolveAgentToolMode(Model(name = "Gemma-4-E4B-it", imported = false)),
     )
+    assertEquals(
+      ResolvedAgentToolMode.COMPAT,
+      resolveAgentToolMode(Model(name = "Gemma-4-12B-it (experimental)", imported = false)),
+    )
   }
 
   @Test

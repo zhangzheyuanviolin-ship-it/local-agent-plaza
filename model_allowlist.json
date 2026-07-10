@@ -388,17 +388,17 @@
       "name": "Gemma-4-12B-it (experimental)",
       "modelId": "litert-community/gemma-4-12B-it-litert-lm",
       "modelFile": "gemma-4-12B-it.litertlm",
-      "description": "Experimental Gemma 4 12B (text-only) in LiteRT-LM format. **Android support is NOT officially declared** by the LiteRT team (model card lists macOS/Linux only). For 24GB+ RAM devices to validate large-parameter feasibility on Snapdragon 8 Gen3 class hardware. Model card says benchmarks used 2048 context and Android support is not yet declared; keep as experimental only.",
+      "description": "Official litert-community Gemma 4 12B text model in LiteRT-LM format. Verified by user to load and run on a 24GB Snapdragon 8 Gen3-class Android device. Native tool-call constrained decoding currently emits control tokens on this branch, so the Agent task defaults this model to compatibility tools while keeping it available for large-model text and prompt-lab testing. Base Gemma 4 family supports long context; default mobile context is raised to 32K for this high-memory device.",
       "sizeInBytes": 6547589312,
       "minDeviceMemoryInGb": 16,
       "commitHash": "44cf85a326f79b814fa86a60af414c042755b43a",
       "defaultConfig": {
         "topK": 64,
         "topP": 0.95,
-        "temperature": 1.0,
-        "maxTokens": 1024,
+        "temperature": 0.8,
+        "maxTokens": 2048,
         "accelerators": "gpu,cpu",
-        "maxContextLength": 2048
+        "maxContextLength": 32768
       },
       "taskTypes": [
         "llm_chat",
@@ -871,6 +871,72 @@
           "llm_agent_chat"
         ]
       }
+    },
+    {
+      "name": "Gemma4-E2B Uncensored INT4 8192 experimental",
+      "modelId": "PeppX/gemma-4-e2b-uncensored-litertlm",
+      "modelFile": "gemma4_uncensored_INT4_8192.litertlm",
+      "description": "Recent community Gemma 4 E2B uncensored LiteRT-LM conversion with Android/on-device tags and an 8192-context INT4 artifact. Experimental model for comparing Gemma-family compatibility-tool behavior; not yet verified on this app.",
+      "sizeInBytes": 2570459088,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "c6127b57654fa9e956a97adcdf3e8d439ac4944a",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.8,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 8192
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Gemma4-E4B Abliterated community experimental",
+      "modelId": "olekk/gemma-4-E4B-it-abliterated-litert-lm",
+      "modelFile": "gemma-4-E4B-it-abliterated.litertlm",
+      "description": "Recent community Gemma 4 E4B abliterated LiteRT-LM conversion with Android/on-device tags. Experimental high-quality Gemma-family candidate; not yet verified on this app.",
+      "sizeInBytes": 3659530240,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "a4eecccd3b0ba1777660180cda60a396eedcb8aa",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.8,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 32768
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Gemma4-E4B QAT community experimental",
+      "modelId": "DarrenJiaImbue/gemma-4-E4B-it-qat-litertlm",
+      "modelFile": "gemma-4-E4B-it-qat.litertlm",
+      "description": "Recent community Gemma 4 E4B QAT mobile-transformers LiteRT-LM conversion. Experimental candidate for speed and stability comparison on Android GPU; not yet verified on this app.",
+      "sizeInBytes": 3254493296,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "a9c6beea02917b453bd60045cb6ee23e14d91535",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.8,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 32768
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
     }
   ]
 }

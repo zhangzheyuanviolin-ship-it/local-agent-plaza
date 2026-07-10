@@ -101,7 +101,6 @@ import com.google.ai.edge.gallery.ui.llmchat.LlmChatScreen
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelInitializationStatusType
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
-import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Message
 import java.lang.Exception
@@ -195,7 +194,7 @@ fun AgentChatScreen(
       modelManagerViewModel = modelManagerViewModel,
     )
   }
-  var continueCompatConversation: ((Model, Message) -> Unit)? = null
+  var continueCompatConversation: ((Model, String) -> Unit)? = null
   val handleGenerationDone: (Model) -> Unit = handleGenerationDone@ { model ->
     val lastAgentText =
       viewModel.getLastMessageWithTypeAndSide(
@@ -329,20 +328,10 @@ fun AgentChatScreen(
           updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
           continueCompatConversation?.invoke(
             model,
-            Message.tool(
-              Contents.of(
-                Content.ToolResponse(
-                  executionResult.toolName,
-                  JSONObject(
-                      buildCompatToolResultPayload(
-                        toolName = executionResult.toolName,
-                        result = executionResult.result,
-                        originalUserRequest = originalUserRequest,
-                      )
-                    )
-                    .toString(),
-                )
-              )
+            buildCompatToolResultPrompt(
+              toolName = executionResult.toolName,
+              result = executionResult.result,
+              originalUserRequest = originalUserRequest,
             ),
           )
         }
@@ -353,11 +342,10 @@ fun AgentChatScreen(
     compatToolStepsByModel.remove(model.name)
     updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
   }
-  continueCompatConversation = { model, message ->
+  continueCompatConversation = { model, input ->
     viewModel.generateResponse(
       model = model,
-      input = "",
-      inputMessage = message,
+      input = input,
       onFirstToken = handleFirstToken,
       onDone = { handleGenerationDone(model) },
       onError = { errorMessage -> handleCompatError(model, errorMessage) },

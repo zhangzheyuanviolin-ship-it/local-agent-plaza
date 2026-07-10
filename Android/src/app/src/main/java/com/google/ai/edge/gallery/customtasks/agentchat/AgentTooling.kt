@@ -65,7 +65,11 @@ fun getConfiguredAgentToolMode(model: Model): String {
 
 fun supportsNativeAgentTools(model: Model): Boolean {
   val normalizedName = model.name.lowercase()
-  return normalizedName.contains("gemma-4") ||
+  if (normalizedName.contains("12b")) {
+    return false
+  }
+  return normalizedName.contains("gemma-4-e2b") ||
+    normalizedName.contains("gemma-4-e4b") ||
     normalizedName.contains("functiongemma") ||
     normalizedName.contains("function-gemma") ||
     normalizedName.contains("function_gemma") ||
@@ -78,7 +82,12 @@ fun defaultAgentToolMode(model: Model): String {
 
 fun resolveAgentToolMode(model: Model): ResolvedAgentToolMode {
   return when (getConfiguredAgentToolMode(model)) {
-    AgentToolModeValues.NATIVE -> ResolvedAgentToolMode.NATIVE
+    AgentToolModeValues.NATIVE ->
+      if (supportsNativeAgentTools(model)) {
+        ResolvedAgentToolMode.NATIVE
+      } else {
+        ResolvedAgentToolMode.COMPAT
+      }
     AgentToolModeValues.COMPAT -> ResolvedAgentToolMode.COMPAT
     else -> if (supportsNativeAgentTools(model)) ResolvedAgentToolMode.NATIVE else ResolvedAgentToolMode.COMPAT
   }
