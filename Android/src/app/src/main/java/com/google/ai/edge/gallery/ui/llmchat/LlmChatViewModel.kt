@@ -194,8 +194,7 @@ open class LlmChatViewModelBase(
                   }
                   if (firstRun) {
                     val hasVisibleProgress =
-                      partialResult.isNotEmpty() ||
-                        (enableThinking && !partialThinkingResult.isNullOrEmpty())
+                      partialResult.isNotEmpty() || !partialThinkingResult.isNullOrEmpty()
                     if (!hasVisibleProgress && !done) {
                       return@resultListener
                     }
@@ -292,8 +291,7 @@ open class LlmChatViewModelBase(
 
                 if (firstRun) {
                   val hasVisibleProgress =
-                    partialResult.isNotEmpty() ||
-                      (enableThinking && !partialThinkingResult.isNullOrEmpty())
+                    partialResult.isNotEmpty() || !partialThinkingResult.isNullOrEmpty()
                   if (!hasVisibleProgress && !done) {
                     return@resultListener
                   }

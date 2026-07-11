@@ -421,7 +421,11 @@ fun AgentChatScreen(
       }
     },
     extraContextForModel = { model ->
-      mapOf("enable_thinking" to "false")
+      if (resolveAgentToolMode(model) == ResolvedAgentToolMode.COMPAT) {
+        mapOf("enable_thinking" to "false")
+      } else {
+        null
+      }
     },
     composableBelowMessageList = { model ->
       val actionChannel = agentTools.actionChannel
