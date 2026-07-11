@@ -72,10 +72,12 @@ object LlmChatModelHelper : LlmModelHelper {
   ) {
     // Prepare options.
     val configuredContextWindow = model.getConfiguredContextWindow()
-    val maxTokens =
+    val maxOutputTokens =
       model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = DEFAULT_MAX_TOKEN).let {
         if (configuredContextWindow > 0) it.coerceAtMost(configuredContextWindow) else it
       }
+    val engineMaxNumTokens =
+      configuredContextWindow.takeIf { it > 0 } ?: maxOutputTokens
     val topK = model.getIntConfigValue(key = ConfigKeys.TOPK, defaultValue = DEFAULT_TOPK)
     val topP = model.getFloatConfigValue(key = ConfigKeys.TOPP, defaultValue = DEFAULT_TOPP)
     val temperature =
@@ -112,13 +114,17 @@ object LlmChatModelHelper : LlmModelHelper {
     Log.d(TAG, "Preferred backend: $preferredBackend")
 
     val modelPath = model.getPath(context = context)
+    Log.d(
+      TAG,
+      "Token config for '${model.name}': engineMaxNumTokens=$engineMaxNumTokens, maxOutputTokens=$maxOutputTokens, configuredContextWindow=$configuredContextWindow",
+    )
     val engineConfig =
       EngineConfig(
         modelPath = modelPath,
         backend = preferredBackend,
         visionBackend = if (shouldEnableImage) visionBackend else null, // must be GPU for Gemma 3n
         audioBackend = if (shouldEnableAudio) Backend.CPU() else null, // must be CPU for Gemma 3n
-        maxNumTokens = maxTokens,
+        maxNumTokens = engineMaxNumTokens,
         cacheDir =
           if (modelPath.startsWith("/data/local/tmp"))
             context.getExternalFilesDir(null)?.absolutePath
