@@ -277,12 +277,16 @@ fun parseCompatToolCall(rawText: String): ParsedCompatToolCall? {
       .trim()
   val balancedPayload = extractFirstJsonObject(payload) ?: return null
   val json = runCatching { JSONObject(balancedPayload) }.getOrNull() ?: return null
+  val namedRootToolCall = extractNamedRootToolCall(json)
   val toolName =
     json.optString("tool").ifBlank {
-      json.optString("name").ifBlank { json.optString("tool_name") }
+      json.optString("name").ifBlank { json.optString("tool_name").ifBlank { namedRootToolCall?.first.orEmpty() } }
     }
   val arguments =
-    json.optJSONObject("arguments") ?: json.optJSONObject("parameters") ?: buildCompatArgumentsFromRoot(json)
+    json.optJSONObject("arguments") ?:
+      json.optJSONObject("parameters") ?:
+      namedRootToolCall?.second ?:
+      buildCompatArgumentsFromRoot(json)
   val resolvedToolName =
     toolName.ifBlank {
       when {
@@ -362,6 +366,24 @@ private fun buildCompatArgumentsFromRoot(json: JSONObject): JSONObject {
       }
     }
   }
+}
+
+private fun extractNamedRootToolCall(json: JSONObject): Pair<String, JSONObject>? {
+  val keys = mutableListOf<String>()
+  val iterator = json.keys()
+  while (iterator.hasNext()) {
+    keys.add(iterator.next())
+  }
+  if (keys.size != 1) {
+    return null
+  }
+  val key = keys.first()
+  val value = json.optJSONObject(key) ?: return null
+  val normalizedKey = key.trim()
+  if (normalizedKey.isBlank()) {
+    return null
+  }
+  return normalizedKey to value
 }
 
 private fun getOptionalStringFromJson(json: JSONObject, names: List<String>): String {

@@ -106,6 +106,24 @@ class AgentToolingTest {
   }
 
   @Test
+  fun parserAcceptsToolNameAsRootObjectKey() {
+    val parsed =
+      parseCompatToolCall(
+        """
+        <tool_call>
+        {"search_web":{"query":"multiple countries criticize China missile tests news"}}
+        </tool_call>
+        """.trimIndent()
+      )
+
+    assertEquals("search_web", parsed?.toolName)
+    assertEquals(
+      "multiple countries criticize China missile tests news",
+      parsed?.arguments?.getString("query"),
+    )
+  }
+
+  @Test
   fun compatPromptAdvertisesOnlyEnabledGenericSearchAndNoLoadSkillRequirement() {
     val prompt =
       buildCompatAgentInstructionPayloadForTest(

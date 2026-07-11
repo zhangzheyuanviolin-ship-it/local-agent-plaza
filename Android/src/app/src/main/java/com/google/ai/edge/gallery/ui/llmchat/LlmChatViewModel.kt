@@ -167,6 +167,9 @@ open class LlmChatViewModelBase(
 
       var firstRun = true
       val start = System.currentTimeMillis()
+      val enableThinking =
+        allowThinking &&
+          model.getBooleanConfigValue(key = ConfigKeys.ENABLE_THINKING, defaultValue = false)
 
       try {
         val resultListener: (String, Boolean, String?) -> Unit =
@@ -191,7 +194,8 @@ open class LlmChatViewModelBase(
                   }
                   if (firstRun) {
                     val hasVisibleProgress =
-                      partialResult.isNotEmpty() || !partialThinkingResult.isNullOrEmpty()
+                      partialResult.isNotEmpty() ||
+                        (enableThinking && !partialThinkingResult.isNullOrEmpty())
                     if (!hasVisibleProgress && !done) {
                       return@resultListener
                     }
@@ -213,7 +217,7 @@ open class LlmChatViewModelBase(
                   removeLastMessage(model = model)
                 }
 
-                val thinkingText = partialThinkingResult
+                val thinkingText = if (enableThinking) partialThinkingResult else null
                 val isThinking = thinkingText != null && thinkingText.isNotEmpty()
                 var currentLastMessage = getLastMessage(model = model)
 
@@ -288,7 +292,8 @@ open class LlmChatViewModelBase(
 
                 if (firstRun) {
                   val hasVisibleProgress =
-                    partialResult.isNotEmpty() || !partialThinkingResult.isNullOrEmpty()
+                    partialResult.isNotEmpty() ||
+                      (enableThinking && !partialThinkingResult.isNullOrEmpty())
                   if (!hasVisibleProgress && !done) {
                     return@resultListener
                   }
@@ -334,9 +339,6 @@ open class LlmChatViewModelBase(
           finishWithError(message)
         }
 
-        val enableThinking =
-          allowThinking &&
-            model.getBooleanConfigValue(key = ConfigKeys.ENABLE_THINKING, defaultValue = false)
         val extraContext =
           extraContextOverride ?: if (enableThinking) mapOf("enable_thinking" to "true") else null
 
