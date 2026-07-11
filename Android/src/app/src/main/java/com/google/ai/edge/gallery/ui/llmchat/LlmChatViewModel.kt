@@ -270,6 +270,7 @@ open class LlmChatViewModelBase(
                         ChatMessageText(
                           content = "",
                           side = ChatSide.AGENT,
+                          latencyMs = -1f,
                           accelerator = accelerator,
                           hideSenderLabel =
                             currentLastMessage?.type == ChatMessageType.COLLAPSABLE_PROGRESS_PANEL ||

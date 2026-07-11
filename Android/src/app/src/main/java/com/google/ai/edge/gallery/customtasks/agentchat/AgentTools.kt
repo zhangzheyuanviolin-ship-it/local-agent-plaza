@@ -700,54 +700,59 @@ open class AgentTools() : ToolSet {
             arguments = arguments,
           )
         "list_workspace" ->
-          runConfiguredIntent(
-              skillName = FILE_WORKSPACE_SKILL_NAME,
-              intent = IntentAction.FILE_WORKSPACE.action,
-              parameters =
-                JSONObject(arguments.toString())
-                  .apply {
-                    put("operation", "list")
-                    if (!has("path")) {
-                      put("path", ".")
-                    }
-                  }
-                  .toString(),
-            )
-            .mapValues { it.value }
+          runFileWorkspaceCompatOperation(
+            operation = "list",
+            arguments = arguments,
+            defaultPath = ".",
+          )
         "read_workspace_text_file" ->
-          runConfiguredIntent(
-              skillName = FILE_WORKSPACE_SKILL_NAME,
-              intent = IntentAction.FILE_WORKSPACE.action,
-              parameters =
-                JSONObject(arguments.toString())
-                  .apply {
-                    put("operation", "read_text")
-                  }
-                  .toString(),
-            )
-            .mapValues { it.value }
-        "write_workspace_text_file" ->
-          writeWorkspaceTextFile(
-              path =
-                getRequiredStringArgument(
-                  arguments = arguments,
-                  names = listOf("path"),
-                ),
-              content =
-                getRequiredStringArgument(
-                  arguments = arguments,
-                  names = listOf("content"),
-                ),
-            )
-            .mapValues { it.value }
+          runFileWorkspaceCompatOperation(operation = "read_text", arguments = arguments)
+        "write_workspace_text_file",
+        "write_workspace_file" ->
+          runFileWorkspaceCompatOperation(operation = "write_text", arguments = arguments)
+        "append_workspace_text_file",
+        "append_workspace_file" ->
+          runFileWorkspaceCompatOperation(operation = "append_text", arguments = arguments)
+        "create_workspace_dir",
+        "create_workspace_directory" ->
+          runFileWorkspaceCompatOperation(operation = "create_dir", arguments = arguments)
+        "delete_workspace_file",
+        "delete_workspace_text_file",
+        "delete_workspace_path" ->
+          runFileWorkspaceCompatOperation(operation = "delete", arguments = arguments)
+        "stat_workspace_file",
+        "stat_workspace_path" ->
+          runFileWorkspaceCompatOperation(operation = "stat", arguments = arguments)
         else ->
           mapOf(
             "status" to "failed",
             "error" to "Unknown compatibility tool \"$toolName\".",
-            "recovery_hint" to "Retry with an enabled compatibility tool such as search_web, list_workspace, read_workspace_text_file, write_workspace_text_file, run_js, or run_configured_intent.",
+            "recovery_hint" to "Retry with an enabled compatibility tool such as search_web, list_workspace, read_workspace_text_file, write_workspace_file, delete_workspace_file, run_js, or run_configured_intent.",
           )
       }
     return CompatToolExecutionResult(toolName = normalizedToolName, result = result)
+  }
+
+  private fun runFileWorkspaceCompatOperation(
+    operation: String,
+    arguments: JSONObject,
+    defaultPath: String? = null,
+  ): Map<String, Any?> {
+    val parameters =
+      JSONObject(arguments.toString())
+        .apply {
+          put("operation", operation)
+          if (defaultPath != null && !has("path")) {
+            put("path", defaultPath)
+          }
+        }
+        .toString()
+    return runConfiguredIntent(
+        skillName = FILE_WORKSPACE_SKILL_NAME,
+        intent = IntentAction.FILE_WORKSPACE.action,
+        parameters = parameters,
+      )
+      .mapValues { it.value }
   }
 
   private fun runSearchCompatTool(skillName: String, arguments: JSONObject): Map<String, Any?> {

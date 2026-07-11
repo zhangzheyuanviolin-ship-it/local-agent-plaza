@@ -300,7 +300,7 @@ fun parseCompatToolCall(rawText: String): ParsedCompatToolCall? {
   if (resolvedToolName.isBlank()) {
     return null
   }
-  return ParsedCompatToolCall(toolName = resolvedToolName.trim(), arguments = arguments)
+  return normalizeCompatToolCall(toolName = resolvedToolName.trim(), arguments = arguments)
 }
 
 fun stripCompatThinkingText(rawText: String): String {
@@ -361,11 +361,33 @@ private fun extractFirstJsonObject(text: String): String? {
 private fun buildCompatArgumentsFromRoot(json: JSONObject): JSONObject {
   return JSONObject().also { arguments ->
     json.keys().forEach { key ->
-      if (key != "tool" && key != "name" && key != "tool_name") {
+      if (key !in setOf("tool", "name", "tool_name", "function", "function_name")) {
         arguments.put(key, json.get(key))
       }
     }
   }
+}
+
+private fun normalizeCompatToolCall(toolName: String, arguments: JSONObject): ParsedCompatToolCall? {
+  val trimmedToolName = toolName.trim()
+  val lowerToolName = trimmedToolName.lowercase()
+  if (lowerToolName == "tool_call" || lowerToolName == "call_tool" || lowerToolName == "function_call") {
+    val rootToolCall = extractNamedRootToolCall(arguments)
+    val nestedToolName =
+      getOptionalStringFromJson(
+          arguments,
+          listOf("tool", "name", "tool_name", "function", "function_name"),
+        )
+        .ifBlank { rootToolCall?.first.orEmpty() }
+    val nestedArguments =
+      getOptionalJsonObjectFromJson(arguments, listOf("arguments", "parameters", "input")) ?:
+        rootToolCall?.second ?:
+        buildCompatArgumentsFromRoot(arguments)
+    if (nestedToolName.isNotBlank()) {
+      return normalizeCompatToolCall(toolName = nestedToolName, arguments = nestedArguments)
+    }
+  }
+  return ParsedCompatToolCall(toolName = trimmedToolName, arguments = arguments)
 }
 
 private fun extractNamedRootToolCall(json: JSONObject): Pair<String, JSONObject>? {
@@ -394,6 +416,23 @@ private fun getOptionalStringFromJson(json: JSONObject, names: List<String>): St
     }
   }
   return ""
+}
+
+private fun getOptionalJsonObjectFromJson(json: JSONObject, names: List<String>): JSONObject? {
+  for (name in names) {
+    val objectValue = json.optJSONObject(name)
+    if (objectValue != null) {
+      return objectValue
+    }
+    val stringValue = json.optString(name)
+    if (stringValue.trim().startsWith("{")) {
+      val parsed = runCatching { JSONObject(stringValue) }.getOrNull()
+      if (parsed != null) {
+        return parsed
+      }
+    }
+  }
+  return null
 }
 
 internal fun buildCompatAgentInstructionPayload(
@@ -463,6 +502,8 @@ private fun buildAvailableCompatToolsList(selectedSkillNames: Set<String>): Stri
   if (selectedSkillNames.contains(FILE_WORKSPACE_SKILL_NAME)) {
     tools += "- list_workspace arguments: {\"path\":\".\"} . Lists files in the mounted workspace."
     tools += "- read_workspace_text_file arguments: {\"path\":\"notes/input.txt\"} . Reads a text file from the mounted workspace."
+    tools += "- write_workspace_file arguments: {\"path\":\"notes/output.txt\",\"content\":\"...\"} . Writes text directly into the mounted workspace."
+    tools += "- delete_workspace_file arguments: {\"path\":\"notes/output.txt\"} . Deletes a workspace file or empty directory."
   }
   if (selectedSkillNames.contains(LONG_TEXT_WRITER_SKILL_NAME)) {
     tools += "- write_workspace_text_file arguments: {\"path\":\"notes/output.md\",\"content\":\"...\"} . Writes the full final text into the workspace."

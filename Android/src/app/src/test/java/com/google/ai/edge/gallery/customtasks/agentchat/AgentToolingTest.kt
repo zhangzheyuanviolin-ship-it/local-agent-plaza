@@ -124,6 +124,37 @@ class AgentToolingTest {
   }
 
   @Test
+  fun parserUnwrapsGenericToolCallWrapper() {
+    val parsed =
+      parseCompatToolCall(
+        """
+        <tool_call>
+        {"tool_call":{"name":"list_workspace","arguments":{"path":"."}}}
+        </tool_call>
+        """.trimIndent()
+      )
+
+    assertEquals("list_workspace", parsed?.toolName)
+    assertEquals(".", parsed?.arguments?.getString("path"))
+  }
+
+  @Test
+  fun parserUnwrapsStringifiedNestedArguments() {
+    val parsed =
+      parseCompatToolCall(
+        """
+        <tool_call>
+        {"name":"tool_call","arguments":{"tool_name":"write_workspace_file","arguments":"{\"path\":\"notes/me.txt\",\"content\":\"hello\"}"}}
+        </tool_call>
+        """.trimIndent()
+      )
+
+    assertEquals("write_workspace_file", parsed?.toolName)
+    assertEquals("notes/me.txt", parsed?.arguments?.getString("path"))
+    assertEquals("hello", parsed?.arguments?.getString("content"))
+  }
+
+  @Test
   fun compatPromptAdvertisesOnlyEnabledGenericSearchAndNoLoadSkillRequirement() {
     val prompt =
       buildCompatAgentInstructionPayloadForTest(
@@ -136,12 +167,27 @@ class AgentToolingTest {
       )
 
     assertTrue(prompt.contains("search_web"))
+    assertFalse(prompt.contains("write_workspace_file"))
     assertFalse(prompt.contains("- langsearch-search arguments"))
     assertFalse(prompt.contains("- tavily-search arguments"))
     assertFalse(prompt.contains("You MUST use load_skill before every task"))
     assertFalse(prompt.contains("2026 World Cup news"))
     assertFalse(prompt.contains("用户要搜索的关键词"))
     assertFalse(prompt.contains("{\"name\""))
+  }
+
+  @Test
+  fun compatPromptAdvertisesDirectWorkspaceWriteAndDeleteWhenWorkspaceEnabled() {
+    val prompt =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("file-workspace: mounted workspace"),
+      )
+
+    assertTrue(prompt.contains("list_workspace"))
+    assertTrue(prompt.contains("read_workspace_text_file"))
+    assertTrue(prompt.contains("write_workspace_file"))
+    assertTrue(prompt.contains("delete_workspace_file"))
   }
 
   @Test
