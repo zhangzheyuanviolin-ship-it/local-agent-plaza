@@ -284,6 +284,7 @@ fun createLlmChatConfigs(
   contextWindowSliderMax: Int = MAX_CONTEXT_WINDOW_SLIDER_LIMIT,
 ): List<Config> {
   val resolvedContextWindow = defaultMaxContextLength ?: maxOf(defaultMaxToken, 4096)
+  val resolvedContextWindowEditable = contextWindowEditable || defaultMaxContextLength != null
   val resolvedMaxTokens = if (defaultMaxContextLength != null) {
     defaultMaxToken.coerceAtMost(defaultMaxContextLength)
   } else {
@@ -291,13 +292,8 @@ fun createLlmChatConfigs(
   }
   var maxTokensConfig: Config =
     LabelConfig(key = ConfigKeys.MAX_TOKENS, defaultValue = "$resolvedMaxTokens")
-  if (defaultMaxContextLength != null || contextWindowEditable) {
-    val sliderMax =
-      if (contextWindowEditable) {
-        maxOf(resolvedContextWindow, contextWindowSliderMax).toFloat()
-      } else {
-        defaultMaxContextLength!!.toFloat()
-      }
+  if (resolvedContextWindowEditable) {
+    val sliderMax = maxOf(resolvedContextWindow, contextWindowSliderMax).toFloat()
     maxTokensConfig =
       NumberSliderConfig(
         key = ConfigKeys.MAX_TOKENS,
@@ -308,7 +304,7 @@ fun createLlmChatConfigs(
       )
   }
   val configs = mutableListOf<Config>()
-  if (contextWindowEditable) {
+  if (resolvedContextWindowEditable) {
     configs.add(
       NumberSliderConfig(
         key = ConfigKeys.MAX_CONTEXT_LENGTH,

@@ -1395,17 +1395,46 @@ constructor(
       }
       mergedValues[key] = normalizedValue
     }
-    model.configValues =
+    val finalConfigValues =
       if (model.isLlm) {
-        normalizeContextWindowAndMaxTokens(
-          values = mergedValues,
-          defaultContextWindow = model.llmMaxContextLength,
+        normalizeLegacyGemmaTwelveContextWindow(
+          model = model,
+          values =
+            normalizeContextWindowAndMaxTokens(
+              values = mergedValues,
+              defaultContextWindow = model.llmMaxContextLength,
+            ),
         )
       } else {
         mergedValues
       }
+    if (model.configValues != finalConfigValues) {
+      changed = true
+    }
+    model.configValues = finalConfigValues
     if (changed) {
       persistModelConfigValues(model)
+    }
+  }
+
+  private fun normalizeLegacyGemmaTwelveContextWindow(
+    model: Model,
+    values: Map<String, Any>,
+  ): Map<String, Any> {
+    val safeDefault = model.llmMaxContextLength ?: return values
+    if (!model.name.contains("Gemma-4-12B", ignoreCase = true)) {
+      return values
+    }
+    val currentContext =
+      convertValueToTargetType(
+        value = values.getOrDefault(ConfigKeys.MAX_CONTEXT_LENGTH.label, safeDefault),
+        valueType = ValueType.INT,
+      ) as Int
+    if (currentContext != 32768 || safeDefault >= currentContext) {
+      return values
+    }
+    return values.toMutableMap().apply {
+      put(ConfigKeys.MAX_CONTEXT_LENGTH.label, safeDefault)
     }
   }
 

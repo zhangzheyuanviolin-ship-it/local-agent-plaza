@@ -388,7 +388,7 @@
       "name": "Gemma-4-12B-it (experimental)",
       "modelId": "litert-community/gemma-4-12B-it-litert-lm",
       "modelFile": "gemma-4-12B-it.litertlm",
-      "description": "Official litert-community Gemma 4 12B text model in LiteRT-LM format. Verified by user to load and run on a 24GB Snapdragon 8 Gen3-class Android device. Native tool-call constrained decoding currently emits control tokens on this branch, so the Agent task defaults this model to compatibility tools while keeping it available for large-model text and prompt-lab testing. Base Gemma 4 family supports long context; default mobile context is raised to 32K for this high-memory device.",
+      "description": "Official litert-community Gemma 4 12B text model in LiteRT-LM format. Verified by user to load and run on a 24GB Snapdragon 8 Gen3-class Android device. Native tool-call constrained decoding currently emits control tokens on this branch, so the Agent task defaults this model to compatibility tools while keeping it available for large-model text and prompt-lab testing. Base Gemma 4 family supports long context, but this Android branch defaults to a conservative 4K context for reliable loading; users can manually raise the total context length in model settings for testing.",
       "sizeInBytes": 6547589312,
       "minDeviceMemoryInGb": 16,
       "commitHash": "44cf85a326f79b814fa86a60af414c042755b43a",
@@ -398,7 +398,7 @@
         "temperature": 0.8,
         "maxTokens": 2048,
         "accelerators": "gpu,cpu",
-        "maxContextLength": 32768
+        "maxContextLength": 4096
       },
       "taskTypes": [
         "llm_chat",
