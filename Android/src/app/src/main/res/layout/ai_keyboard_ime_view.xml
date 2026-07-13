@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#101820"
+    android:importantForAccessibility="yes"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:id="@+id/rowCursorActions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnCursorLeft"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_cursor_left"
+            android:text="@string/btn_cursor_left" />
+
+        <Button
+            android:id="@+id/btnCursorRight"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_cursor_right"
+            android:text="@string/btn_cursor_right" />
+
+        <Button
+            android:id="@+id/btnDeleteBeforeCursor"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_delete_before_cursor_all"
+            android:text="@string/btn_delete_before_cursor_all" />
+
+        <Button
+            android:id="@+id/btnDeleteAfterCursor"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_delete_after_cursor_all"
+            android:text="@string/btn_delete_after_cursor_all" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/rowTextActions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnJumpStart"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_jump_to_start"
+            android:text="@string/btn_jump_start" />
+
+        <Button
+            android:id="@+id/btnJumpEnd"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_jump_to_end"
+            android:text="@string/btn_jump_end" />
+
+        <Button
+            android:id="@+id/btnPaste"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_paste"
+            android:text="@string/btn_paste" />
+
+        <Button
+            android:id="@+id/btnCopyAll"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_copy_all"
+            android:text="@string/btn_copy_all" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/rowPunctuation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnPuncComma"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_insert_comma_zh"
+            android:text="@string/punc_comma_zh" />
+
+        <Button
+            android:id="@+id/btnPuncPeriod"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_insert_period_zh"
+            android:text="@string/punc_period_zh" />
+
+        <Button
+            android:id="@+id/btnPuncQuestion"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_insert_question_zh"
+            android:text="@string/punc_question_zh" />
+
+        <Button
+            android:id="@+id/btnPuncExclamation"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_insert_exclamation_zh"
+            android:text="@string/punc_exclamation_zh" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/rowMainActions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnHoldToTalk"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1.2"
+            android:contentDescription="@string/btn_hold_to_talk"
+            android:text="@string/btn_hold_to_talk" />
+
+        <Button
+            android:id="@+id/btnDelete"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="0.9"
+            android:contentDescription="@string/btn_delete"
+            android:text="@string/btn_delete" />
+
+        <Button
+            android:id="@+id/btnLang"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="0.7"
+            android:contentDescription="@string/a11y_lang_now_zh"
+            android:text="@string/btn_lang_zh" />
+
+        <Button
+            android:id="@+id/btnHideKeyboard"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="0.9"
+            android:contentDescription="@string/a11y_hide_keyboard"
+            android:text="@string/btn_hide_keyboard" />
+    </LinearLayout>
+
+</LinearLayout>
