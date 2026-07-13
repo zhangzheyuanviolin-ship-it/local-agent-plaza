@@ -24,10 +24,12 @@ package com.google.ai.edge.gallery.ui.modelmanager
 import androidx.compose.ui.platform.LocalContext
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,10 +42,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.rounded.UnfoldLess
+import androidx.compose.material.icons.rounded.UnfoldMore
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -63,6 +70,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.Task
 import com.google.ai.edge.gallery.ui.common.ClickableLink
 import com.google.ai.edge.gallery.ui.common.RevealingText
@@ -178,6 +186,31 @@ fun ModelList(
       )
     }
   val modelItemExpandedStates = remember { mutableStateMapOf<String, Boolean>() }
+  var downloadedModelsExpanded by remember(task.id) { androidx.compose.runtime.mutableStateOf(true) }
+  var availableModelsExpanded by remember(task.id) { androidx.compose.runtime.mutableStateOf(false) }
+  val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
+  val parentModels = models.filter { it.parentModelName.isNullOrEmpty() }
+  val downloadedModelNames =
+    parentModels
+      .filter { model ->
+        modelManagerUiState.modelDownloadStatus[model.name]?.status ==
+          ModelDownloadStatusType.SUCCEEDED ||
+          modelVariants.getOrDefault(model.name, listOf()).any { variant ->
+            modelManagerUiState.modelDownloadStatus[variant.name]?.status ==
+              ModelDownloadStatusType.SUCCEEDED
+          }
+      }
+      .map { it.name }
+      .toSet()
+  val downloadedModels = parentModels.filter { downloadedModelNames.contains(it.name) }
+  val availableModels = parentModels.filterNot { downloadedModelNames.contains(it.name) }
+  val downloadedSectionModels = downloadedModels + importedModels
+
+  LaunchedEffect(downloadedSectionModels.isEmpty(), availableModels.isNotEmpty(), task.id) {
+    if (downloadedSectionModels.isEmpty() && availableModels.isNotEmpty()) {
+      availableModelsExpanded = true
+    }
+  }
 
   Box(
     contentAlignment = Alignment.BottomEnd,
@@ -307,15 +340,15 @@ fun ModelList(
         }
       }
 
-      // Title for recommended models.
-      if (!models.isEmpty()) {
-        item(key = "recommendedModelsTitle") {
-          Text(
-            stringResource(R.string.model_list_recommended_models_title),
-            color = MaterialTheme.colorScheme.onSurface,
-            style = MaterialTheme.typography.labelLarge,
+      if (downloadedSectionModels.isNotEmpty()) {
+        item(key = "downloadedModelsSection") {
+          ModelListSectionHeader(
+            title = "已下载模型",
+            count = downloadedSectionModels.size,
+            expanded = downloadedModelsExpanded,
+            onClick = { downloadedModelsExpanded = !downloadedModelsExpanded },
             modifier =
-              Modifier.padding(horizontal = 16.dp, vertical = 8.dp).graphicsLayer {
+              Modifier.graphicsLayer {
                 alpha = modelListProgress
                 translationY = (CONTENT_ANIMATION_OFFSET * (1 - modelListProgress)).toPx()
               },
@@ -323,9 +356,8 @@ fun ModelList(
         }
       }
 
-      // List of models within a task.
-      items(items = models) { model ->
-        if (model.parentModelName.isNullOrEmpty()) {
+      if (downloadedModelsExpanded) {
+        items(items = downloadedModels, key = { "downloaded_${it.name}" }) { model ->
           val expanded = modelItemExpandedStates.getOrDefault(model.name, null)
           ModelItem(
             model = model,
@@ -344,35 +376,51 @@ fun ModelList(
               },
           )
         }
-      }
-
-      // Title for imported models.
-      if (importedModels.isNotEmpty()) {
-        item(key = "importedModelsTitle") {
-          Text(
-            stringResource(R.string.model_list_imported_models_title),
-            color = MaterialTheme.colorScheme.onSurface,
-            style = MaterialTheme.typography.labelLarge,
-            modifier =
-              Modifier.padding(horizontal = 16.dp)
-                .padding(top = 32.dp, bottom = 8.dp)
-                .graphicsLayer {
-                  alpha = modelListProgress
-                  translationY = (CONTENT_ANIMATION_OFFSET * (1 - modelListProgress)).toPx()
-                },
-          )
-        }
-      }
-
-      // List of imported models within a task.
-      items(items = importedModels, key = { it.name }) { model ->
-        Box {
+        items(items = importedModels, key = { "downloaded_imported_${it.name}" }) { model ->
           ModelItem(
             model = model,
             task = task,
             modelManagerViewModel = modelManagerViewModel,
             onModelClicked = onModelClicked,
             onBenchmarkClicked = onBenchmarkClicked,
+            showBenchmarkButton = model.showBenchmarkButton,
+            modifier =
+              Modifier.graphicsLayer {
+                alpha = modelListProgress
+                translationY = (CONTENT_ANIMATION_OFFSET * (1 - modelListProgress)).toPx()
+              },
+          )
+        }
+      }
+
+      if (availableModels.isNotEmpty()) {
+        item(key = "availableModelsSection") {
+          ModelListSectionHeader(
+            title = "可下载模型",
+            count = availableModels.size,
+            expanded = availableModelsExpanded,
+            onClick = { availableModelsExpanded = !availableModelsExpanded },
+            modifier =
+              Modifier.graphicsLayer {
+                alpha = modelListProgress
+                translationY = (CONTENT_ANIMATION_OFFSET * (1 - modelListProgress)).toPx()
+              },
+          )
+        }
+      }
+
+      if (availableModelsExpanded) {
+        items(items = availableModels, key = { "available_${it.name}" }) { model ->
+          val expanded = modelItemExpandedStates.getOrDefault(model.name, null)
+          ModelItem(
+            model = model,
+            modelVariants = modelVariants.getOrDefault(model.name, listOf()),
+            task = task,
+            modelManagerViewModel = modelManagerViewModel,
+            onModelClicked = onModelClicked,
+            onBenchmarkClicked = onBenchmarkClicked,
+            expanded = expanded,
+            onExpanded = { modelItemExpandedStates[model.name] = it },
             showBenchmarkButton = model.showBenchmarkButton,
             modifier =
               Modifier.graphicsLayer {
@@ -396,6 +444,49 @@ fun ModelList(
           )
           .align(Alignment.BottomCenter)
     )
+  }
+}
+
+@Composable
+private fun ModelListSectionHeader(
+  title: String,
+  count: Int,
+  expanded: Boolean,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+    modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+  ) {
+    Row(
+      modifier =
+        Modifier.clickable(onClick = onClick)
+          .padding(horizontal = 14.dp, vertical = 12.dp)
+          .semantics { contentDescription = "$title，$count 个模型，${if (expanded) "已展开" else "已收起"}" },
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
+        Text(
+          text = title,
+          color = MaterialTheme.colorScheme.onSurface,
+          style = MaterialTheme.typography.labelLarge,
+        )
+        Text(
+          text = "$count 个模型",
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          style = MaterialTheme.typography.bodySmall,
+        )
+      }
+      Icon(
+        if (expanded) Icons.Rounded.UnfoldLess else Icons.Rounded.UnfoldMore,
+        contentDescription =
+          stringResource(if (expanded) R.string.cd_collapse_icon else R.string.cd_expand_icon),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
   }
 }
 

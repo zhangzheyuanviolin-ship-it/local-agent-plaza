@@ -48,6 +48,18 @@ class ImageGenerationModelRegistryTest {
         "cyber-realistic-v10-qnn-8gen3",
         "wai-illustrious-v170-dmd2-qnn-8gen3",
         "intorealism-ultra-v11-qnn-8gen3",
+        "dreamshaper-sdxl-qnn-8gen3",
+        "epic-realism-sdxl-qnn-8gen3",
+        "perfect-deliberate-v9-qnn-8gen3",
+        "perfection-realistic-v8-qnn-8gen3",
+        "pony-diffusion-v6xl-qnn-8gen3",
+        "animagine-v4-qnn-8gen3",
+        "anikawa-v4-qnn-8gen3",
+        "illustrious-v17-qnn-8gen3",
+        "wai-illustrious-v170-qnn-8gen3",
+        "mopmix-omnia-sdxl-qnn-8gen3",
+        "mopmix-epic-realism-sdxl-qnn-8gen3",
+        "jrd-renderspec-xl-turbo-qnn-8gen3",
       ),
       modelIds,
     )
@@ -130,7 +142,7 @@ class ImageGenerationModelRegistryTest {
     val models = createVisualCreationImageModels()
 
     assertEquals("absolute-reality-qnn-8gen2", models.first().name)
-    assertEquals(20, models.size)
+    assertEquals(32, models.size)
     val model = models.first()
     assertEquals("AbsoluteReality_qnn2.28_8gen2.zip", model.downloadFileName)
     assertTrue(model.url.endsWith("/AbsoluteReality_qnn2.28_8gen2.zip"))

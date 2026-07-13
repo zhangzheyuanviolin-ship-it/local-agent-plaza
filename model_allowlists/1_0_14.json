@@ -937,6 +937,284 @@
         "llm_prompt_lab",
         "llm_agent_chat"
       ]
+    },
+    {
+      "name": "Qwen3.5-0.8B Multimodal Q8 experimental",
+      "modelId": "GabrieleConte/Qwen3.5-0.8B-LiteRT",
+      "modelFile": "qwen35_mm_q8_ekv2048.litertlm",
+      "description": "Community Qwen3.5 0.8B multimodal LiteRT-LM bundle. Model card reports full multimodal bundle, Apache-2.0 upstream, and KV cache length 2048. Experimental candidate for Chinese chat, prompt optimization, lightweight agent smoke tests, and image-aware tasks.",
+      "sizeInBytes": 1159757824,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "766ec4afaaeeda64da162c458bac1efc0d27cf9e",
+      "llmSupportImage": true,
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1024,
+        "accelerators": "gpu,cpu",
+        "visionAccelerator": "gpu",
+        "maxContextLength": 2048
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image"
+      ]
+    },
+    {
+      "name": "Qwen3.5-2B LiteRT-LM Q8 experimental",
+      "modelId": "paulsp94/Qwen3.5-2B-LiteRT-LM",
+      "modelFile": "qwen35_2b.litertlm",
+      "description": "Community Qwen3.5 2B LiteRT-LM bundle. Model card describes a working LiteRT-LM conversion of Qwen3.5 hybrid GatedDeltaNet architecture. Higher-priority Chinese candidate than older small Qwen models; context behavior must be verified on device.",
+      "sizeInBytes": 1901762208,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "f91f8c5e985350f10bd55e6aebdeb89b7c211fcc",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "bestForTaskTypes": [
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3.5-2B LiteRT-LM Q4 experimental",
+      "modelId": "paulsp94/Qwen3.5-2B-LiteRT-LM",
+      "modelFile": "qwen35_2b_q4.litertlm",
+      "description": "Smaller Q4 variant of the community Qwen3.5 2B LiteRT-LM bundle. Use it when the Q8 variant is too slow or too memory-heavy; tool-calling quality may differ from Q8.",
+      "sizeInBytes": 1069429648,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "f91f8c5e985350f10bd55e6aebdeb89b7c211fcc",
+      "parentModelName": "Qwen3.5-2B LiteRT-LM Q8 experimental",
+      "variantLabel": "Q4 smaller variant",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3.5-4B Multimodal experimental",
+      "modelId": "trevon/Qwen3.5-4B-LiteRT",
+      "modelFile": "model_multimodal.litertlm",
+      "description": "Community Qwen3.5 4B multimodal LiteRT package. Repository provides model_multimodal.litertlm and marks image-text-to-text; added as an experimental high-quality Chinese candidate for chat, agent, and image-aware testing.",
+      "sizeInBytes": 5263458304,
+      "minDeviceMemoryInGb": 14,
+      "commitHash": "8c81b3a5932f8544fd927c9f095f24baf4ca755a",
+      "llmSupportImage": true,
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "visionAccelerator": "gpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3.5-4B Quantized text experimental",
+      "modelId": "trevon/Qwen3.5-4B-LiteRT",
+      "modelFile": "model_quantized.litertlm",
+      "description": "Text-oriented quantized variant from the Qwen3.5 4B LiteRT repository. Smaller than the multimodal bundle and useful for isolating whether vision assets affect tool-call stability.",
+      "sizeInBytes": 4274913280,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "8c81b3a5932f8544fd927c9f095f24baf4ca755a",
+      "parentModelName": "Qwen3.5-4B Multimodal experimental",
+      "variantLabel": "Quantized text variant",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3.5-9B Multimodal experimental",
+      "modelId": "trevon/Qwen3.5-9B-LiteRT",
+      "modelFile": "model_multimodal.litertlm",
+      "description": "Community Qwen3.5 9B multimodal LiteRT package. Large experimental Chinese candidate for 24GB-class phones; repository exposes a single model_multimodal.litertlm artifact and image-text-to-text metadata.",
+      "sizeInBytes": 9518678016,
+      "minDeviceMemoryInGb": 20,
+      "commitHash": "3b2a2a45f00ed50ddea31764d2e989659c2df878",
+      "llmSupportImage": true,
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "visionAccelerator": "gpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "TinySwallow-1.5B-Instruct",
+      "modelId": "litert-community/TinySwallow-1.5B-Instruct",
+      "modelFile": "TinySwallow-1.5B-Instruct.litertlm",
+      "description": "litert-community TinySwallow 1.5B Instruct LiteRT-LM model. Small multilingual/Japanese-oriented model, included as a lightweight comparison point for chat and agent compatibility.",
+      "sizeInBytes": 1567604736,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "cf67d4d779c4602a7fdf43331c21897bc63ee67f",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "VibeThinker-1.5B LiteRT-LM",
+      "modelId": "litert-community/VibeThinker-1.5B",
+      "modelFile": "VibeThinker-1.5B.litertlm",
+      "description": "litert-community VibeThinker 1.5B LiteRT-LM reasoning model. Experimental small reasoning/tool-calling comparison model; may emit reasoning-style text depending on template behavior.",
+      "sizeInBytes": 1567604736,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "10a5f89bb85a97b58585b0d962205dfda0fdac82",
+      "capabilities": [
+        "llm_thinking"
+      ],
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_prompt_lab",
+          "llm_agent_chat"
+        ]
+      }
+    },
+    {
+      "name": "MiniCPM5-1B Web Android-tested",
+      "modelId": "Tdamre/MiniCPM5-1B-litert-lm",
+      "modelFile": "MiniCPM5-1B-web.litertlm",
+      "description": "MiniCPM5 1B LiteRT-LM web/mobile bundle. Model card reports Android CPU/GPU smoke tests and seven-turn chat completion; included as a compact long-running conversation candidate. Context cache is 2048 for this artifact.",
+      "sizeInBytes": 1103486896,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "c18b7715fced1c691cc0697c479dee67113a084a",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 2048
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "MiniCPM5-1B CPU-GPU 4096",
+      "modelId": "Tdamre/MiniCPM5-1B-litert-lm",
+      "modelFile": "MiniCPM5-1B.litertlm",
+      "description": "MiniCPM5 1B LiteRT-LM CPU/GPU artifact with 4096 context cache according to the model card. Experimental alternative to the Android-tested web artifact when a larger local context is needed.",
+      "sizeInBytes": 1103486896,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "c18b7715fced1c691cc0697c479dee67113a084a",
+      "parentModelName": "MiniCPM5-1B Web Android-tested",
+      "variantLabel": "CPU/GPU 4096 context variant",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "JOSIE-1.1-4B-Instruct WI8 experimental",
+      "modelId": "Werve/JOSIE-1.1-4B-Instruct-litert-lm",
+      "modelFile": "JOSIE-1.1-4B-Instruct_dynamic_wi8_afp32.litertlm",
+      "description": "WI8 AFP32 variant of the JOSIE 1.1 4B Instruct LiteRT-LM conversion. Larger than the existing WI4 artifact; included to test whether the higher precision variant improves Chinese output stability after tool results.",
+      "sizeInBytes": 4449940400,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "3028d1f2fe6bb50547e3eb827017336d405a9864",
+      "parentModelName": "JOSIE-1.1-4B-Instruct WI4",
+      "variantLabel": "WI8 higher precision variant",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
     }
   ]
 }
