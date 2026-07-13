@@ -29,6 +29,7 @@ import com.google.ai.edge.gallery.common.ProjectConfig
 import com.google.ai.edge.gallery.common.SystemPromptHelper
 import com.google.ai.edge.gallery.common.getJsonResponse
 import com.google.ai.edge.gallery.common.isAICoreSupported
+import com.google.ai.edge.gallery.customtasks.aikeyboard.TASK_ID_AI_KEYBOARD
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
 import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NARRATION
 import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_LOCAL_VISUAL_CREATION
@@ -186,6 +187,7 @@ private val PREDEFINED_LLM_TASK_ORDER =
     BuiltInTaskId.LLM_ASK_AUDIO,
     BuiltInTaskId.LLM_CHAT,
     BuiltInTaskId.LLM_AGENT_CHAT,
+    TASK_ID_AI_KEYBOARD,
     BuiltInTaskId.LLM_PROMPT_LAB,
     BuiltInTaskId.LLM_TINY_GARDEN,
     BuiltInTaskId.LLM_MOBILE_ACTIONS,
@@ -1591,9 +1593,6 @@ constructor(
   private fun groupTasksByCategory(): Map<String, List<Task>> {
     val tasks = getActiveCustomTasks().map { it.task }
 
-    val categoryMap: Map<String, CategoryInfo> =
-      tasks.associateBy { it.category.id }.mapValues { it.value.category }
-
     val groupedTasks = tasks.groupBy { it.category.id }
     val groupedSortedTasks: MutableMap<String, List<Task>> = mutableMapOf()
     // Sort the tasks in categories by pre-defined order. Sort other tasks by label.
@@ -1615,11 +1614,7 @@ constructor(
             } else if (indexB != -1) {
               1
             } else {
-              val ca = categoryMap[a.id]!!
-              val cb = categoryMap[b.id]!!
-              val caLabel = getCategoryLabel(context = context, category = ca)
-              val cbLabel = getCategoryLabel(context = context, category = cb)
-              caLabel.compareTo(cbLabel)
+              a.label.compareTo(b.label)
             }
           } else {
             a.label.compareTo(b.label)
