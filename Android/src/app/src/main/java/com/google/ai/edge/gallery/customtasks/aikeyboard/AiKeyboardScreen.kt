@@ -28,7 +28,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.R
@@ -76,7 +76,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun AiKeyboardScreen(bottomPadding: PaddingValues) {
+fun AiKeyboardScreen(bottomPadding: Dp) {
   val context = LocalContext.current
   val repository = remember(context) { AiKeyboardModelRepository(context.applicationContext) }
   val scope = rememberCoroutineScope()
@@ -105,7 +105,7 @@ fun AiKeyboardScreen(bottomPadding: PaddingValues) {
       Modifier.fillMaxSize()
         .verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp, vertical = 12.dp)
-        .padding(bottom = bottomPadding.calculateBottomPadding()),
+        .padding(bottom = bottomPadding),
     verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
     Text(
