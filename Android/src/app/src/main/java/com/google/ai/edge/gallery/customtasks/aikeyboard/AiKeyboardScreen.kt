@@ -113,11 +113,6 @@ fun AiKeyboardScreen(bottomPadding: Dp) {
       style = MaterialTheme.typography.titleLarge,
       fontWeight = FontWeight.SemiBold,
     )
-    Text(
-      text = stringResource(R.string.ai_keyboard_intro),
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
       if (!micPermissionGranted) {

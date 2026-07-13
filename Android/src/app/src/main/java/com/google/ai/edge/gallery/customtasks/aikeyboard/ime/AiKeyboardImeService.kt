@@ -334,7 +334,6 @@ class AiKeyboardImeService : InputMethodService() {
             activeSession = session
             isRecording = true
             triggerMicFeedback()
-            toast(R.string.toast_recording)
         } catch (e: Exception) {
             toast(e.message ?: "recognition start failed")
         }
