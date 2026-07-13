@@ -22,32 +22,47 @@ import android.widget.Button
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.common.processLlmResponse
 import com.google.ai.edge.gallery.customtasks.aikeyboard.asr.VoskRecognizerSession
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelCatalog
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelRepository
-import org.vosk.LibVosk
-import org.vosk.LogLevel
-import org.vosk.Model
+import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelineCatalog
+import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardTextModelRepository
+import com.google.ai.edge.gallery.data.BuiltInTaskId
+import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import org.vosk.LibVosk
+import org.vosk.LogLevel
+import org.vosk.Model as VoskModel
 
 class AiKeyboardImeService : InputMethodService() {
 
     private lateinit var modelRepository: AiKeyboardModelRepository
+    private lateinit var textModelRepository: AiKeyboardTextModelRepository
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val loadedModels = ConcurrentHashMap<String, Model>()
+    private val loadedModels = ConcurrentHashMap<String, VoskModel>()
     private val loadingModels = Collections.synchronizedSet(mutableSetOf<String>())
     private val modelLoaderExecutor = Executors.newSingleThreadExecutor()
+    private val pipelineExecutor = Executors.newSingleThreadExecutor()
     private val isInputViewVisible = AtomicBoolean(false)
+    private val isPipelineRunning = AtomicBoolean(false)
     private val modelLifecycleEpoch = AtomicInteger(0)
     private val unloadModelsRunnable = Runnable { unloadAllModelsNow() }
 
     private var activeSession: VoskRecognizerSession? = null
     private var isRecording = false
+    private var activePipelineModel: Model? = null
+    private var lastPipelineOriginalText: String? = null
 
+    private var pipelineRunButton: Button? = null
+    private var pipelineTypeButton: Button? = null
+    private var pipelineUndoButton: Button? = null
+    private var pipelineModelButton: Button? = null
     private var languageButton: Button? = null
     private var punctuationCommaButton: Button? = null
     private var punctuationPeriodButton: Button? = null
@@ -65,6 +80,7 @@ class AiKeyboardImeService : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
         modelRepository = AiKeyboardModelRepository(this)
+        textModelRepository = AiKeyboardTextModelRepository(this)
         LibVosk.setLogLevel(LogLevel.WARNINGS)
         modelLoaderExecutor.execute {
             runCatching {
@@ -77,13 +93,19 @@ class AiKeyboardImeService : InputMethodService() {
         isInputViewVisible.set(false)
         mainHandler.removeCallbacks(unloadModelsRunnable)
         stopRecognition()
+        cancelPipeline()
         unloadAllModelsNow()
         modelLoaderExecutor.shutdownNow()
+        pipelineExecutor.shutdownNow()
         super.onDestroy()
     }
 
     override fun onCreateInputView(): View {
         val root = layoutInflater.inflate(R.layout.ai_keyboard_ime_view, null)
+        pipelineRunButton = root.findViewById(R.id.btnPipelineRun)
+        pipelineTypeButton = root.findViewById(R.id.btnPipelineType)
+        pipelineUndoButton = root.findViewById(R.id.btnPipelineUndo)
+        pipelineModelButton = root.findViewById(R.id.btnPipelineModel)
         val holdToTalkButton = root.findViewById<Button>(R.id.btnHoldToTalk)
         val deleteButton = root.findViewById<Button>(R.id.btnDelete)
         languageButton = root.findViewById(R.id.btnLang)
@@ -103,6 +125,25 @@ class AiKeyboardImeService : InputMethodService() {
 
         refreshLanguageButton()
         refreshPunctuationButtons()
+        refreshPipelineButtons()
+
+        pipelineRunButton?.setOnClickListener {
+            runPipeline()
+        }
+        pipelineTypeButton?.setOnClickListener {
+            selectNextPipeline()
+        }
+        pipelineUndoButton?.setOnClickListener {
+            if (isPipelineRunning.get()) {
+                cancelPipeline()
+                toast(R.string.toast_pipeline_cancelled)
+            } else {
+                restoreLastPipelineText()
+            }
+        }
+        pipelineModelButton?.setOnClickListener {
+            selectNextTextModel()
+        }
 
         holdToTalkButton.setOnTouchListener { _, event ->
             when (event.actionMasked) {
@@ -168,6 +209,7 @@ class AiKeyboardImeService : InputMethodService() {
         isInputViewVisible.set(true)
         mainHandler.removeCallbacks(unloadModelsRunnable)
         refreshLanguageButton()
+        refreshPipelineButtons()
         ensureSelectedModelWarmup()
     }
 
@@ -243,9 +285,9 @@ class AiKeyboardImeService : InputMethodService() {
         val scheduleEpoch = modelLifecycleEpoch.get()
         loadingModels.add(modelId)
         modelLoaderExecutor.execute {
-            var model: Model? = null
+            var model: VoskModel? = null
             try {
-                model = Model(modelRepository.getModelDir(modelId).absolutePath)
+                model = VoskModel(modelRepository.getModelDir(modelId).absolutePath)
                 if (!isInputViewVisible.get() || modelLifecycleEpoch.get() != scheduleEpoch) {
                     return@execute
                 }
@@ -344,6 +386,188 @@ class AiKeyboardImeService : InputMethodService() {
         isRecording = false
         activeSession?.stop()
         activeSession = null
+    }
+
+    private fun refreshPipelineButtons() {
+        val preset = AiKeyboardPipelineCatalog.byId(textModelRepository.getSelectedPipelineId())
+            ?: AiKeyboardPipelineCatalog.defaultPreset()
+        pipelineTypeButton?.text = preset.keyboardLabel
+        pipelineTypeButton?.contentDescription = getString(R.string.a11y_pipeline_type, preset.displayName)
+        pipelineRunButton?.text = if (isPipelineRunning.get()) {
+            getString(R.string.btn_pipeline_running)
+        } else {
+            getString(R.string.btn_pipeline_run)
+        }
+        pipelineRunButton?.contentDescription = getString(R.string.a11y_pipeline_run)
+        pipelineUndoButton?.text = getString(R.string.btn_pipeline_undo)
+        pipelineUndoButton?.contentDescription =
+            if (isPipelineRunning.get()) {
+                getString(R.string.a11y_pipeline_cancel)
+            } else {
+                getString(R.string.a11y_pipeline_undo)
+            }
+        val selectedModel = textModelRepository.getSelectedModel()
+        pipelineModelButton?.text = selectedModel?.displayName?.shortKeyboardModelLabel()
+            ?: getString(R.string.btn_pipeline_model_none)
+        pipelineModelButton?.contentDescription =
+            selectedModel?.let { getString(R.string.a11y_pipeline_model, it.displayName) }
+                ?: getString(R.string.a11y_pipeline_model_none)
+    }
+
+    private fun selectNextPipeline() {
+        val preset = textModelRepository.selectNextPipeline()
+        refreshPipelineButtons()
+        announcePipelineAction(getString(R.string.toast_pipeline_type_selected, preset.displayName))
+    }
+
+    private fun selectNextTextModel() {
+        val model = textModelRepository.selectNextModel()
+        refreshPipelineButtons()
+        if (model == null) {
+            toast(R.string.toast_pipeline_no_text_model)
+        } else {
+            announcePipelineAction(getString(R.string.toast_pipeline_model_selected, model.displayName))
+        }
+    }
+
+    private fun runPipeline() {
+        if (!isPipelineRunning.compareAndSet(false, true)) {
+            toast(R.string.toast_pipeline_running)
+            return
+        }
+
+        val ic = currentInputConnection
+        if (ic == null) {
+            finishPipelineRun()
+            return
+        }
+        val originalText = readAllText(ic)
+        val prompt = AiKeyboardPipelineCatalog.buildPrompt(
+            presetId = textModelRepository.getSelectedPipelineId(),
+            input = originalText,
+        )
+        if (prompt.isBlank()) {
+            finishPipelineRun()
+            toast(R.string.toast_pipeline_no_text)
+            return
+        }
+        val candidate = textModelRepository.getSelectedModel()
+        if (candidate == null) {
+            finishPipelineRun()
+            toast(R.string.toast_pipeline_no_text_model)
+            return
+        }
+
+        lastPipelineOriginalText = originalText
+        refreshPipelineButtons()
+        toast(R.string.toast_pipeline_started)
+
+        pipelineExecutor.execute {
+            val model = candidate.model
+            activePipelineModel = model
+            var response = ""
+
+            LlmChatModelHelper.initialize(
+                context = this,
+                model = model,
+                taskId = BuiltInTaskId.LLM_CHAT,
+                supportImage = false,
+                supportAudio = false,
+                onDone = { error ->
+                    if (error.isNotBlank()) {
+                        mainHandler.post {
+                            toast(error)
+                            finishPipelineRun()
+                        }
+                        cleanupPipelineModel(model)
+                        return@initialize
+                    }
+
+                    LlmChatModelHelper.resetConversation(model = model)
+                    LlmChatModelHelper.runInference(
+                        model = model,
+                        input = prompt,
+                        resultListener = { partialResult, done, _ ->
+                            if (partialResult.isNotEmpty()) {
+                                response = processLlmResponse("$response$partialResult")
+                            }
+                            if (done) {
+                                val finalText = response.trim()
+                                mainHandler.post {
+                                    if (finalText.isBlank()) {
+                                        toast(R.string.toast_pipeline_empty_result)
+                                    } else if (isPipelineRunning.get()) {
+                                        replaceAllText(finalText)
+                                        toast(R.string.toast_pipeline_done)
+                                    }
+                                    finishPipelineRun()
+                                }
+                                cleanupPipelineModel(model)
+                            }
+                        },
+                        cleanUpListener = {
+                            mainHandler.post { finishPipelineRun() }
+                        },
+                        onError = { message ->
+                            mainHandler.post {
+                                toast(message)
+                                finishPipelineRun()
+                            }
+                            cleanupPipelineModel(model)
+                        },
+                    )
+                },
+            )
+        }
+    }
+
+    private fun cancelPipeline() {
+        val model = activePipelineModel
+        if (model != null) {
+            runCatching { LlmChatModelHelper.stopResponse(model) }
+            cleanupPipelineModel(model)
+        }
+        finishPipelineRun()
+    }
+
+    private fun cleanupPipelineModel(model: Model) {
+        runCatching { LlmChatModelHelper.cleanUp(model) {} }
+        if (activePipelineModel === model) {
+            activePipelineModel = null
+        }
+    }
+
+    private fun finishPipelineRun() {
+        isPipelineRunning.set(false)
+        refreshPipelineButtons()
+    }
+
+    private fun restoreLastPipelineText() {
+        val original = lastPipelineOriginalText
+        if (original == null) {
+            toast(R.string.toast_pipeline_no_undo)
+            return
+        }
+        replaceAllText(original)
+        lastPipelineOriginalText = null
+        toast(R.string.toast_pipeline_restored)
+    }
+
+    private fun replaceAllText(text: String) {
+        val ic = currentInputConnection ?: return
+        ic.beginBatchEdit()
+        try {
+            clearBeforeCursor(ic)
+            clearAfterCursor(ic)
+            ic.commitText(text, 1)
+        } finally {
+            ic.endBatchEdit()
+        }
+    }
+
+    private fun announcePipelineAction(message: String) {
+        pipelineTypeButton?.announceForAccessibility(message)
+        toast(message)
     }
 
     private fun triggerMicFeedback() {
@@ -518,6 +742,12 @@ class AiKeyboardImeService : InputMethodService() {
 
     private fun announceForAccessibility(message: String) {
         languageButton?.announceForAccessibility(message)
+    }
+
+    private fun String.shortKeyboardModelLabel(): String {
+        val trimmed = trim()
+        if (trimmed.isEmpty()) return getString(R.string.btn_pipeline_model_none)
+        return trimmed.take(4)
     }
 
     private enum class PunctuationType {

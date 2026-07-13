@@ -8,9 +8,53 @@
     android:padding="8dp">
 
     <LinearLayout
+        android:id="@+id/rowPipelineActions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnPipelineRun"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_pipeline_run"
+            android:text="@string/btn_pipeline_run" />
+
+        <Button
+            android:id="@+id/btnPipelineType"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_pipeline_type_default"
+            android:text="@string/btn_pipeline_type_default" />
+
+        <Button
+            android:id="@+id/btnPipelineUndo"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_pipeline_undo"
+            android:text="@string/btn_pipeline_undo" />
+
+        <Button
+            android:id="@+id/btnPipelineModel"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/a11y_pipeline_model_none"
+            android:text="@string/btn_pipeline_model_none" />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/rowCursorActions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
