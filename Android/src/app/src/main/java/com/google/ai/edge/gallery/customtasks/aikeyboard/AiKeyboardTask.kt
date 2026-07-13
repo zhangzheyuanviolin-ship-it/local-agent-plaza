@@ -36,9 +36,20 @@ import kotlinx.coroutines.CoroutineScope
 
 const val TASK_ID_AI_KEYBOARD = "local_ai_keyboard"
 
-private const val AI_KEYBOARD_SETTINGS_MODEL = "ai-keyboard-settings"
+const val AI_KEYBOARD_SETTINGS_MODEL = "ai-keyboard-settings"
 
 class AiKeyboardSettingsInstance
+
+fun createAiKeyboardSettingsModel(): Model {
+  return Model(
+    name = AI_KEYBOARD_SETTINGS_MODEL,
+    displayName = "AI 键盘设置",
+    info = "管理离线语音输入模型，启用系统输入法，并测试按需加载的本地语音输入链路。",
+    localFileRelativeDirPathOverride = "ai_keyboard_settings",
+    showBenchmarkButton = false,
+    showRunAgainButton = false,
+  )
+}
 
 class AiKeyboardTask @Inject constructor() : CustomTask {
   override val task: Task =
@@ -47,17 +58,7 @@ class AiKeyboardTask @Inject constructor() : CustomTask {
       label = "AI 键盘",
       category = Category.LLM,
       icon = Icons.Outlined.KeyboardVoice,
-      models =
-        mutableListOf(
-          Model(
-            name = AI_KEYBOARD_SETTINGS_MODEL,
-            displayName = "AI 键盘设置",
-            info = "管理离线语音输入模型，启用系统输入法，并测试按需加载的本地语音输入链路。",
-            localFileRelativeDirPathOverride = "ai_keyboard_settings",
-            showBenchmarkButton = false,
-            showRunAgainButton = false,
-          )
-        ),
+      models = mutableListOf(createAiKeyboardSettingsModel()),
       description = "把本地智能体广场作为系统输入法使用，第一阶段支持离线语音输入和中英文 Vosk 模型管理。",
       shortDescription = "本地语音输入法",
       docUrl = "https://github.com/zhangzheyuanviolin-ship-it/offline-voice-ime",
