@@ -18,6 +18,8 @@ package com.google.ai.edge.gallery.customtasks.aikeyboard
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -235,6 +237,7 @@ private fun AiKeyboardPipelineSettingsSection(
   val selectedPipelineId = remember(refreshTick) { repository.getSelectedPipelineId() }
   val presets = remember(refreshTick) { repository.listPipelinePresets() }
   val logs = remember(refreshTick) { repository.listPipelineLogs() }
+  val context = LocalContext.current
 
   Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
     OutlinedButton(
@@ -252,6 +255,12 @@ private fun AiKeyboardPipelineSettingsSection(
           onRefresh()
         },
         onClear = { showClearLogsDialog = true },
+        onCopy = { entry ->
+          copyTextToClipboard(context, "流水线日志", entry.toExportText())
+        },
+        onExport = {
+          copyTextToClipboard(context, "全部流水线日志", logs.joinToString(separator = "\n\n") { it.toExportText() })
+        },
       )
     }
 
@@ -398,6 +407,8 @@ private fun AiKeyboardPipelineLogSection(
   logs: List<AiKeyboardPipelineLogEntry>,
   onDelete: (String) -> Unit,
   onClear: () -> Unit,
+  onCopy: (AiKeyboardPipelineLogEntry) -> Unit,
+  onExport: () -> Unit,
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -411,11 +422,18 @@ private fun AiKeyboardPipelineLogSection(
         Text("清空")
       }
     }
+    OutlinedButton(onClick = onExport, enabled = logs.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
+      Text("复制全部日志")
+    }
     if (logs.isEmpty()) {
       Text("暂无流水线处理记录。", style = MaterialTheme.typography.bodyMedium)
     } else {
       logs.forEach { entry ->
-        AiKeyboardPipelineLogCard(entry = entry, onDelete = { onDelete(entry.id) })
+        AiKeyboardPipelineLogCard(
+          entry = entry,
+          onCopy = { onCopy(entry) },
+          onDelete = { onDelete(entry.id) },
+        )
       }
     }
   }
@@ -424,6 +442,7 @@ private fun AiKeyboardPipelineLogSection(
 @Composable
 private fun AiKeyboardPipelineLogCard(
   entry: AiKeyboardPipelineLogEntry,
+  onCopy: () -> Unit,
   onDelete: () -> Unit,
 ) {
   var expanded by remember(entry.id) { mutableStateOf(false) }
@@ -444,6 +463,11 @@ private fun AiKeyboardPipelineLogCard(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
+      Text(
+        "首 token ${entry.firstTokenLatencyMs} ms，推理 ${entry.inferenceDurationMs} ms，提交 ${entry.commitDurationMs} ms，总计 ${entry.totalDurationMs} ms，速度 ${String.format(Locale.US, "%.1f", entry.outputCharsPerSecond)} 字符/秒",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
       Text("原文：" + entry.inputText.previewForLog(expanded), style = MaterialTheme.typography.bodyMedium)
       Text("输出：" + entry.outputText.previewForLog(expanded), style = MaterialTheme.typography.bodyMedium)
       if (entry.committedText.isNotBlank() && entry.committedText != entry.outputText) {
@@ -456,6 +480,9 @@ private fun AiKeyboardPipelineLogCard(
         OutlinedButton(onClick = { expanded = !expanded }, modifier = Modifier.weight(1f)) {
           Text(if (expanded) "收起" else "展开")
         }
+        OutlinedButton(onClick = onCopy, modifier = Modifier.weight(1f)) {
+          Text("复制")
+        }
         OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
           Icon(Icons.Outlined.Delete, contentDescription = null)
           Text("删除", modifier = Modifier.padding(start = 6.dp))
@@ -463,6 +490,38 @@ private fun AiKeyboardPipelineLogCard(
       }
     }
   }
+}
+
+private fun copyTextToClipboard(context: Context, label: String, text: String) {
+  val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+  clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+  Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+}
+
+private fun AiKeyboardPipelineLogEntry.toExportText(): String {
+  return listOf(
+    "时间：${formatPipelineLogTime(createdAtMillis)}",
+    "流水线：$presetName",
+    "模型：$modelName",
+    "状态：$status",
+    "输入长度：$inputLength",
+    "原始输出长度：$rawOutputLength",
+    "清洗输出长度：$outputLength",
+    "提交后长度：$committedLength",
+    "maxTokens：$maxTokens",
+    "上下文：$contextWindow",
+    "首 token 延迟：$firstTokenLatencyMs ms",
+    "推理耗时：$inferenceDurationMs ms",
+    "提交耗时：$commitDurationMs ms",
+    "总耗时：$totalDurationMs ms",
+    "输出速度：${String.format(Locale.US, "%.1f", outputCharsPerSecond)} 字符/秒",
+    "原文：$inputText",
+    "提示词：$promptText",
+    "原始输出：$rawOutputText",
+    "清洗输出：$outputText",
+    "提交后：$committedText",
+    "错误：$errorText",
+  ).joinToString(separator = "\n")
 }
 
 private fun String.previewForLog(expanded: Boolean): String {

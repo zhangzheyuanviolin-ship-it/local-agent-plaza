@@ -69,6 +69,7 @@ class AiKeyboardImeService : InputMethodService() {
     private var pendingPipelineRequest: PipelineRequest? = null
     private var activePipelineRequestId: String? = null
     private var activePipelineInputText: String = ""
+    private var activePipelineStartedAtMs: Long = 0L
     private var lastPipelineOriginalText: String? = null
 
     private var pipelineRunButton: Button? = null
@@ -488,6 +489,7 @@ class AiKeyboardImeService : InputMethodService() {
             )
         activePipelineRequestId = request.requestId
         activePipelineInputText = originalText
+        activePipelineStartedAtMs = System.currentTimeMillis()
         refreshPipelineButtons()
         toast(R.string.toast_pipeline_started)
         if (!sendPipelineRequest(request)) {
@@ -515,6 +517,7 @@ class AiKeyboardImeService : InputMethodService() {
         isPipelineRunning.set(false)
         activePipelineRequestId = null
         activePipelineInputText = ""
+        activePipelineStartedAtMs = 0L
         refreshPipelineButtons()
     }
 
@@ -558,14 +561,23 @@ class AiKeyboardImeService : InputMethodService() {
                     if (requestId != activePipelineRequestId) return
                     val text = msg.data.getString(AiKeyboardPipelineService.KEY_RESULT_TEXT).orEmpty().trim()
                     var committedText = ""
+                    var commitDurationMs = 0L
                     if (text.isBlank()) {
                         toast(R.string.toast_pipeline_empty_result)
                     } else if (isPipelineRunning.get()) {
+                        val commitStartMs = System.currentTimeMillis()
                         replaceAllText(text)
+                        commitDurationMs = System.currentTimeMillis() - commitStartMs
                         committedText = currentInputConnection?.let { readAllText(it) }.orEmpty()
                         toast(R.string.toast_pipeline_done)
                     }
-                    appendPipelineLog(data = msg.data, outputText = text, committedText = committedText, status = "success")
+                    appendPipelineLog(
+                        data = msg.data,
+                        outputText = text,
+                        committedText = committedText,
+                        status = "success",
+                        commitDurationMs = commitDurationMs,
+                    )
                     finishPipelineRun()
                 }
 
@@ -598,6 +610,7 @@ class AiKeyboardImeService : InputMethodService() {
         committedText: String,
         status: String,
         errorText: String = "",
+        commitDurationMs: Long = 0L,
     ) {
         val presetId = textModelRepository.getSelectedPipelineId()
         val preset = textModelRepository.getPipelinePreset(presetId) ?: AiKeyboardPipelineCatalog.defaultPreset()
@@ -625,6 +638,12 @@ class AiKeyboardImeService : InputMethodService() {
                     contextWindow = data.getInt(AiKeyboardPipelineService.KEY_CONTEXT_WINDOW, 0),
                     status = status,
                     errorText = errorText,
+                    firstTokenLatencyMs = data.getLong(AiKeyboardPipelineService.KEY_FIRST_TOKEN_LATENCY_MS, 0L),
+                    inferenceDurationMs = data.getLong(AiKeyboardPipelineService.KEY_INFERENCE_DURATION_MS, 0L),
+                    commitDurationMs = commitDurationMs,
+                    totalDurationMs =
+                        activePipelineStartedAtMs.takeIf { it > 0L }?.let { System.currentTimeMillis() - it } ?: 0L,
+                    outputCharsPerSecond = data.getFloat(AiKeyboardPipelineService.KEY_OUTPUT_CHARS_PER_SECOND, 0f),
                 )
             )
         }
@@ -647,9 +666,15 @@ class AiKeyboardImeService : InputMethodService() {
         try {
             clearBeforeCursor(ic)
             clearAfterCursor(ic)
-            ic.commitText(text, 1)
+            commitTextInChunks(ic, text)
         } finally {
             ic.endBatchEdit()
+        }
+    }
+
+    private fun commitTextInChunks(ic: InputConnection, text: String) {
+        AiKeyboardCommitTextChunker.chunks(text).forEach { chunk ->
+            ic.commitText(chunk, 1)
         }
     }
 

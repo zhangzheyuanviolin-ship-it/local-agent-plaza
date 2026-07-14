@@ -125,7 +125,7 @@ class AiKeyboardPipelineService : Service() {
     unloadActiveModel()
     System.gc()
     runCatching { Thread.sleep(MODEL_RELOAD_SETTLE_MS) }
-    val model = repository.prepareModelForPipeline(candidate)
+    val model = candidate.model
     LlmChatModelHelper.initialize(
       context = this,
       model = model,
@@ -155,16 +155,28 @@ class AiKeyboardPipelineService : Service() {
   ) {
     var rawResponse = ""
     var cleanedResponse = ""
+    val inferenceStartMs = System.currentTimeMillis()
+    var firstTokenLatencyMs = 0L
     LlmChatModelHelper.resetConversation(model = model)
     LlmChatModelHelper.runInference(
       model = model,
       input = prompt,
       resultListener = { partialResult, done, _ ->
         if (partialResult.isNotEmpty()) {
+          if (firstTokenLatencyMs == 0L) {
+            firstTokenLatencyMs = System.currentTimeMillis() - inferenceStartMs
+          }
           rawResponse += partialResult
           cleanedResponse = processLlmResponse(rawResponse)
         }
         if (done) {
+          val inferenceDurationMs = System.currentTimeMillis() - inferenceStartMs
+          val outputCharsPerSecond =
+            if (inferenceDurationMs > 0L) {
+              (cleanedResponse.length * 1000f) / inferenceDurationMs
+            } else {
+              0f
+            }
           running.set(false)
           scheduleIdleUnload()
           sendResult(
@@ -175,6 +187,9 @@ class AiKeyboardPipelineService : Service() {
             modelPath = modelPath,
             preset = preset,
             prompt = prompt,
+            firstTokenLatencyMs = firstTokenLatencyMs,
+            inferenceDurationMs = inferenceDurationMs,
+            outputCharsPerSecond = outputCharsPerSecond,
           )
         }
       },
@@ -220,6 +235,9 @@ class AiKeyboardPipelineService : Service() {
     modelPath: String,
     preset: AiKeyboardPipelinePreset,
     prompt: String,
+    firstTokenLatencyMs: Long,
+    inferenceDurationMs: Long,
+    outputCharsPerSecond: Float,
   ) {
     val contextWindow = model.getConfiguredContextWindow()
     val maxTokens = model.getIntConfigValue(ConfigKeys.MAX_TOKENS, DEFAULT_MAX_TOKEN)
@@ -233,6 +251,9 @@ class AiKeyboardPipelineService : Service() {
       putString(KEY_PROMPT_TEXT, prompt)
       putInt(KEY_CONTEXT_WINDOW, contextWindow)
       putInt(KEY_MAX_TOKENS, maxTokens)
+      putLong(KEY_FIRST_TOKEN_LATENCY_MS, firstTokenLatencyMs)
+      putLong(KEY_INFERENCE_DURATION_MS, inferenceDurationMs)
+      putFloat(KEY_OUTPUT_CHARS_PER_SECOND, outputCharsPerSecond)
     })
   }
 
@@ -279,6 +300,9 @@ class AiKeyboardPipelineService : Service() {
     const val KEY_PROMPT_TEXT = "prompt_text"
     const val KEY_CONTEXT_WINDOW = "context_window"
     const val KEY_MAX_TOKENS = "max_tokens"
+    const val KEY_FIRST_TOKEN_LATENCY_MS = "first_token_latency_ms"
+    const val KEY_INFERENCE_DURATION_MS = "inference_duration_ms"
+    const val KEY_OUTPUT_CHARS_PER_SECOND = "output_chars_per_second"
     private const val MODEL_RELOAD_SETTLE_MS = 600L
     private const val IDLE_MODEL_UNLOAD_DELAY_MS = 120_000L
   }
