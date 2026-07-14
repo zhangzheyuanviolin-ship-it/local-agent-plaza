@@ -656,12 +656,12 @@
   <string name="a11y_paste">从剪贴板粘贴</string>
   <string name="a11y_copy_all">复制当前文本框全部文字</string>
   <string name="a11y_pipeline_run">使用本地文本模型处理当前文本框文字</string>
-  <string name="a11y_pipeline_type_default">当前流水线为润色，点按切换流水线</string>
-  <string name="a11y_pipeline_type">当前流水线为%1$s，点按切换流水线</string>
+  <string name="a11y_pipeline_type_default">当前流水线为润色，点按打开流水线菜单</string>
+  <string name="a11y_pipeline_type">当前流水线为%1$s，点按打开流水线菜单</string>
   <string name="a11y_pipeline_undo">恢复上一次 AI 替换前的文本</string>
   <string name="a11y_pipeline_cancel">取消正在进行的文本处理</string>
-  <string name="a11y_pipeline_model_none">未选择本地文本模型，点按查找可用模型</string>
-  <string name="a11y_pipeline_model">当前文本模型为%1$s，点按切换模型</string>
+  <string name="a11y_pipeline_model_none">未选择本地文本模型，点按打开模型菜单</string>
+  <string name="a11y_pipeline_model">当前文本模型为%1$s，点按打开模型菜单</string>
   <string name="punc_comma_zh">，</string>
   <string name="punc_period_zh">。</string>
   <string name="punc_question_zh">？</string>

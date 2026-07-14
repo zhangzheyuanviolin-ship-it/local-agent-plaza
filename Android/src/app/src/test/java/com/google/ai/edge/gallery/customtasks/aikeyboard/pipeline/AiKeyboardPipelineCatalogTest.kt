@@ -26,6 +26,7 @@ class AiKeyboardPipelineCatalogTest {
         "list",
         "table",
         "translate",
+        "complete",
         "custom",
       )
 
@@ -59,6 +60,19 @@ class AiKeyboardPipelineCatalogTest {
 
     assertTrue(prompt.contains("翻译为英文"))
     assertTrue(prompt.contains("今天晚上要不要一起吃饭？"))
+  }
+
+  @Test
+  fun completePromptContinuesIncompleteTextFromContext() {
+    val prompt =
+      AiKeyboardPipelineCatalog.buildPrompt(
+        "complete",
+        "The actual communication effectiveness and the final",
+      )
+
+    assertTrue(prompt.contains("补全"))
+    assertTrue(prompt.contains("基于上下文"))
+    assertTrue(prompt.contains("The actual communication effectiveness and the final"))
   }
 
   @Test

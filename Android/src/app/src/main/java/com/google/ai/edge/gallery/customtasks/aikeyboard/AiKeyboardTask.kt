@@ -59,7 +59,7 @@ class AiKeyboardTask @Inject constructor() : CustomTask {
       category = Category.LLM,
       icon = Icons.Outlined.KeyboardVoice,
       models = mutableListOf(createAiKeyboardSettingsModel()),
-      description = "把本地智能体广场作为系统输入法使用，第一阶段支持离线语音输入和中英文 Vosk 模型管理。",
+      description = "",
       shortDescription = "本地语音输入法",
       docUrl = "https://github.com/zhangzheyuanviolin-ship-it/offline-voice-ime",
       sourceCodeUrl = "https://github.com/zhangzheyuanviolin-ship-it/offline-voice-ime",

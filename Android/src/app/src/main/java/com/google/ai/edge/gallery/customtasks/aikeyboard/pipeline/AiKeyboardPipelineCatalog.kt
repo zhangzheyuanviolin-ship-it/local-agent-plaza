@@ -110,6 +110,12 @@ object AiKeyboardPipelineCatalog {
         instruction = "把原文翻译为{target_language}。保留原文含义、语气和格式，不要把目标语言再翻译回原文语言。",
       ),
       AiKeyboardPipelinePreset(
+        id = "complete",
+        displayName = "文本补全",
+        keyboardLabel = "补全",
+        instruction = "基于上下文补全未完成的文字，延续原文语言、语气、格式和逻辑，只补出自然完整的后续内容。",
+      ),
+      AiKeyboardPipelinePreset(
         id = "custom",
         displayName = "自定义",
         keyboardLabel = "自定",

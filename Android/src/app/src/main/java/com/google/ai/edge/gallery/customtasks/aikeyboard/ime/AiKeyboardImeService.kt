@@ -28,6 +28,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputConnection
 import android.widget.Button
+import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.google.ai.edge.gallery.R
@@ -171,7 +172,7 @@ class AiKeyboardImeService : InputMethodService() {
             runPipeline()
         }
         pipelineTypeButton?.setOnClickListener {
-            selectNextPipeline()
+            showPipelineMenu(it)
         }
         pipelineUndoButton?.setOnClickListener {
             if (isPipelineRunning.get()) {
@@ -182,7 +183,7 @@ class AiKeyboardImeService : InputMethodService() {
             }
         }
         pipelineModelButton?.setOnClickListener {
-            selectNextTextModel()
+            showTextModelMenu(it)
         }
 
         holdToTalkButton.setOnTouchListener { _, event ->
@@ -446,20 +447,53 @@ class AiKeyboardImeService : InputMethodService() {
                 ?: getString(R.string.a11y_pipeline_model_none)
     }
 
-    private fun selectNextPipeline() {
-        val preset = textModelRepository.selectNextPipeline()
-        refreshPipelineButtons()
-        announcePipelineAction(getString(R.string.toast_pipeline_type_selected, preset.displayName))
+    private fun showPipelineMenu(anchor: View) {
+        val presets = textModelRepository.listPipelinePresets()
+        if (presets.isEmpty()) {
+            return
+        }
+        val selectedId = textModelRepository.getSelectedPipelineId()
+        val popup = PopupMenu(anchor.context, anchor)
+        presets.forEachIndexed { index, preset ->
+            popup.menu.add(0, index, index, preset.displayName).apply {
+                isCheckable = true
+                isChecked = preset.id == selectedId
+            }
+        }
+        popup.menu.setGroupCheckable(0, true, true)
+        popup.setOnMenuItemClickListener { item ->
+            val preset = presets.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener false
+            textModelRepository.setSelectedPipelineId(preset.id)
+            refreshPipelineButtons()
+            announcePipelineAction(getString(R.string.toast_pipeline_type_selected, preset.displayName))
+            true
+        }
+        popup.show()
     }
 
-    private fun selectNextTextModel() {
-        val model = textModelRepository.selectNextModel()
-        refreshPipelineButtons()
-        if (model == null) {
+    private fun showTextModelMenu(anchor: View) {
+        val models = textModelRepository.listAvailableModels()
+        if (models.isEmpty()) {
             toast(R.string.toast_pipeline_no_text_model)
-        } else {
-            announcePipelineAction(getString(R.string.toast_pipeline_model_selected, model.displayName))
+            return
         }
+        val selectedPath = textModelRepository.getSelectedModel()?.path
+        val popup = PopupMenu(anchor.context, anchor)
+        models.forEachIndexed { index, model ->
+            popup.menu.add(0, index, index, model.displayName).apply {
+                isCheckable = true
+                isChecked = model.path == selectedPath
+            }
+        }
+        popup.menu.setGroupCheckable(0, true, true)
+        popup.setOnMenuItemClickListener { item ->
+            val model = models.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener false
+            textModelRepository.setSelectedModelPath(model.path)
+            refreshPipelineButtons()
+            announcePipelineAction(getString(R.string.toast_pipeline_model_selected, model.displayName))
+            true
+        }
+        popup.show()
     }
 
     private fun runPipeline() {
