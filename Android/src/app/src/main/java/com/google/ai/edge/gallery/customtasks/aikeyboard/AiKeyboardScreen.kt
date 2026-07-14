@@ -468,6 +468,11 @@ private fun AiKeyboardPipelineLogCard(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
+      Text(
+        "提交方式 ${entry.commitStrategy.ifBlank { "未知" }}，直接读回 ${entry.directCommittedLength}，剪贴板回退 ${if (entry.clipboardFallbackUsed) "是" else "否"}，粘贴接受 ${if (entry.clipboardPasteAccepted) "是" else "否"}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
       Text("原文：" + entry.inputText.previewForLog(expanded), style = MaterialTheme.typography.bodyMedium)
       Text("输出：" + entry.outputText.previewForLog(expanded), style = MaterialTheme.typography.bodyMedium)
       if (entry.committedText.isNotBlank() && entry.committedText != entry.outputText) {
@@ -515,6 +520,10 @@ private fun AiKeyboardPipelineLogEntry.toExportText(): String {
     "提交耗时：$commitDurationMs ms",
     "总耗时：$totalDurationMs ms",
     "输出速度：${String.format(Locale.US, "%.1f", outputCharsPerSecond)} 字符/秒",
+    "提交方式：$commitStrategy",
+    "直接提交读回长度：$directCommittedLength",
+    "是否启用剪贴板回退：$clipboardFallbackUsed",
+    "剪贴板粘贴是否被接受：$clipboardPasteAccepted",
     "原文：$inputText",
     "提示词：$promptText",
     "原始输出：$rawOutputText",

@@ -566,9 +566,13 @@ class AiKeyboardImeService : InputMethodService() {
                         toast(R.string.toast_pipeline_empty_result)
                     } else if (isPipelineRunning.get()) {
                         val commitStartMs = System.currentTimeMillis()
-                        replaceAllText(text)
+                        val outcome = replaceAllText(text)
                         commitDurationMs = System.currentTimeMillis() - commitStartMs
-                        committedText = currentInputConnection?.let { readAllText(it) }.orEmpty()
+                        committedText = outcome.committedText
+                        msg.data.putString(KEY_COMMIT_STRATEGY, outcome.strategy)
+                        msg.data.putInt(KEY_DIRECT_COMMITTED_LENGTH, outcome.directCommittedText.length)
+                        msg.data.putBoolean(KEY_CLIPBOARD_FALLBACK_USED, outcome.clipboardFallbackUsed)
+                        msg.data.putBoolean(KEY_CLIPBOARD_PASTE_ACCEPTED, outcome.clipboardPasteAccepted)
                         toast(R.string.toast_pipeline_done)
                     }
                     appendPipelineLog(
@@ -644,6 +648,10 @@ class AiKeyboardImeService : InputMethodService() {
                     totalDurationMs =
                         activePipelineStartedAtMs.takeIf { it > 0L }?.let { System.currentTimeMillis() - it } ?: 0L,
                     outputCharsPerSecond = data.getFloat(AiKeyboardPipelineService.KEY_OUTPUT_CHARS_PER_SECOND, 0f),
+                    commitStrategy = data.getString(KEY_COMMIT_STRATEGY).orEmpty(),
+                    directCommittedLength = data.getInt(KEY_DIRECT_COMMITTED_LENGTH, 0),
+                    clipboardFallbackUsed = data.getBoolean(KEY_CLIPBOARD_FALLBACK_USED, false),
+                    clipboardPasteAccepted = data.getBoolean(KEY_CLIPBOARD_PASTE_ACCEPTED, false),
                 )
             )
         }
@@ -660,21 +668,75 @@ class AiKeyboardImeService : InputMethodService() {
         toast(R.string.toast_pipeline_restored)
     }
 
-    private fun replaceAllText(text: String) {
-        val ic = currentInputConnection ?: return
+    private fun replaceAllText(text: String): PipelineCommitOutcome {
+        val ic = currentInputConnection ?: return PipelineCommitOutcome(committedText = "", strategy = "none")
+        val directCommittedText = replaceAllTextDirect(ic, text)
+        if (!AiKeyboardCommitVerifier.needsClipboardFallback(text, directCommittedText)) {
+            return PipelineCommitOutcome(
+                committedText = directCommittedText,
+                strategy = "direct",
+                directCommittedText = directCommittedText,
+            )
+        }
+
+        val clipboardOutcome = replaceAllTextViaClipboard(text, directCommittedText)
+        if (clipboardOutcome.committedText.isNotBlank()) {
+            return clipboardOutcome
+        }
+        return PipelineCommitOutcome(
+            committedText = directCommittedText,
+            strategy = "direct_truncated",
+            directCommittedText = directCommittedText,
+        )
+    }
+
+    private fun replaceAllTextDirect(ic: InputConnection, text: String): String {
         ic.beginBatchEdit()
         try {
             clearBeforeCursor(ic)
             clearAfterCursor(ic)
-            commitTextInChunks(ic, text)
+            ic.commitText(text, 1)
         } finally {
             ic.endBatchEdit()
         }
+        return readAllText(ic)
     }
 
-    private fun commitTextInChunks(ic: InputConnection, text: String) {
-        AiKeyboardCommitTextChunker.chunks(text).forEach { chunk ->
-            ic.commitText(chunk, 1)
+    private fun replaceAllTextViaClipboard(text: String, directCommittedText: String): PipelineCommitOutcome {
+        val ic = currentInputConnection ?: return PipelineCommitOutcome(
+            committedText = directCommittedText,
+            strategy = "direct_truncated",
+            directCommittedText = directCommittedText,
+        )
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager ?: return PipelineCommitOutcome(
+            committedText = directCommittedText,
+            strategy = "direct_truncated",
+            directCommittedText = directCommittedText,
+        )
+        clipboard.setPrimaryClip(ClipData.newPlainText("ai-keyboard-pipeline-result", text))
+        ic.beginBatchEdit()
+        val pasteAccepted =
+            try {
+                clearBeforeCursor(ic)
+                clearAfterCursor(ic)
+                ic.performContextMenuAction(android.R.id.paste)
+            } finally {
+                ic.endBatchEdit()
+            }
+        val pastedText = readAllText(ic)
+        return PipelineCommitOutcome(
+            committedText = pastedText,
+            strategy = "clipboard_paste",
+            directCommittedText = directCommittedText,
+            clipboardFallbackUsed = true,
+            clipboardPasteAccepted = pasteAccepted,
+        )
+    }
+
+    private fun extractedTextRequest(): ExtractedTextRequest {
+        return ExtractedTextRequest().apply {
+            hintMaxChars = TEXT_READ_MAX_CHARS
+            hintMaxLines = TEXT_READ_MAX_LINES
         }
     }
 
@@ -762,7 +824,7 @@ class AiKeyboardImeService : InputMethodService() {
 
     private fun jumpToStart() {
         val ic = currentInputConnection ?: return
-        val extracted = ic.getExtractedText(ExtractedTextRequest(), 0)
+        val extracted = ic.getExtractedText(extractedTextRequest(), 0)
         if (extracted?.text != null) {
             ic.setSelection(0, 0)
             return
@@ -772,7 +834,7 @@ class AiKeyboardImeService : InputMethodService() {
 
     private fun jumpToEnd() {
         val ic = currentInputConnection ?: return
-        val extracted = ic.getExtractedText(ExtractedTextRequest(), 0)
+        val extracted = ic.getExtractedText(extractedTextRequest(), 0)
         val textLength = extracted?.text?.length
         if (textLength != null) {
             ic.setSelection(textLength, textLength)
@@ -809,7 +871,7 @@ class AiKeyboardImeService : InputMethodService() {
     }
 
     private fun readAllText(ic: InputConnection): String {
-        val extracted = ic.getExtractedText(ExtractedTextRequest(), 0)
+        val extracted = ic.getExtractedText(extractedTextRequest(), 0)
         val extractedText = extracted?.text?.toString().orEmpty()
         if (extractedText.isNotEmpty()) return extractedText
 
@@ -873,7 +935,12 @@ class AiKeyboardImeService : InputMethodService() {
     companion object {
         private val WHITESPACE_REGEX = Regex("\\s+")
         private const val TEXT_READ_MAX_CHARS = 100_000
+        private const val TEXT_READ_MAX_LINES = 10_000
         private const val MODEL_UNLOAD_DELAY_MS = 600L
+        private const val KEY_COMMIT_STRATEGY = "ai_keyboard_commit_strategy"
+        private const val KEY_DIRECT_COMMITTED_LENGTH = "ai_keyboard_direct_committed_length"
+        private const val KEY_CLIPBOARD_FALLBACK_USED = "ai_keyboard_clipboard_fallback_used"
+        private const val KEY_CLIPBOARD_PASTE_ACCEPTED = "ai_keyboard_clipboard_paste_accepted"
     }
 }
 
@@ -881,4 +948,12 @@ private data class PipelineRequest(
     val requestId: String,
     val presetId: String,
     val inputText: String,
+)
+
+private data class PipelineCommitOutcome(
+    val committedText: String,
+    val strategy: String,
+    val directCommittedText: String = committedText,
+    val clipboardFallbackUsed: Boolean = false,
+    val clipboardPasteAccepted: Boolean = false,
 )

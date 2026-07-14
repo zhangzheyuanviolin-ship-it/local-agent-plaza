@@ -52,6 +52,10 @@ data class AiKeyboardPipelineLogEntry(
   val commitDurationMs: Long = 0L,
   val totalDurationMs: Long = 0L,
   val outputCharsPerSecond: Float = 0f,
+  val commitStrategy: String = "",
+  val directCommittedLength: Int = 0,
+  val clipboardFallbackUsed: Boolean = false,
+  val clipboardPasteAccepted: Boolean = false,
 )
 
 class AiKeyboardTextModelRepository(
