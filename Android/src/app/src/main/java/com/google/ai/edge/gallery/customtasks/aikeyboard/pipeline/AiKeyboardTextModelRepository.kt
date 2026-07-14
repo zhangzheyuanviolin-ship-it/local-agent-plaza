@@ -315,7 +315,24 @@ class AiKeyboardTextModelRepository(
     return runCatching { gson.fromJson<List<AiKeyboardPipelinePreset>>(json, type) }
       .getOrNull()
       .orEmpty()
-      .map { it.copy(builtIn = false) }
+      .mapNotNull { preset ->
+        val id = preset.id.orEmpty()
+        val displayName = preset.displayName.orEmpty()
+        val keyboardLabel = preset.keyboardLabel.orEmpty()
+        val instruction = preset.instruction.orEmpty()
+        if (id.isBlank() || displayName.isBlank() || instruction.isBlank()) {
+          null
+        } else {
+          AiKeyboardPipelinePreset(
+            id = id,
+            displayName = displayName,
+            keyboardLabel = keyboardLabel.ifBlank { displayName }.take(4),
+            instruction = instruction,
+            builtIn = false,
+            commitMode = AiKeyboardPipelineCommitMode.REPLACE,
+          )
+        }
+      }
       .filter { it.id.isNotBlank() && it.displayName.isNotBlank() && it.instruction.isNotBlank() }
   }
 

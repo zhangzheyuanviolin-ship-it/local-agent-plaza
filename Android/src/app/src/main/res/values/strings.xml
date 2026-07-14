@@ -666,6 +666,7 @@
   <string name="punc_period_zh">。</string>
   <string name="punc_question_zh">？</string>
   <string name="punc_exclamation_zh">！</string>
+  <string name="btn_punc_space">空格</string>
   <string name="punc_comma_en">,</string>
   <string name="punc_period_en">.</string>
   <string name="punc_question_en">?</string>
@@ -678,5 +679,6 @@
   <string name="a11y_insert_period_en">Insert period</string>
   <string name="a11y_insert_question_en">Insert question mark</string>
   <string name="a11y_insert_exclamation_en">Insert exclamation mark</string>
+  <string name="a11y_insert_space">插入空格</string>
 
 </resources>

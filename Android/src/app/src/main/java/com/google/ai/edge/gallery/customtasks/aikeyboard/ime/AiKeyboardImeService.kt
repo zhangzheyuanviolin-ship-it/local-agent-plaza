@@ -36,6 +36,7 @@ import com.google.ai.edge.gallery.customtasks.aikeyboard.asr.VoskRecognizerSessi
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelCatalog
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelRepository
 import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelineCatalog
+import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelineCommitMode
 import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelineLogEntry
 import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelineService
 import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardTextModelRepository
@@ -69,6 +70,7 @@ class AiKeyboardImeService : InputMethodService() {
     private var pipelineBound = false
     private var pendingPipelineRequest: PipelineRequest? = null
     private var activePipelineRequestId: String? = null
+    private var activePipelinePresetId: String = ""
     private var activePipelineInputText: String = ""
     private var activePipelineStartedAtMs: Long = 0L
     private var lastPipelineOriginalText: String? = null
@@ -82,6 +84,7 @@ class AiKeyboardImeService : InputMethodService() {
     private var punctuationPeriodButton: Button? = null
     private var punctuationQuestionButton: Button? = null
     private var punctuationExclamationButton: Button? = null
+    private var punctuationSpaceButton: Button? = null
     private var cursorLeftButton: Button? = null
     private var cursorRightButton: Button? = null
     private var deleteBeforeCursorButton: Button? = null
@@ -154,6 +157,7 @@ class AiKeyboardImeService : InputMethodService() {
         punctuationPeriodButton = root.findViewById(R.id.btnPuncPeriod)
         punctuationQuestionButton = root.findViewById(R.id.btnPuncQuestion)
         punctuationExclamationButton = root.findViewById(R.id.btnPuncExclamation)
+        punctuationSpaceButton = root.findViewById(R.id.btnPuncSpace)
         cursorLeftButton = root.findViewById(R.id.btnCursorLeft)
         cursorRightButton = root.findViewById(R.id.btnCursorRight)
         deleteBeforeCursorButton = root.findViewById(R.id.btnDeleteBeforeCursor)
@@ -229,6 +233,7 @@ class AiKeyboardImeService : InputMethodService() {
         punctuationPeriodButton?.setOnClickListener { insertPunctuation(PunctuationType.PERIOD) }
         punctuationQuestionButton?.setOnClickListener { insertPunctuation(PunctuationType.QUESTION) }
         punctuationExclamationButton?.setOnClickListener { insertPunctuation(PunctuationType.EXCLAMATION) }
+        punctuationSpaceButton?.setOnClickListener { insertPunctuation(PunctuationType.SPACE) }
         cursorLeftButton?.setOnClickListener { moveCursorLeft() }
         cursorRightButton?.setOnClickListener { moveCursorRight() }
         deleteBeforeCursorButton?.setOnClickListener { deleteBeforeCursorAll() }
@@ -291,6 +296,7 @@ class AiKeyboardImeService : InputMethodService() {
         punctuationQuestionButton?.text = getString(if (isZh) R.string.punc_question_zh else R.string.punc_question_en)
         punctuationExclamationButton?.text =
             getString(if (isZh) R.string.punc_exclamation_zh else R.string.punc_exclamation_en)
+        punctuationSpaceButton?.text = getString(R.string.btn_punc_space)
 
         punctuationCommaButton?.contentDescription =
             getString(if (isZh) R.string.a11y_insert_comma_zh else R.string.a11y_insert_comma_en)
@@ -300,6 +306,7 @@ class AiKeyboardImeService : InputMethodService() {
             getString(if (isZh) R.string.a11y_insert_question_zh else R.string.a11y_insert_question_en)
         punctuationExclamationButton?.contentDescription =
             getString(if (isZh) R.string.a11y_insert_exclamation_zh else R.string.a11y_insert_exclamation_en)
+        punctuationSpaceButton?.contentDescription = getString(R.string.a11y_insert_space)
     }
 
     private fun ensureSelectedModelWarmup() {
@@ -522,6 +529,7 @@ class AiKeyboardImeService : InputMethodService() {
                 inputText = originalText,
             )
         activePipelineRequestId = request.requestId
+        activePipelinePresetId = request.presetId
         activePipelineInputText = originalText
         activePipelineStartedAtMs = System.currentTimeMillis()
         refreshPipelineButtons()
@@ -550,6 +558,7 @@ class AiKeyboardImeService : InputMethodService() {
     private fun finishPipelineRun() {
         isPipelineRunning.set(false)
         activePipelineRequestId = null
+        activePipelinePresetId = ""
         activePipelineInputText = ""
         activePipelineStartedAtMs = 0L
         refreshPipelineButtons()
@@ -593,7 +602,9 @@ class AiKeyboardImeService : InputMethodService() {
                 AiKeyboardPipelineService.MSG_RESULT -> {
                     val requestId = msg.data.getString(AiKeyboardPipelineService.KEY_REQUEST_ID)
                     if (requestId != activePipelineRequestId) return
-                    val text = msg.data.getString(AiKeyboardPipelineService.KEY_RESULT_TEXT).orEmpty().trim()
+                    val text = preparePipelineResultText(
+                        msg.data.getString(AiKeyboardPipelineService.KEY_RESULT_TEXT).orEmpty()
+                    )
                     var committedText = ""
                     var commitDurationMs = 0L
                     if (text.isBlank()) {
@@ -608,7 +619,7 @@ class AiKeyboardImeService : InputMethodService() {
                         finishPipelineRun()
                     } else if (isPipelineRunning.get()) {
                         val commitStartMs = System.currentTimeMillis()
-                        val outcome = replaceAllText(text)
+                        val outcome = commitPipelineResultText(text)
                         commitDurationMs = System.currentTimeMillis() - commitStartMs
                         committedText = outcome.committedText
                         appendEditorInfo(msg.data)
@@ -668,7 +679,7 @@ class AiKeyboardImeService : InputMethodService() {
         errorText: String = "",
         commitDurationMs: Long = 0L,
     ) {
-        val presetId = textModelRepository.getSelectedPipelineId()
+        val presetId = activePipelinePresetId.ifBlank { textModelRepository.getSelectedPipelineId() }
         val preset = textModelRepository.getPipelinePreset(presetId) ?: AiKeyboardPipelineCatalog.defaultPreset()
         val rawOutput = data.getString(AiKeyboardPipelineService.KEY_RAW_RESULT_TEXT).orEmpty()
         runCatching {
@@ -756,6 +767,36 @@ class AiKeyboardImeService : InputMethodService() {
         replaceAllText(original)
         lastPipelineOriginalText = null
         toast(R.string.toast_pipeline_restored)
+    }
+
+    private fun commitPipelineResultText(text: String): PipelineCommitOutcome {
+        val preset = textModelRepository.getPipelinePreset(activePipelinePresetId)
+        return if (preset?.commitMode == AiKeyboardPipelineCommitMode.APPEND) {
+            appendText(text)
+        } else {
+            replaceAllText(text)
+        }
+    }
+
+    private fun preparePipelineResultText(text: String): String {
+        val preset = textModelRepository.getPipelinePreset(activePipelinePresetId)
+        return if (preset?.commitMode == AiKeyboardPipelineCommitMode.APPEND) {
+            text.trimEnd()
+        } else {
+            text.trim()
+        }
+    }
+
+    private fun appendText(text: String): PipelineCommitOutcome {
+        val ic = currentInputConnection ?: return PipelineCommitOutcome(committedText = "", strategy = "none")
+        val accepted = ic.commitText(text, 1)
+        val committedText = readAllText(ic)
+        return PipelineCommitOutcome(
+            committedText = committedText,
+            strategy = "direct_append",
+            directCommittedText = committedText,
+            directCommitAccepted = accepted,
+        )
     }
 
     private fun replaceAllText(text: String): PipelineCommitOutcome {
@@ -901,6 +942,7 @@ class AiKeyboardImeService : InputMethodService() {
             PunctuationType.QUESTION -> getString(if (isZh) R.string.punc_question_zh else R.string.punc_question_en)
             PunctuationType.EXCLAMATION ->
                 getString(if (isZh) R.string.punc_exclamation_zh else R.string.punc_exclamation_en)
+            PunctuationType.SPACE -> " "
         }
         val ic = currentInputConnection ?: return
         ic.commitText(symbol, 1)
@@ -1031,7 +1073,8 @@ class AiKeyboardImeService : InputMethodService() {
         COMMA,
         PERIOD,
         QUESTION,
-        EXCLAMATION
+        EXCLAMATION,
+        SPACE,
     }
 
     companion object {

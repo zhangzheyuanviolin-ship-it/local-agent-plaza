@@ -6,7 +6,13 @@ data class AiKeyboardPipelinePreset(
   val keyboardLabel: String,
   val instruction: String,
   val builtIn: Boolean = true,
+  val commitMode: AiKeyboardPipelineCommitMode = AiKeyboardPipelineCommitMode.REPLACE,
 )
+
+enum class AiKeyboardPipelineCommitMode {
+  REPLACE,
+  APPEND,
+}
 
 object AiKeyboardPipelineCatalog {
   const val DEFAULT_PRESET_ID = "polish"
@@ -114,6 +120,7 @@ object AiKeyboardPipelineCatalog {
         displayName = "文本补全",
         keyboardLabel = "补全",
         instruction = "基于上下文补全未完成的文字，延续原文语言、语气、格式和逻辑，只补出自然完整的后续内容。",
+        commitMode = AiKeyboardPipelineCommitMode.APPEND,
       ),
       AiKeyboardPipelinePreset(
         id = "custom",

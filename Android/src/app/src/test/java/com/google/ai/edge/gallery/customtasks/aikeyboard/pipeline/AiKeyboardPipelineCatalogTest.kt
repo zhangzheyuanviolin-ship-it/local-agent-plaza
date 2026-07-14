@@ -76,6 +76,18 @@ class AiKeyboardPipelineCatalogTest {
   }
 
   @Test
+  fun completePresetAppendsModelOutputInsteadOfReplacingOriginalText() {
+    assertEquals(
+      AiKeyboardPipelineCommitMode.APPEND,
+      AiKeyboardPipelineCatalog.byId("complete")?.commitMode,
+    )
+    assertEquals(
+      AiKeyboardPipelineCommitMode.REPLACE,
+      AiKeyboardPipelineCatalog.byId("polish")?.commitMode,
+    )
+  }
+
+  @Test
   fun translatePromptSupportsCustomInstructionWithTargetLanguageVariable() {
     val preset =
       AiKeyboardPipelineCatalog.defaultPreset().copy(
