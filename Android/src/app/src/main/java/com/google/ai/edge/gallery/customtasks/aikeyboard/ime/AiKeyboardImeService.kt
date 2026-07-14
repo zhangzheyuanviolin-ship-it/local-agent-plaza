@@ -35,6 +35,7 @@ import com.google.ai.edge.gallery.customtasks.aikeyboard.asr.VoskRecognizerSessi
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelCatalog
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelRepository
 import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelineCatalog
+import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelineLogEntry
 import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelineService
 import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardTextModelRepository
 import java.util.Collections
@@ -67,6 +68,7 @@ class AiKeyboardImeService : InputMethodService() {
     private var pipelineBound = false
     private var pendingPipelineRequest: PipelineRequest? = null
     private var activePipelineRequestId: String? = null
+    private var activePipelineInputText: String = ""
     private var lastPipelineOriginalText: String? = null
 
     private var pipelineRunButton: Button? = null
@@ -262,28 +264,20 @@ class AiKeyboardImeService : InputMethodService() {
 
     private fun toggleLanguage() {
         val current = modelRepository.getSelectedLanguage()
-        val next = if (current == AiKeyboardModelCatalog.LANG_ZH) AiKeyboardModelCatalog.LANG_EN else AiKeyboardModelCatalog.LANG_ZH
+        val languages = AiKeyboardModelCatalog.supportedLanguages()
+        val index = languages.indexOf(current).takeIf { it >= 0 } ?: 0
+        val next = languages[(index + 1) % languages.size]
         modelRepository.setSelectedLanguage(next)
         refreshLanguageButton()
         ensureSelectedModelWarmup()
-        announceForAccessibility(
-            if (next == AiKeyboardModelCatalog.LANG_ZH) {
-                getString(R.string.a11y_lang_switched_zh)
-            } else {
-                getString(R.string.a11y_lang_switched_en)
-            }
-        )
+        announceForAccessibility("已切换到${AiKeyboardModelCatalog.languageDisplayName(next)}语音模型")
     }
 
     private fun refreshLanguageButton() {
         val button = languageButton ?: return
-        val isZh = modelRepository.getSelectedLanguage() == AiKeyboardModelCatalog.LANG_ZH
-        button.setText(if (isZh) R.string.btn_lang_zh else R.string.btn_lang_en)
-        button.contentDescription = if (isZh) {
-            getString(R.string.a11y_lang_now_zh)
-        } else {
-            getString(R.string.a11y_lang_now_en)
-        }
+        val language = modelRepository.getSelectedLanguage()
+        button.text = AiKeyboardModelCatalog.languageKeyboardLabel(language)
+        button.contentDescription = "当前语音模型语言为${AiKeyboardModelCatalog.languageDisplayName(language)}，点按切换语言"
         refreshPunctuationButtons()
     }
 
@@ -493,6 +487,7 @@ class AiKeyboardImeService : InputMethodService() {
                 inputText = originalText,
             )
         activePipelineRequestId = request.requestId
+        activePipelineInputText = originalText
         refreshPipelineButtons()
         toast(R.string.toast_pipeline_started)
         if (!sendPipelineRequest(request)) {
@@ -519,6 +514,7 @@ class AiKeyboardImeService : InputMethodService() {
     private fun finishPipelineRun() {
         isPipelineRunning.set(false)
         activePipelineRequestId = null
+        activePipelineInputText = ""
         refreshPipelineButtons()
     }
 
@@ -561,12 +557,15 @@ class AiKeyboardImeService : InputMethodService() {
                     val requestId = msg.data.getString(AiKeyboardPipelineService.KEY_REQUEST_ID)
                     if (requestId != activePipelineRequestId) return
                     val text = msg.data.getString(AiKeyboardPipelineService.KEY_RESULT_TEXT).orEmpty().trim()
+                    var committedText = ""
                     if (text.isBlank()) {
                         toast(R.string.toast_pipeline_empty_result)
                     } else if (isPipelineRunning.get()) {
                         replaceAllText(text)
+                        committedText = currentInputConnection?.let { readAllText(it) }.orEmpty()
                         toast(R.string.toast_pipeline_done)
                     }
+                    appendPipelineLog(data = msg.data, outputText = text, committedText = committedText, status = "success")
                     finishPipelineRun()
                 }
 
@@ -574,6 +573,13 @@ class AiKeyboardImeService : InputMethodService() {
                     val requestId = msg.data.getString(AiKeyboardPipelineService.KEY_REQUEST_ID)
                     if (requestId != activePipelineRequestId) return
                     toast(msg.data.getString(AiKeyboardPipelineService.KEY_ERROR_TEXT).orEmpty())
+                    appendPipelineLog(
+                        data = msg.data,
+                        outputText = "",
+                        committedText = "",
+                        status = "error",
+                        errorText = msg.data.getString(AiKeyboardPipelineService.KEY_ERROR_TEXT).orEmpty(),
+                    )
                     finishPipelineRun()
                 }
 
@@ -583,6 +589,44 @@ class AiKeyboardImeService : InputMethodService() {
 
                 else -> super.handleMessage(msg)
             }
+        }
+    }
+
+    private fun appendPipelineLog(
+        data: Bundle,
+        outputText: String,
+        committedText: String,
+        status: String,
+        errorText: String = "",
+    ) {
+        val presetId = textModelRepository.getSelectedPipelineId()
+        val preset = textModelRepository.getPipelinePreset(presetId) ?: AiKeyboardPipelineCatalog.defaultPreset()
+        val rawOutput = data.getString(AiKeyboardPipelineService.KEY_RAW_RESULT_TEXT).orEmpty()
+        runCatching {
+            textModelRepository.appendPipelineLog(
+                AiKeyboardPipelineLogEntry(
+                    id = UUID.randomUUID().toString(),
+                    createdAtMillis = System.currentTimeMillis(),
+                    presetId = presetId,
+                    presetName = data.getString(AiKeyboardPipelineService.KEY_PRESET_NAME).orEmpty()
+                        .ifBlank { preset.displayName },
+                    modelName = data.getString(AiKeyboardPipelineService.KEY_MODEL_NAME).orEmpty(),
+                    modelPath = data.getString(AiKeyboardPipelineService.KEY_MODEL_PATH).orEmpty(),
+                    inputText = activePipelineInputText,
+                    promptText = data.getString(AiKeyboardPipelineService.KEY_PROMPT_TEXT).orEmpty(),
+                    rawOutputText = rawOutput,
+                    outputText = outputText,
+                    committedText = committedText,
+                    inputLength = activePipelineInputText.length,
+                    rawOutputLength = rawOutput.length,
+                    outputLength = outputText.length,
+                    committedLength = committedText.length,
+                    maxTokens = data.getInt(AiKeyboardPipelineService.KEY_MAX_TOKENS, 0),
+                    contextWindow = data.getInt(AiKeyboardPipelineService.KEY_CONTEXT_WINDOW, 0),
+                    status = status,
+                    errorText = errorText,
+                )
+            )
         }
     }
 

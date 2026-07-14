@@ -23,10 +23,19 @@ data class AiKeyboardModelDescriptor(
 object AiKeyboardModelCatalog {
     const val LANG_ZH = "zh"
     const val LANG_EN = "en"
+    const val LANG_JA = "ja"
+    const val LANG_KO = "ko"
+    const val LANG_FR = "fr"
+    const val LANG_DE = "de"
+    const val LANG_ES = "es"
+    const val LANG_RU = "ru"
+    const val LANG_VI = "vi"
+    const val LANG_PT = "pt"
 
     private const val TIER_SMALL = 1
     private const val TIER_MEDIUM = 2
     private const val TIER_LARGE = 3
+    private const val TIER_EXTRA = 4
     private const val OFFICIAL_BASE = "https://alphacephei.com/vosk/models"
 
     val models: List<AiKeyboardModelDescriptor> = listOf(
@@ -143,6 +152,20 @@ object AiKeyboardModelCatalog {
             )
         ),
         AiKeyboardModelDescriptor(
+            id = "en_lgraph_us_022",
+            language = LANG_EN,
+            tierRank = TIER_EXTRA,
+            displayName = "英文动态图模型 Vosk en-us-0.22-lgraph",
+            fileSizeBytes = 128_000_000L,
+            downloadSources = listOf(
+                ModelDownloadSource(
+                    id = "official_en_lgraph",
+                    displayName = "官方源",
+                    url = "$OFFICIAL_BASE/vosk-model-en-us-0.22-lgraph.zip"
+                )
+            )
+        ),
+        AiKeyboardModelDescriptor(
             id = "en_large_gigaspeech_042",
             language = LANG_EN,
             tierRank = TIER_LARGE,
@@ -165,8 +188,156 @@ object AiKeyboardModelCatalog {
                     url = "$OFFICIAL_BASE/vosk-model-en-us-0.42-gigaspeech.zip"
                 )
             )
+        ),
+        AiKeyboardModelDescriptor(
+            id = "ja_small_022",
+            language = LANG_JA,
+            tierRank = TIER_SMALL,
+            displayName = "日语小模型 Vosk small-ja-0.22",
+            fileSizeBytes = 48_000_000L,
+            downloadSources = listOf(
+                ModelDownloadSource(
+                    id = "official_ja_small",
+                    displayName = "官方源",
+                    url = "$OFFICIAL_BASE/vosk-model-small-ja-0.22.zip"
+                )
+            )
+        ),
+        AiKeyboardModelDescriptor(
+            id = "ko_small_022",
+            language = LANG_KO,
+            tierRank = TIER_SMALL,
+            displayName = "韩语小模型 Vosk small-ko-0.22",
+            fileSizeBytes = 82_000_000L,
+            downloadSources = listOf(
+                ModelDownloadSource(
+                    id = "official_ko_small",
+                    displayName = "官方源",
+                    url = "$OFFICIAL_BASE/vosk-model-small-ko-0.22.zip"
+                )
+            )
+        ),
+        AiKeyboardModelDescriptor(
+            id = "fr_small_022",
+            language = LANG_FR,
+            tierRank = TIER_SMALL,
+            displayName = "法语小模型 Vosk small-fr-0.22",
+            fileSizeBytes = 41_000_000L,
+            downloadSources = listOf(
+                ModelDownloadSource(
+                    id = "official_fr_small",
+                    displayName = "官方源",
+                    url = "$OFFICIAL_BASE/vosk-model-small-fr-0.22.zip"
+                )
+            )
+        ),
+        AiKeyboardModelDescriptor(
+            id = "de_small_015",
+            language = LANG_DE,
+            tierRank = TIER_SMALL,
+            displayName = "德语小模型 Vosk small-de-0.15",
+            fileSizeBytes = 45_000_000L,
+            downloadSources = listOf(
+                ModelDownloadSource(
+                    id = "official_de_small",
+                    displayName = "官方源",
+                    url = "$OFFICIAL_BASE/vosk-model-small-de-0.15.zip"
+                )
+            )
+        ),
+        AiKeyboardModelDescriptor(
+            id = "es_small_042",
+            language = LANG_ES,
+            tierRank = TIER_SMALL,
+            displayName = "西班牙语小模型 Vosk small-es-0.42",
+            fileSizeBytes = 39_000_000L,
+            downloadSources = listOf(
+                ModelDownloadSource(
+                    id = "official_es_small",
+                    displayName = "官方源",
+                    url = "$OFFICIAL_BASE/vosk-model-small-es-0.42.zip"
+                )
+            )
+        ),
+        AiKeyboardModelDescriptor(
+            id = "ru_small_022",
+            language = LANG_RU,
+            tierRank = TIER_SMALL,
+            displayName = "俄语小模型 Vosk small-ru-0.22",
+            fileSizeBytes = 45_000_000L,
+            downloadSources = listOf(
+                ModelDownloadSource(
+                    id = "official_ru_small",
+                    displayName = "官方源",
+                    url = "$OFFICIAL_BASE/vosk-model-small-ru-0.22.zip"
+                )
+            )
+        ),
+        AiKeyboardModelDescriptor(
+            id = "vi_small_04",
+            language = LANG_VI,
+            tierRank = TIER_SMALL,
+            displayName = "越南语小模型 Vosk small-vn-0.4",
+            fileSizeBytes = 32_000_000L,
+            downloadSources = listOf(
+                ModelDownloadSource(
+                    id = "official_vi_small",
+                    displayName = "官方源",
+                    url = "$OFFICIAL_BASE/vosk-model-small-vn-0.4.zip"
+                )
+            )
+        ),
+        AiKeyboardModelDescriptor(
+            id = "pt_small_03",
+            language = LANG_PT,
+            tierRank = TIER_SMALL,
+            displayName = "葡萄牙语小模型 Vosk small-pt-0.3",
+            fileSizeBytes = 31_000_000L,
+            downloadSources = listOf(
+                ModelDownloadSource(
+                    id = "official_pt_small",
+                    displayName = "官方源",
+                    url = "$OFFICIAL_BASE/vosk-model-small-pt-0.3.zip"
+                )
+            )
         )
     )
+
+    fun supportedLanguages(): List<String> {
+        return listOf(LANG_ZH, LANG_EN, LANG_JA, LANG_KO, LANG_FR, LANG_DE, LANG_ES, LANG_RU, LANG_VI, LANG_PT)
+    }
+
+    fun languageDisplayName(language: String): String {
+        return when (language) {
+            LANG_ZH -> "中文"
+            LANG_EN -> "英文"
+            LANG_JA -> "日语"
+            LANG_KO -> "韩语"
+            LANG_FR -> "法语"
+            LANG_DE -> "德语"
+            LANG_ES -> "西班牙语"
+            LANG_RU -> "俄语"
+            LANG_VI -> "越南语"
+            LANG_PT -> "葡萄牙语"
+            else -> language
+        }
+    }
+
+    fun languageKeyboardLabel(language: String): String {
+        return when (language) {
+            LANG_ZH -> "中"
+            LANG_EN -> "英"
+            LANG_JA -> "日"
+            LANG_KO -> "韩"
+            LANG_FR -> "法"
+            LANG_DE -> "德"
+            LANG_ES -> "西"
+            LANG_RU -> "俄"
+            LANG_VI -> "越"
+            LANG_PT -> "葡"
+            else -> language.take(2)
+        }
+    }
 
     fun modelsForLanguage(language: String): List<AiKeyboardModelDescriptor> {
         return models.filter { it.language == language }.sortedBy { it.tierRank }

@@ -95,4 +95,11 @@ class AiKeyboardPipelineCatalogTest {
       assertTrue(preset.keyboardLabel.length <= 4)
     }
   }
+
+  @Test
+  fun pipelineOutputBudgetRaisesLowModelDefaultsForTranslationAndLongOutputs() {
+    assertEquals(4096, AiKeyboardTextModelRepository.resolvePipelineMaxTokens(1024, 8192))
+    assertEquals(2048, AiKeyboardTextModelRepository.resolvePipelineMaxTokens(1024, 2048))
+    assertEquals(6000, AiKeyboardTextModelRepository.resolvePipelineMaxTokens(6000, 8192))
+  }
 }

@@ -74,8 +74,12 @@ import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelCa
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelDescriptor
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelDownloadProgress
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelRepository
+import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelineLogEntry
 import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelinePreset
 import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardTextModelRepository
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -165,95 +169,52 @@ fun AiKeyboardScreen(bottomPadding: Dp) {
       )
     }
 
-    AiKeyboardModelSection(
-      title = stringResource(R.string.ai_keyboard_zh_model_title),
-      language = AiKeyboardModelCatalog.LANG_ZH,
-      repository = repository,
-      progressByModel = progressByModel,
-      downloadingIds = downloadingIds,
-      refreshTick = refreshTick,
-      onRefresh = { refreshTick++ },
-      onDownload = { model ->
-        scope.launch {
-          downloadingIds[model.id] = true
-          try {
-            withContext(Dispatchers.IO) {
-              repository.downloadAndInstall(model.id) { progressByModel[model.id] = it }
-              repository.setSelectedModelId(model.language, model.id)
+    AiKeyboardModelCatalog.supportedLanguages().forEach { language ->
+      AiKeyboardModelSection(
+        title = AiKeyboardModelCatalog.languageDisplayName(language) + "语音模型",
+        language = language,
+        repository = repository,
+        progressByModel = progressByModel,
+        downloadingIds = downloadingIds,
+        refreshTick = refreshTick,
+        onRefresh = { refreshTick++ },
+        onDownload = { model ->
+          scope.launch {
+            downloadingIds[model.id] = true
+            try {
+              withContext(Dispatchers.IO) {
+                repository.downloadAndInstall(model.id) { progressByModel[model.id] = it }
+                repository.setSelectedModelId(model.language, model.id)
+              }
+              Toast.makeText(context, R.string.ai_keyboard_download_done, Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+              Toast.makeText(
+                  context,
+                  context.getString(R.string.ai_keyboard_download_failed) + ": " + e.message,
+                  Toast.LENGTH_LONG,
+                )
+                .show()
+            } finally {
+              downloadingIds.remove(model.id)
+              progressByModel.remove(model.id)
+              refreshTick++
             }
-            Toast.makeText(context, R.string.ai_keyboard_download_done, Toast.LENGTH_SHORT).show()
-          } catch (e: Exception) {
-            Toast.makeText(
-                context,
-                context.getString(R.string.ai_keyboard_download_failed) + ": " + e.message,
-                Toast.LENGTH_LONG,
-              )
-              .show()
-          } finally {
-            downloadingIds.remove(model.id)
-            progressByModel.remove(model.id)
+          }
+        },
+        onSelect = { model ->
+          repository.setSelectedModelId(model.language, model.id)
+          Toast.makeText(context, R.string.ai_keyboard_model_switched, Toast.LENGTH_SHORT).show()
+          refreshTick++
+        },
+        onDelete = { model ->
+          scope.launch {
+            withContext(Dispatchers.IO) { repository.deleteModel(model.id) }
+            Toast.makeText(context, R.string.ai_keyboard_delete_done, Toast.LENGTH_SHORT).show()
             refreshTick++
           }
-        }
-      },
-      onSelect = { model ->
-        repository.setSelectedModelId(model.language, model.id)
-        Toast.makeText(context, R.string.ai_keyboard_model_switched, Toast.LENGTH_SHORT).show()
-        refreshTick++
-      },
-      onDelete = { model ->
-        scope.launch {
-          withContext(Dispatchers.IO) { repository.deleteModel(model.id) }
-          Toast.makeText(context, R.string.ai_keyboard_delete_done, Toast.LENGTH_SHORT).show()
-          refreshTick++
-        }
-      },
-    )
-
-    AiKeyboardModelSection(
-      title = stringResource(R.string.ai_keyboard_en_model_title),
-      language = AiKeyboardModelCatalog.LANG_EN,
-      repository = repository,
-      progressByModel = progressByModel,
-      downloadingIds = downloadingIds,
-      refreshTick = refreshTick,
-      onRefresh = { refreshTick++ },
-      onDownload = { model ->
-        scope.launch {
-          downloadingIds[model.id] = true
-          try {
-            withContext(Dispatchers.IO) {
-              repository.downloadAndInstall(model.id) { progressByModel[model.id] = it }
-              repository.setSelectedModelId(model.language, model.id)
-            }
-            Toast.makeText(context, R.string.ai_keyboard_download_done, Toast.LENGTH_SHORT).show()
-          } catch (e: Exception) {
-            Toast.makeText(
-                context,
-                context.getString(R.string.ai_keyboard_download_failed) + ": " + e.message,
-                Toast.LENGTH_LONG,
-              )
-              .show()
-          } finally {
-            downloadingIds.remove(model.id)
-            progressByModel.remove(model.id)
-            refreshTick++
-          }
-        }
-      },
-      onSelect = { model ->
-        repository.setSelectedModelId(model.language, model.id)
-        Toast.makeText(context, R.string.ai_keyboard_model_switched, Toast.LENGTH_SHORT).show()
-        refreshTick++
-      },
-      onDelete = { model ->
-        scope.launch {
-          withContext(Dispatchers.IO) { repository.deleteModel(model.id) }
-          Toast.makeText(context, R.string.ai_keyboard_delete_done, Toast.LENGTH_SHORT).show()
-          refreshTick++
-        }
-      },
-    )
+        },
+      )
+    }
   }
 }
 
@@ -267,12 +228,33 @@ private fun AiKeyboardPipelineSettingsSection(
   var newName by remember { mutableStateOf("") }
   var newLabel by remember { mutableStateOf("") }
   var newInstruction by remember { mutableStateOf("") }
+  var showLogs by remember { mutableStateOf(false) }
+  var showClearLogsDialog by remember { mutableStateOf(false) }
   val selectedModel = remember(refreshTick) { repository.getSelectedModel() }
   val availableModels = remember(refreshTick) { repository.listAvailableModels() }
   val selectedPipelineId = remember(refreshTick) { repository.getSelectedPipelineId() }
   val presets = remember(refreshTick) { repository.listPipelinePresets() }
+  val logs = remember(refreshTick) { repository.listPipelineLogs() }
 
   Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+    OutlinedButton(
+      onClick = { showLogs = !showLogs },
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      Text(if (showLogs) "收起流水线日志" else "查看流水线日志")
+    }
+
+    if (showLogs) {
+      AiKeyboardPipelineLogSection(
+        logs = logs,
+        onDelete = { id ->
+          repository.deletePipelineLog(id)
+          onRefresh()
+        },
+        onClear = { showClearLogsDialog = true },
+      )
+    }
+
     Text("文本模型", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     if (availableModels.isEmpty()) {
       Text("未找到已下载或已导入的 LiteRT 文本模型。", style = MaterialTheme.typography.bodyMedium)
@@ -385,6 +367,112 @@ private fun AiKeyboardPipelineSettingsSection(
       }
     }
   }
+
+  if (showClearLogsDialog) {
+    AlertDialog(
+      onDismissRequest = { showClearLogsDialog = false },
+      title = { Text("清空流水线日志") },
+      text = { Text("清空后，所有流水线处理记录都会从本机删除。") },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            showClearLogsDialog = false
+            repository.clearPipelineLogs()
+            onRefresh()
+          }
+        ) {
+          Text("清空")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showClearLogsDialog = false }) {
+          Text("取消")
+        }
+      },
+    )
+  }
+}
+
+@Composable
+private fun AiKeyboardPipelineLogSection(
+  logs: List<AiKeyboardPipelineLogEntry>,
+  onDelete: (String) -> Unit,
+  onClear: () -> Unit,
+) {
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+      Text(
+        "流水线日志 ${logs.size} 条",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.weight(1f),
+      )
+      OutlinedButton(onClick = onClear, enabled = logs.isNotEmpty()) {
+        Text("清空")
+      }
+    }
+    if (logs.isEmpty()) {
+      Text("暂无流水线处理记录。", style = MaterialTheme.typography.bodyMedium)
+    } else {
+      logs.forEach { entry ->
+        AiKeyboardPipelineLogCard(entry = entry, onDelete = { onDelete(entry.id) })
+      }
+    }
+  }
+}
+
+@Composable
+private fun AiKeyboardPipelineLogCard(
+  entry: AiKeyboardPipelineLogEntry,
+  onDelete: () -> Unit,
+) {
+  var expanded by remember(entry.id) { mutableStateOf(false) }
+  Card(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Text(
+        formatPipelineLogTime(entry.createdAtMillis),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+      )
+      Text(
+        "${entry.presetName}，${entry.modelName.ifBlank { "未知模型" }}，状态 ${entry.status}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      Text(
+        "输入 ${entry.inputLength}，原始输出 ${entry.rawOutputLength}，清洗输出 ${entry.outputLength}，提交后 ${entry.committedLength}，maxTokens ${entry.maxTokens}，上下文 ${entry.contextWindow}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      Text("原文：" + entry.inputText.previewForLog(expanded), style = MaterialTheme.typography.bodyMedium)
+      Text("输出：" + entry.outputText.previewForLog(expanded), style = MaterialTheme.typography.bodyMedium)
+      if (entry.committedText.isNotBlank() && entry.committedText != entry.outputText) {
+        Text("提交后：" + entry.committedText.previewForLog(expanded), style = MaterialTheme.typography.bodyMedium)
+      }
+      if (entry.errorText.isNotBlank()) {
+        Text("错误：" + entry.errorText.previewForLog(expanded), style = MaterialTheme.typography.bodyMedium)
+      }
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = { expanded = !expanded }, modifier = Modifier.weight(1f)) {
+          Text(if (expanded) "收起" else "展开")
+        }
+        OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
+          Icon(Icons.Outlined.Delete, contentDescription = null)
+          Text("删除", modifier = Modifier.padding(start = 6.dp))
+        }
+      }
+    }
+  }
+}
+
+private fun String.previewForLog(expanded: Boolean): String {
+  val text = trim()
+  if (expanded || text.length <= 260) return text
+  return text.take(260) + "..."
+}
+
+private fun formatPipelineLogTime(timeMillis: Long): String {
+  return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA).format(Date(timeMillis))
 }
 
 @Composable

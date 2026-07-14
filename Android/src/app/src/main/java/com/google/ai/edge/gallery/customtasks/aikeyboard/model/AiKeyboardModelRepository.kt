@@ -414,7 +414,8 @@ class AiKeyboardModelRepository(private val context: Context) {
     private fun selectedModelKey(language: String): String {
         return when (language) {
             AiKeyboardModelCatalog.LANG_EN -> KEY_SELECTED_MODEL_EN
-            else -> KEY_SELECTED_MODEL_ZH
+            AiKeyboardModelCatalog.LANG_ZH -> KEY_SELECTED_MODEL_ZH
+            else -> "selected_model_$language"
         }
     }
 

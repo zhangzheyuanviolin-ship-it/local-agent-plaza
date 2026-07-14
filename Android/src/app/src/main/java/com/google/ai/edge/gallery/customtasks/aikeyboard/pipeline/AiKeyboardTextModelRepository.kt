@@ -4,8 +4,10 @@ import android.content.Context
 import com.google.ai.edge.gallery.GalleryApplication
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.BuiltInTaskId
+import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.DataStoreRepository
 import com.google.ai.edge.gallery.data.DEFAULT_CONTEXT_WINDOW
+import com.google.ai.edge.gallery.data.DEFAULT_MAX_TOKEN
 import com.google.ai.edge.gallery.data.IMPORTS_DIR
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelAllowlist
@@ -26,6 +28,28 @@ data class AiKeyboardTextModelCandidate(
   val displayName: String
     get() = model.displayName.ifBlank { model.name }
 }
+
+data class AiKeyboardPipelineLogEntry(
+  val id: String,
+  val createdAtMillis: Long,
+  val presetId: String,
+  val presetName: String,
+  val modelName: String,
+  val modelPath: String,
+  val inputText: String,
+  val promptText: String,
+  val rawOutputText: String,
+  val outputText: String,
+  val committedText: String,
+  val inputLength: Int,
+  val rawOutputLength: Int,
+  val outputLength: Int,
+  val committedLength: Int,
+  val maxTokens: Int,
+  val contextWindow: Int,
+  val status: String,
+  val errorText: String = "",
+)
 
 class AiKeyboardTextModelRepository(
   private val context: Context,
@@ -189,12 +213,69 @@ class AiKeyboardTextModelRepository(
     return selected
   }
 
+  fun prepareModelForPipeline(candidate: AiKeyboardTextModelCandidate): Model {
+    val model = candidate.model
+    val contextWindow = model.getConfiguredContextWindow().takeIf { it > 0 } ?: DEFAULT_CONTEXT_WINDOW
+    val currentMaxTokens = model.getIntConfigValue(ConfigKeys.MAX_TOKENS, DEFAULT_MAX_TOKEN)
+    val pipelineMaxTokens = resolvePipelineMaxTokens(currentMaxTokens, contextWindow)
+    if (pipelineMaxTokens != currentMaxTokens) {
+      model.configValues = model.configValues.toMutableMap().apply {
+        put(ConfigKeys.MAX_TOKENS.label, pipelineMaxTokens)
+      }
+    }
+    return model
+  }
+
+  fun appendPipelineLog(entry: AiKeyboardPipelineLogEntry) {
+    val file = pipelineLogFile()
+    file.parentFile?.mkdirs()
+    file.appendText("${gson.toJson(entry)}\n")
+  }
+
+  fun listPipelineLogs(): List<AiKeyboardPipelineLogEntry> {
+    val file = pipelineLogFile()
+    if (!file.exists()) return emptyList()
+    return file
+      .readLines()
+      .mapNotNull { line ->
+        runCatching { gson.fromJson(line, AiKeyboardPipelineLogEntry::class.java) }.getOrNull()
+      }
+      .sortedByDescending { it.createdAtMillis }
+  }
+
+  fun deletePipelineLog(id: String): Boolean {
+    val logs = listPipelineLogs()
+    val updated = logs.filterNot { it.id == id }
+    if (updated.size == logs.size) return false
+    rewritePipelineLogs(updated.sortedBy { it.createdAtMillis })
+    return true
+  }
+
+  fun clearPipelineLogs() {
+    val file = pipelineLogFile()
+    if (file.exists()) {
+      file.delete()
+    }
+  }
+
   private fun persistSelectedModel(candidate: AiKeyboardTextModelCandidate) {
     prefs
       .edit()
       .putString(KEY_SELECTED_TEXT_MODEL_NAME, candidate.model.name)
       .putString(KEY_SELECTED_TEXT_MODEL_PATH, candidate.path)
       .apply()
+  }
+
+  private fun pipelineLogFile(): File {
+    return File(context.filesDir, PIPELINE_LOG_FILENAME)
+  }
+
+  private fun rewritePipelineLogs(entries: List<AiKeyboardPipelineLogEntry>) {
+    val file = pipelineLogFile()
+    file.parentFile?.mkdirs()
+    file.writeText(entries.joinToString(separator = "\n") { gson.toJson(it) }.let {
+      if (it.isBlank()) "" else "$it\n"
+    })
   }
 
   private fun getInstructionOverrides(): Map<String, String> {
@@ -359,7 +440,15 @@ class AiKeyboardTextModelRepository(
     private const val KEY_PIPELINE_INSTRUCTION_OVERRIDES = "pipeline_instruction_overrides"
     private const val KEY_CUSTOM_PIPELINES = "custom_pipelines"
     private const val DEFAULT_TRANSLATION_TARGET_LANGUAGE = "英文"
+    private const val PIPELINE_LOG_FILENAME = "ai_keyboard_pipeline_logs.jsonl"
+    private const val PIPELINE_DEFAULT_MAX_OUTPUT_TOKENS = 4096
     private const val MODEL_ALLOWLIST_FILENAME = "model_allowlist.json"
     private const val TMP_FILE_EXT = "tmp"
+
+    fun resolvePipelineMaxTokens(currentMaxTokens: Int, contextWindow: Int): Int {
+      val resolvedContext = contextWindow.takeIf { it > 0 } ?: DEFAULT_CONTEXT_WINDOW
+      return maxOf(currentMaxTokens, minOf(resolvedContext, PIPELINE_DEFAULT_MAX_OUTPUT_TOKENS))
+        .coerceAtMost(resolvedContext)
+    }
   }
 }

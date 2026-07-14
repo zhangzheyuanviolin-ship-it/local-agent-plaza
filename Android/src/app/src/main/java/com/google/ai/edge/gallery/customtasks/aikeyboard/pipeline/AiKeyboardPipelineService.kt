@@ -11,6 +11,8 @@ import android.os.Messenger
 import android.os.RemoteException
 import com.google.ai.edge.gallery.common.processLlmResponse
 import com.google.ai.edge.gallery.data.BuiltInTaskId
+import com.google.ai.edge.gallery.data.ConfigKeys
+import com.google.ai.edge.gallery.data.DEFAULT_MAX_TOKEN
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper
 import java.util.concurrent.Executors
@@ -75,6 +77,7 @@ class AiKeyboardPipelineService : Service() {
     val requestId = msg.data.getString(KEY_REQUEST_ID).orEmpty()
     val input = msg.data.getString(KEY_INPUT_TEXT).orEmpty()
     val presetId = msg.data.getString(KEY_PRESET_ID).orEmpty()
+    val preset = repository.getPipelinePreset(presetId) ?: AiKeyboardPipelineCatalog.defaultPreset()
     val prompt = repository.buildPrompt(presetId = presetId, input = input)
     if (prompt.isBlank()) {
       running.set(false)
@@ -95,7 +98,15 @@ class AiKeyboardPipelineService : Service() {
       ensureModelReady(
         candidate = candidate,
         requestId = requestId,
-        onReady = { model -> runInference(requestId = requestId, model = model, prompt = prompt) },
+        onReady = { model ->
+          runInference(
+            requestId = requestId,
+            model = model,
+            modelPath = candidate.path,
+            preset = preset,
+            prompt = prompt,
+          )
+        },
       )
     }
   }
@@ -114,7 +125,7 @@ class AiKeyboardPipelineService : Service() {
     unloadActiveModel()
     System.gc()
     runCatching { Thread.sleep(MODEL_RELOAD_SETTLE_MS) }
-    val model = candidate.model
+    val model = repository.prepareModelForPipeline(candidate)
     LlmChatModelHelper.initialize(
       context = this,
       model = model,
@@ -135,20 +146,36 @@ class AiKeyboardPipelineService : Service() {
     )
   }
 
-  private fun runInference(requestId: String, model: Model, prompt: String) {
-    var response = ""
+  private fun runInference(
+    requestId: String,
+    model: Model,
+    modelPath: String,
+    preset: AiKeyboardPipelinePreset,
+    prompt: String,
+  ) {
+    var rawResponse = ""
+    var cleanedResponse = ""
     LlmChatModelHelper.resetConversation(model = model)
     LlmChatModelHelper.runInference(
       model = model,
       input = prompt,
       resultListener = { partialResult, done, _ ->
         if (partialResult.isNotEmpty()) {
-          response = processLlmResponse("$response$partialResult")
+          rawResponse += partialResult
+          cleanedResponse = processLlmResponse(rawResponse)
         }
         if (done) {
           running.set(false)
           scheduleIdleUnload()
-          sendResult(requestId = requestId, text = response.trim())
+          sendResult(
+            requestId = requestId,
+            rawText = rawResponse.trim(),
+            text = cleanedResponse.trim(),
+            model = model,
+            modelPath = modelPath,
+            preset = preset,
+            prompt = prompt,
+          )
         }
       },
       cleanUpListener = {
@@ -185,10 +212,27 @@ class AiKeyboardPipelineService : Service() {
     activeModelPath = ""
   }
 
-  private fun sendResult(requestId: String, text: String) {
+  private fun sendResult(
+    requestId: String,
+    rawText: String,
+    text: String,
+    model: Model,
+    modelPath: String,
+    preset: AiKeyboardPipelinePreset,
+    prompt: String,
+  ) {
+    val contextWindow = model.getConfiguredContextWindow()
+    val maxTokens = model.getIntConfigValue(ConfigKeys.MAX_TOKENS, DEFAULT_MAX_TOKEN)
     sendMessage(MSG_RESULT, Bundle().apply {
       putString(KEY_REQUEST_ID, requestId)
+      putString(KEY_RAW_RESULT_TEXT, rawText)
       putString(KEY_RESULT_TEXT, text)
+      putString(KEY_MODEL_NAME, model.displayName.ifBlank { model.name })
+      putString(KEY_MODEL_PATH, modelPath)
+      putString(KEY_PRESET_NAME, preset.displayName)
+      putString(KEY_PROMPT_TEXT, prompt)
+      putInt(KEY_CONTEXT_WINDOW, contextWindow)
+      putInt(KEY_MAX_TOKENS, maxTokens)
     })
   }
 
@@ -227,7 +271,14 @@ class AiKeyboardPipelineService : Service() {
     const val KEY_INPUT_TEXT = "input_text"
     const val KEY_PRESET_ID = "preset_id"
     const val KEY_RESULT_TEXT = "result_text"
+    const val KEY_RAW_RESULT_TEXT = "raw_result_text"
     const val KEY_ERROR_TEXT = "error_text"
+    const val KEY_MODEL_NAME = "model_name"
+    const val KEY_MODEL_PATH = "model_path"
+    const val KEY_PRESET_NAME = "preset_name"
+    const val KEY_PROMPT_TEXT = "prompt_text"
+    const val KEY_CONTEXT_WINDOW = "context_window"
+    const val KEY_MAX_TOKENS = "max_tokens"
     private const val MODEL_RELOAD_SETTLE_MS = 600L
     private const val IDLE_MODEL_UNLOAD_DELAY_MS = 120_000L
   }
