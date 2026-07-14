@@ -56,6 +56,13 @@ data class AiKeyboardPipelineLogEntry(
   val directCommittedLength: Int = 0,
   val clipboardFallbackUsed: Boolean = false,
   val clipboardPasteAccepted: Boolean = false,
+  val directCommitAccepted: Boolean = false,
+  val clipboardCommittedLength: Int = 0,
+  val delayedCommittedLength: Int = 0,
+  val editorPackageName: String = "",
+  val editorFieldId: Int = 0,
+  val editorInputType: Int = 0,
+  val editorImeOptions: Int = 0,
 )
 
 class AiKeyboardTextModelRepository(
@@ -234,6 +241,7 @@ class AiKeyboardTextModelRepository(
       .mapNotNull { line ->
         runCatching { gson.fromJson(line, AiKeyboardPipelineLogEntry::class.java) }.getOrNull()
       }
+      .map { it.sanitized() }
       .sortedByDescending { it.createdAtMillis }
   }
 
@@ -270,6 +278,25 @@ class AiKeyboardTextModelRepository(
     file.writeText(entries.joinToString(separator = "\n") { gson.toJson(it) }.let {
       if (it.isBlank()) "" else "$it\n"
     })
+  }
+
+  private fun AiKeyboardPipelineLogEntry.sanitized(): AiKeyboardPipelineLogEntry {
+    return copy(
+      id = id.orEmpty().ifBlank { UUID.randomUUID().toString() },
+      presetId = presetId.orEmpty(),
+      presetName = presetName.orEmpty(),
+      modelName = modelName.orEmpty(),
+      modelPath = modelPath.orEmpty(),
+      inputText = inputText.orEmpty(),
+      promptText = promptText.orEmpty(),
+      rawOutputText = rawOutputText.orEmpty(),
+      outputText = outputText.orEmpty(),
+      committedText = committedText.orEmpty(),
+      status = status.orEmpty(),
+      errorText = errorText.orEmpty(),
+      commitStrategy = commitStrategy.orEmpty(),
+      editorPackageName = editorPackageName.orEmpty(),
+    )
   }
 
   private fun getInstructionOverrides(): Map<String, String> {

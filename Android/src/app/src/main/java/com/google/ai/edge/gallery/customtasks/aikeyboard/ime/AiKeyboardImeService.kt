@@ -564,25 +564,43 @@ class AiKeyboardImeService : InputMethodService() {
                     var commitDurationMs = 0L
                     if (text.isBlank()) {
                         toast(R.string.toast_pipeline_empty_result)
+                        appendPipelineLog(
+                            data = msg.data,
+                            outputText = text,
+                            committedText = committedText,
+                            status = "success",
+                            commitDurationMs = commitDurationMs,
+                        )
+                        finishPipelineRun()
                     } else if (isPipelineRunning.get()) {
                         val commitStartMs = System.currentTimeMillis()
                         val outcome = replaceAllText(text)
                         commitDurationMs = System.currentTimeMillis() - commitStartMs
                         committedText = outcome.committedText
+                        appendEditorInfo(msg.data)
                         msg.data.putString(KEY_COMMIT_STRATEGY, outcome.strategy)
                         msg.data.putInt(KEY_DIRECT_COMMITTED_LENGTH, outcome.directCommittedText.length)
                         msg.data.putBoolean(KEY_CLIPBOARD_FALLBACK_USED, outcome.clipboardFallbackUsed)
                         msg.data.putBoolean(KEY_CLIPBOARD_PASTE_ACCEPTED, outcome.clipboardPasteAccepted)
+                        msg.data.putBoolean(KEY_DIRECT_COMMIT_ACCEPTED, outcome.directCommitAccepted)
+                        msg.data.putInt(KEY_CLIPBOARD_COMMITTED_LENGTH, outcome.clipboardCommittedText.length)
                         toast(R.string.toast_pipeline_done)
+                        appendPipelineLogAfterCommitSettles(
+                            data = Bundle(msg.data),
+                            outputText = text,
+                            immediateCommittedText = committedText,
+                            commitDurationMs = commitDurationMs,
+                        )
+                    } else {
+                        appendPipelineLog(
+                            data = msg.data,
+                            outputText = text,
+                            committedText = committedText,
+                            status = "success",
+                            commitDurationMs = commitDurationMs,
+                        )
+                        finishPipelineRun()
                     }
-                    appendPipelineLog(
-                        data = msg.data,
-                        outputText = text,
-                        committedText = committedText,
-                        status = "success",
-                        commitDurationMs = commitDurationMs,
-                    )
-                    finishPipelineRun()
                 }
 
                 AiKeyboardPipelineService.MSG_ERROR -> {
@@ -652,9 +670,47 @@ class AiKeyboardImeService : InputMethodService() {
                     directCommittedLength = data.getInt(KEY_DIRECT_COMMITTED_LENGTH, 0),
                     clipboardFallbackUsed = data.getBoolean(KEY_CLIPBOARD_FALLBACK_USED, false),
                     clipboardPasteAccepted = data.getBoolean(KEY_CLIPBOARD_PASTE_ACCEPTED, false),
+                    directCommitAccepted = data.getBoolean(KEY_DIRECT_COMMIT_ACCEPTED, false),
+                    clipboardCommittedLength = data.getInt(KEY_CLIPBOARD_COMMITTED_LENGTH, 0),
+                    delayedCommittedLength = data.getInt(KEY_DELAYED_COMMITTED_LENGTH, 0),
+                    editorPackageName = data.getString(KEY_EDITOR_PACKAGE_NAME).orEmpty(),
+                    editorFieldId = data.getInt(KEY_EDITOR_FIELD_ID, 0),
+                    editorInputType = data.getInt(KEY_EDITOR_INPUT_TYPE, 0),
+                    editorImeOptions = data.getInt(KEY_EDITOR_IME_OPTIONS, 0),
                 )
             )
         }
+    }
+
+    private fun appendPipelineLogAfterCommitSettles(
+        data: Bundle,
+        outputText: String,
+        immediateCommittedText: String,
+        commitDurationMs: Long,
+    ) {
+        mainHandler.postDelayed(
+            {
+                val delayedCommittedText = currentInputConnection?.let { readAllText(it) }.orEmpty()
+                data.putInt(KEY_DELAYED_COMMITTED_LENGTH, delayedCommittedText.length)
+                appendPipelineLog(
+                    data = data,
+                    outputText = outputText,
+                    committedText = delayedCommittedText.ifBlank { immediateCommittedText },
+                    status = "success",
+                    commitDurationMs = commitDurationMs,
+                )
+                finishPipelineRun()
+            },
+            POST_COMMIT_READBACK_DELAY_MS,
+        )
+    }
+
+    private fun appendEditorInfo(data: Bundle) {
+        val info = currentInputEditorInfo ?: return
+        data.putString(KEY_EDITOR_PACKAGE_NAME, info.packageName.orEmpty())
+        data.putInt(KEY_EDITOR_FIELD_ID, info.fieldId)
+        data.putInt(KEY_EDITOR_INPUT_TYPE, info.inputType)
+        data.putInt(KEY_EDITOR_IME_OPTIONS, info.imeOptions)
     }
 
     private fun restoreLastPipelineText() {
@@ -670,16 +726,18 @@ class AiKeyboardImeService : InputMethodService() {
 
     private fun replaceAllText(text: String): PipelineCommitOutcome {
         val ic = currentInputConnection ?: return PipelineCommitOutcome(committedText = "", strategy = "none")
-        val directCommittedText = replaceAllTextDirect(ic, text)
+        val directCommit = replaceAllTextDirect(ic, text)
+        val directCommittedText = directCommit.committedText
         if (!AiKeyboardCommitVerifier.needsClipboardFallback(text, directCommittedText)) {
             return PipelineCommitOutcome(
                 committedText = directCommittedText,
                 strategy = "direct",
                 directCommittedText = directCommittedText,
+                directCommitAccepted = directCommit.accepted,
             )
         }
 
-        val clipboardOutcome = replaceAllTextViaClipboard(text, directCommittedText)
+        val clipboardOutcome = replaceAllTextViaClipboard(text, directCommit)
         if (clipboardOutcome.committedText.isNotBlank()) {
             return clipboardOutcome
         }
@@ -687,31 +745,39 @@ class AiKeyboardImeService : InputMethodService() {
             committedText = directCommittedText,
             strategy = "direct_truncated",
             directCommittedText = directCommittedText,
+            directCommitAccepted = directCommit.accepted,
         )
     }
 
-    private fun replaceAllTextDirect(ic: InputConnection, text: String): String {
+    private fun replaceAllTextDirect(ic: InputConnection, text: String): DirectCommitResult {
+        var accepted = false
         ic.beginBatchEdit()
         try {
             clearBeforeCursor(ic)
             clearAfterCursor(ic)
-            ic.commitText(text, 1)
+            accepted = ic.commitText(text, 1)
         } finally {
             ic.endBatchEdit()
         }
-        return readAllText(ic)
+        return DirectCommitResult(
+            accepted = accepted,
+            committedText = readAllText(ic),
+        )
     }
 
-    private fun replaceAllTextViaClipboard(text: String, directCommittedText: String): PipelineCommitOutcome {
+    private fun replaceAllTextViaClipboard(text: String, directCommit: DirectCommitResult): PipelineCommitOutcome {
+        val directCommittedText = directCommit.committedText
         val ic = currentInputConnection ?: return PipelineCommitOutcome(
             committedText = directCommittedText,
             strategy = "direct_truncated",
             directCommittedText = directCommittedText,
+            directCommitAccepted = directCommit.accepted,
         )
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager ?: return PipelineCommitOutcome(
             committedText = directCommittedText,
             strategy = "direct_truncated",
             directCommittedText = directCommittedText,
+            directCommitAccepted = directCommit.accepted,
         )
         clipboard.setPrimaryClip(ClipData.newPlainText("ai-keyboard-pipeline-result", text))
         ic.beginBatchEdit()
@@ -730,6 +796,8 @@ class AiKeyboardImeService : InputMethodService() {
             directCommittedText = directCommittedText,
             clipboardFallbackUsed = true,
             clipboardPasteAccepted = pasteAccepted,
+            directCommitAccepted = directCommit.accepted,
+            clipboardCommittedText = pastedText,
         )
     }
 
@@ -937,10 +1005,18 @@ class AiKeyboardImeService : InputMethodService() {
         private const val TEXT_READ_MAX_CHARS = 100_000
         private const val TEXT_READ_MAX_LINES = 10_000
         private const val MODEL_UNLOAD_DELAY_MS = 600L
+        private const val POST_COMMIT_READBACK_DELAY_MS = 300L
         private const val KEY_COMMIT_STRATEGY = "ai_keyboard_commit_strategy"
         private const val KEY_DIRECT_COMMITTED_LENGTH = "ai_keyboard_direct_committed_length"
         private const val KEY_CLIPBOARD_FALLBACK_USED = "ai_keyboard_clipboard_fallback_used"
         private const val KEY_CLIPBOARD_PASTE_ACCEPTED = "ai_keyboard_clipboard_paste_accepted"
+        private const val KEY_DIRECT_COMMIT_ACCEPTED = "ai_keyboard_direct_commit_accepted"
+        private const val KEY_CLIPBOARD_COMMITTED_LENGTH = "ai_keyboard_clipboard_committed_length"
+        private const val KEY_DELAYED_COMMITTED_LENGTH = "ai_keyboard_delayed_committed_length"
+        private const val KEY_EDITOR_PACKAGE_NAME = "ai_keyboard_editor_package_name"
+        private const val KEY_EDITOR_FIELD_ID = "ai_keyboard_editor_field_id"
+        private const val KEY_EDITOR_INPUT_TYPE = "ai_keyboard_editor_input_type"
+        private const val KEY_EDITOR_IME_OPTIONS = "ai_keyboard_editor_ime_options"
     }
 }
 
@@ -956,4 +1032,11 @@ private data class PipelineCommitOutcome(
     val directCommittedText: String = committedText,
     val clipboardFallbackUsed: Boolean = false,
     val clipboardPasteAccepted: Boolean = false,
+    val directCommitAccepted: Boolean = false,
+    val clipboardCommittedText: String = "",
+)
+
+private data class DirectCommitResult(
+    val accepted: Boolean,
+    val committedText: String,
 )

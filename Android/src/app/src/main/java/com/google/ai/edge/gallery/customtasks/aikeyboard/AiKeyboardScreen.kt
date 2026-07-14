@@ -473,6 +473,11 @@ private fun AiKeyboardPipelineLogCard(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
+      Text(
+        "直接接受 ${if (entry.directCommitAccepted) "是" else "否"}，剪贴板读回 ${entry.clipboardCommittedLength}，延迟读回 ${entry.delayedCommittedLength}，编辑器 ${entry.editorPackageName.ifBlank { "未知" }}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
       Text("原文：" + entry.inputText.previewForLog(expanded), style = MaterialTheme.typography.bodyMedium)
       Text("输出：" + entry.outputText.previewForLog(expanded), style = MaterialTheme.typography.bodyMedium)
       if (entry.committedText.isNotBlank() && entry.committedText != entry.outputText) {
@@ -524,6 +529,13 @@ private fun AiKeyboardPipelineLogEntry.toExportText(): String {
     "直接提交读回长度：$directCommittedLength",
     "是否启用剪贴板回退：$clipboardFallbackUsed",
     "剪贴板粘贴是否被接受：$clipboardPasteAccepted",
+    "直接提交是否被接受：$directCommitAccepted",
+    "剪贴板提交读回长度：$clipboardCommittedLength",
+    "延迟读回长度：$delayedCommittedLength",
+    "目标编辑器包名：$editorPackageName",
+    "目标编辑器 fieldId：$editorFieldId",
+    "目标编辑器 inputType：$editorInputType",
+    "目标编辑器 imeOptions：$editorImeOptions",
     "原文：$inputText",
     "提示词：$promptText",
     "原始输出：$rawOutputText",
