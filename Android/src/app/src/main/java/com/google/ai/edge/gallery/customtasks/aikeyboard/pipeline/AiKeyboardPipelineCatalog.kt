@@ -5,6 +5,7 @@ data class AiKeyboardPipelinePreset(
   val displayName: String,
   val keyboardLabel: String,
   val instruction: String,
+  val builtIn: Boolean = true,
 )
 
 object AiKeyboardPipelineCatalog {
@@ -106,7 +107,7 @@ object AiKeyboardPipelineCatalog {
         id = "translate",
         displayName = "翻译",
         keyboardLabel = "翻译",
-        instruction = "在中文和英文之间翻译；如果原文不是中文或英文，则翻译为中文。",
+        instruction = "把原文翻译为{target_language}。保留原文含义、语气和格式，不要把目标语言再翻译回原文语言。",
       ),
       AiKeyboardPipelinePreset(
         id = "custom",
@@ -124,19 +125,39 @@ object AiKeyboardPipelineCatalog {
     return presets.firstOrNull { it.id == id }
   }
 
+  fun withInstructionOverride(id: String, instruction: String): AiKeyboardPipelinePreset? {
+    val preset = byId(id) ?: return null
+    return preset.copy(instruction = instruction)
+  }
+
   fun nextAfter(id: String): AiKeyboardPipelinePreset {
     val index = presets.indexOfFirst { it.id == id }
     if (index < 0) return defaultPreset()
     return presets[(index + 1) % presets.size]
   }
 
-  fun buildPrompt(presetId: String, input: String): String {
+  fun buildPrompt(
+    presetId: String,
+    input: String,
+    presetOverride: AiKeyboardPipelinePreset? = null,
+    translationTargetLanguage: String = "英文",
+  ): String {
     val text = input.trim()
     if (text.isEmpty()) return ""
-    val preset = byId(presetId) ?: defaultPreset()
+    val preset = presetOverride ?: byId(presetId) ?: defaultPreset()
+    val rawInstruction =
+      if (preset.id == "translate") {
+        if (preset.instruction.contains("{target_language}")) {
+          preset.instruction.replace("{target_language}", translationTargetLanguage)
+        } else {
+          "${preset.instruction}\n目标语言：$translationTargetLanguage"
+        }
+      } else {
+        preset.instruction
+      }
     return """
       你是本地 AI 键盘的文字处理流水线。
-      任务：${preset.instruction}
+      任务：$rawInstruction
       要求：只输出处理后的正文，不要解释，不要加前后缀，不要描述你做了什么。
       原文：
       $text

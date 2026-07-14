@@ -15,7 +15,9 @@ import com.google.ai.edge.gallery.data.createLlmChatConfigs
 import com.google.ai.edge.gallery.data.normalizeContextWindowAndMaxTokens
 import com.google.ai.edge.gallery.proto.ImportedModel
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import java.io.File
+import java.util.UUID
 
 data class AiKeyboardTextModelCandidate(
   val model: Model,
@@ -33,21 +35,120 @@ class AiKeyboardTextModelRepository(
   private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
   private val gson = Gson()
 
+  fun listPipelinePresets(): List<AiKeyboardPipelinePreset> {
+    val instructionOverrides = getInstructionOverrides()
+    val builtIns =
+      AiKeyboardPipelineCatalog.presets.map { preset ->
+        instructionOverrides[preset.id]?.let { override ->
+          preset.copy(instruction = override)
+        } ?: preset
+      }
+    return builtIns + getCustomPipelines()
+  }
+
+  fun getPipelinePreset(id: String): AiKeyboardPipelinePreset? {
+    return listPipelinePresets().firstOrNull { it.id == id }
+  }
+
   fun getSelectedPipelineId(): String {
     val saved = prefs.getString(KEY_SELECTED_PIPELINE_ID, null)
-    return saved?.takeIf { AiKeyboardPipelineCatalog.byId(it) != null }
+    return saved?.takeIf { getPipelinePreset(it) != null }
       ?: AiKeyboardPipelineCatalog.DEFAULT_PRESET_ID
   }
 
   fun setSelectedPipelineId(id: String) {
-    val resolved = AiKeyboardPipelineCatalog.byId(id)?.id ?: AiKeyboardPipelineCatalog.DEFAULT_PRESET_ID
+    val resolved = getPipelinePreset(id)?.id ?: AiKeyboardPipelineCatalog.DEFAULT_PRESET_ID
     prefs.edit().putString(KEY_SELECTED_PIPELINE_ID, resolved).apply()
   }
 
   fun selectNextPipeline(): AiKeyboardPipelinePreset {
-    val next = AiKeyboardPipelineCatalog.nextAfter(getSelectedPipelineId())
+    val presets = listPipelinePresets()
+    val index = presets.indexOfFirst { it.id == getSelectedPipelineId() }
+    val next =
+      if (index < 0) {
+        presets.firstOrNull { it.id == AiKeyboardPipelineCatalog.DEFAULT_PRESET_ID }
+          ?: AiKeyboardPipelineCatalog.defaultPreset()
+      } else {
+        presets[(index + 1) % presets.size]
+      }
     setSelectedPipelineId(next.id)
     return next
+  }
+
+  fun buildPrompt(presetId: String, input: String): String {
+    val preset = getPipelinePreset(presetId) ?: AiKeyboardPipelineCatalog.defaultPreset()
+    return AiKeyboardPipelineCatalog.buildPrompt(
+      presetId = preset.id,
+      input = input,
+      presetOverride = preset,
+      translationTargetLanguage = getTranslationTargetLanguage(),
+    )
+  }
+
+  fun getTranslationTargetLanguage(): String {
+    return prefs.getString(KEY_TRANSLATION_TARGET_LANGUAGE, null)
+      ?.takeIf { it.isNotBlank() }
+      ?: DEFAULT_TRANSLATION_TARGET_LANGUAGE
+  }
+
+  fun setTranslationTargetLanguage(language: String) {
+    val normalized = language.trim().ifBlank { DEFAULT_TRANSLATION_TARGET_LANGUAGE }
+    prefs.edit().putString(KEY_TRANSLATION_TARGET_LANGUAGE, normalized).apply()
+  }
+
+  fun savePipelineInstruction(id: String, instruction: String) {
+    val normalized = instruction.trim()
+    if (normalized.isBlank()) return
+    val builtIn = AiKeyboardPipelineCatalog.byId(id)
+    if (builtIn != null) {
+      val overrides = getInstructionOverrides().toMutableMap()
+      overrides[id] = normalized
+      saveInstructionOverrides(overrides)
+      return
+    }
+
+    val custom = getCustomPipelines().toMutableList()
+    val index = custom.indexOfFirst { it.id == id }
+    if (index >= 0) {
+      custom[index] = custom[index].copy(instruction = normalized)
+      saveCustomPipelines(custom)
+    }
+  }
+
+  fun resetPipelineInstruction(id: String) {
+    val overrides = getInstructionOverrides().toMutableMap()
+    if (overrides.remove(id) != null) {
+      saveInstructionOverrides(overrides)
+    }
+  }
+
+  fun addCustomPipeline(
+    displayName: String,
+    keyboardLabel: String,
+    instruction: String,
+  ): AiKeyboardPipelinePreset {
+    val preset =
+      AiKeyboardPipelinePreset(
+        id = "custom_${UUID.randomUUID()}",
+        displayName = displayName.trim().ifBlank { "自定义流水线" },
+        keyboardLabel = keyboardLabel.trim().ifBlank { "自定" }.take(4),
+        instruction = instruction.trim().ifBlank { AiKeyboardPipelineCatalog.defaultPreset().instruction },
+        builtIn = false,
+      )
+    saveCustomPipelines(getCustomPipelines() + preset)
+    return preset
+  }
+
+  fun deleteCustomPipeline(id: String): Boolean {
+    if (AiKeyboardPipelineCatalog.byId(id) != null) return false
+    val custom = getCustomPipelines()
+    val updated = custom.filterNot { it.id == id }
+    if (updated.size == custom.size) return false
+    saveCustomPipelines(updated)
+    if (getSelectedPipelineId() == id) {
+      setSelectedPipelineId(AiKeyboardPipelineCatalog.DEFAULT_PRESET_ID)
+    }
+    return true
   }
 
   fun listAvailableModels(): List<AiKeyboardTextModelCandidate> {
@@ -82,12 +183,42 @@ class AiKeyboardTextModelRepository(
     return next
   }
 
+  fun setSelectedModelPath(path: String): AiKeyboardTextModelCandidate? {
+    val selected = listAvailableModels().firstOrNull { it.path == path } ?: return null
+    persistSelectedModel(selected)
+    return selected
+  }
+
   private fun persistSelectedModel(candidate: AiKeyboardTextModelCandidate) {
     prefs
       .edit()
       .putString(KEY_SELECTED_TEXT_MODEL_NAME, candidate.model.name)
       .putString(KEY_SELECTED_TEXT_MODEL_PATH, candidate.path)
       .apply()
+  }
+
+  private fun getInstructionOverrides(): Map<String, String> {
+    val json = prefs.getString(KEY_PIPELINE_INSTRUCTION_OVERRIDES, null) ?: return emptyMap()
+    val type = object : TypeToken<Map<String, String>>() {}.type
+    return runCatching { gson.fromJson<Map<String, String>>(json, type) }.getOrNull().orEmpty()
+  }
+
+  private fun saveInstructionOverrides(overrides: Map<String, String>) {
+    prefs.edit().putString(KEY_PIPELINE_INSTRUCTION_OVERRIDES, gson.toJson(overrides)).apply()
+  }
+
+  private fun getCustomPipelines(): List<AiKeyboardPipelinePreset> {
+    val json = prefs.getString(KEY_CUSTOM_PIPELINES, null) ?: return emptyList()
+    val type = object : TypeToken<List<AiKeyboardPipelinePreset>>() {}.type
+    return runCatching { gson.fromJson<List<AiKeyboardPipelinePreset>>(json, type) }
+      .getOrNull()
+      .orEmpty()
+      .map { it.copy(builtIn = false) }
+      .filter { it.id.isNotBlank() && it.displayName.isNotBlank() && it.instruction.isNotBlank() }
+  }
+
+  private fun saveCustomPipelines(presets: List<AiKeyboardPipelinePreset>) {
+    prefs.edit().putString(KEY_CUSTOM_PIPELINES, gson.toJson(presets.map { it.copy(builtIn = false) })).apply()
   }
 
   private fun readDownloadedAllowlistModels(): List<AiKeyboardTextModelCandidate> {
@@ -224,6 +355,10 @@ class AiKeyboardTextModelRepository(
     private const val KEY_SELECTED_PIPELINE_ID = "selected_pipeline_id"
     private const val KEY_SELECTED_TEXT_MODEL_NAME = "selected_text_model_name"
     private const val KEY_SELECTED_TEXT_MODEL_PATH = "selected_text_model_path"
+    private const val KEY_TRANSLATION_TARGET_LANGUAGE = "translation_target_language"
+    private const val KEY_PIPELINE_INSTRUCTION_OVERRIDES = "pipeline_instruction_overrides"
+    private const val KEY_CUSTOM_PIPELINES = "custom_pipelines"
+    private const val DEFAULT_TRANSLATION_TARGET_LANGUAGE = "英文"
     private const val MODEL_ALLOWLIST_FILENAME = "model_allowlist.json"
     private const val TMP_FILE_EXT = "tmp"
   }

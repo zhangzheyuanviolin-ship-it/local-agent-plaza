@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +50,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -71,6 +74,8 @@ import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelCa
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelDescriptor
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelDownloadProgress
 import com.google.ai.edge.gallery.customtasks.aikeyboard.model.AiKeyboardModelRepository
+import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardPipelinePreset
+import com.google.ai.edge.gallery.customtasks.aikeyboard.pipeline.AiKeyboardTextModelRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,8 +84,11 @@ import kotlinx.coroutines.withContext
 fun AiKeyboardScreen(bottomPadding: Dp) {
   val context = LocalContext.current
   val repository = remember(context) { AiKeyboardModelRepository(context.applicationContext) }
+  val pipelineRepository = remember(context) { AiKeyboardTextModelRepository(context.applicationContext) }
   val scope = rememberCoroutineScope()
   var refreshTick by remember { mutableStateOf(0) }
+  var pipelineRefreshTick by remember { mutableStateOf(0) }
+  var showPipelineSettings by remember { mutableStateOf(false) }
   val progressByModel = remember { mutableStateMapOf<String, AiKeyboardModelDownloadProgress>() }
   val downloadingIds = remember { mutableStateMapOf<String, Boolean>() }
   val hasMicPermission =
@@ -139,6 +147,22 @@ fun AiKeyboardScreen(bottomPadding: Dp) {
     ) {
       Icon(Icons.Outlined.Keyboard, contentDescription = null)
       Text(stringResource(R.string.ai_keyboard_show_ime_picker), modifier = Modifier.padding(start = 6.dp))
+    }
+
+    OutlinedButton(
+      modifier = Modifier.fillMaxWidth(),
+      onClick = { showPipelineSettings = !showPipelineSettings },
+    ) {
+      Icon(Icons.Outlined.Settings, contentDescription = null)
+      Text("流水线设置", modifier = Modifier.padding(start = 6.dp))
+    }
+
+    if (showPipelineSettings) {
+      AiKeyboardPipelineSettingsSection(
+        repository = pipelineRepository,
+        refreshTick = pipelineRefreshTick,
+        onRefresh = { pipelineRefreshTick++ },
+      )
     }
 
     AiKeyboardModelSection(
@@ -227,6 +251,213 @@ fun AiKeyboardScreen(bottomPadding: Dp) {
           withContext(Dispatchers.IO) { repository.deleteModel(model.id) }
           Toast.makeText(context, R.string.ai_keyboard_delete_done, Toast.LENGTH_SHORT).show()
           refreshTick++
+        }
+      },
+    )
+  }
+}
+
+@Composable
+private fun AiKeyboardPipelineSettingsSection(
+  repository: AiKeyboardTextModelRepository,
+  refreshTick: Int,
+  onRefresh: () -> Unit,
+) {
+  var translationTarget by remember(refreshTick) { mutableStateOf(repository.getTranslationTargetLanguage()) }
+  var newName by remember { mutableStateOf("") }
+  var newLabel by remember { mutableStateOf("") }
+  var newInstruction by remember { mutableStateOf("") }
+  val selectedModel = remember(refreshTick) { repository.getSelectedModel() }
+  val availableModels = remember(refreshTick) { repository.listAvailableModels() }
+  val selectedPipelineId = remember(refreshTick) { repository.getSelectedPipelineId() }
+  val presets = remember(refreshTick) { repository.listPipelinePresets() }
+
+  Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+    Text("文本模型", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    if (availableModels.isEmpty()) {
+      Text("未找到已下载或已导入的 LiteRT 文本模型。", style = MaterialTheme.typography.bodyMedium)
+    } else {
+      availableModels.forEach { candidate ->
+        val selected = candidate.path == selectedModel?.path
+        Card(modifier = Modifier.fillMaxWidth()) {
+          Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(candidate.displayName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(
+              if (selected) "当前文本模型" else "可用文本模型",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+              onClick = {
+                repository.setSelectedModelPath(candidate.path)
+                onRefresh()
+              },
+              enabled = !selected,
+              modifier = Modifier.fillMaxWidth(),
+            ) {
+              Text(if (selected) "已选择" else "设为当前文本模型")
+            }
+          }
+        }
+      }
+    }
+
+    Text("翻译目标语言", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    OutlinedTextField(
+      value = translationTarget,
+      onValueChange = { translationTarget = it },
+      label = { Text("目标语言") },
+      modifier = Modifier.fillMaxWidth(),
+      singleLine = true,
+    )
+    Button(
+      onClick = {
+        repository.setTranslationTargetLanguage(translationTarget)
+        onRefresh()
+      },
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      Text("保存翻译目标语言")
+    }
+
+    Text("流水线", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    presets.forEach { preset ->
+      AiKeyboardPipelinePresetCard(
+        preset = preset,
+        selected = preset.id == selectedPipelineId,
+        onSelect = {
+          repository.setSelectedPipelineId(preset.id)
+          onRefresh()
+        },
+        onSaveInstruction = { instruction ->
+          repository.savePipelineInstruction(preset.id, instruction)
+          onRefresh()
+        },
+        onResetInstruction = {
+          repository.resetPipelineInstruction(preset.id)
+          onRefresh()
+        },
+        onDelete = {
+          repository.deleteCustomPipeline(preset.id)
+          onRefresh()
+        },
+      )
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+      Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("新增自定义流水线", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        OutlinedTextField(
+          value = newName,
+          onValueChange = { newName = it },
+          label = { Text("名称") },
+          modifier = Modifier.fillMaxWidth(),
+          singleLine = true,
+        )
+        OutlinedTextField(
+          value = newLabel,
+          onValueChange = { newLabel = it.take(4) },
+          label = { Text("键盘按钮标签") },
+          modifier = Modifier.fillMaxWidth(),
+          singleLine = true,
+        )
+        OutlinedTextField(
+          value = newInstruction,
+          onValueChange = { newInstruction = it },
+          label = { Text("任务说明提示词") },
+          modifier = Modifier.fillMaxWidth(),
+          minLines = 3,
+        )
+        Button(
+          onClick = {
+            val preset = repository.addCustomPipeline(newName, newLabel, newInstruction)
+            repository.setSelectedPipelineId(preset.id)
+            newName = ""
+            newLabel = ""
+            newInstruction = ""
+            onRefresh()
+          },
+          modifier = Modifier.fillMaxWidth(),
+          enabled = newInstruction.isNotBlank(),
+        ) {
+          Text("新增并选中")
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun AiKeyboardPipelinePresetCard(
+  preset: AiKeyboardPipelinePreset,
+  selected: Boolean,
+  onSelect: () -> Unit,
+  onSaveInstruction: (String) -> Unit,
+  onResetInstruction: () -> Unit,
+  onDelete: () -> Unit,
+) {
+  var instruction by remember(preset.id, preset.instruction) { mutableStateOf(preset.instruction) }
+  var showDeleteDialog by remember { mutableStateOf(false) }
+  Card(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Text(preset.displayName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+      Text(
+        (if (preset.builtIn) "内置预设" else "自定义流水线") + if (selected) "，当前使用中" else "",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      OutlinedTextField(
+        value = instruction,
+        onValueChange = { instruction = it },
+        label = { Text("任务说明提示词") },
+        modifier = Modifier.fillMaxWidth(),
+        minLines = 3,
+      )
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onSelect, enabled = !selected, modifier = Modifier.weight(1f)) {
+          Text(if (selected) "已选中" else "选中")
+        }
+        Button(
+          onClick = { onSaveInstruction(instruction) },
+          enabled = instruction.isNotBlank(),
+          modifier = Modifier.weight(1f),
+        ) {
+          Text("保存")
+        }
+      }
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        if (preset.builtIn) {
+          OutlinedButton(onClick = onResetInstruction, modifier = Modifier.weight(1f)) {
+            Text("重置提示词")
+          }
+        } else {
+          OutlinedButton(onClick = { showDeleteDialog = true }, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Outlined.Delete, contentDescription = null)
+            Text("删除", modifier = Modifier.padding(start = 6.dp))
+          }
+        }
+      }
+    }
+  }
+
+  if (showDeleteDialog) {
+    AlertDialog(
+      onDismissRequest = { showDeleteDialog = false },
+      title = { Text("删除自定义流水线") },
+      text = { Text("删除后不能在键盘按钮中继续切换到这个流水线。") },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            showDeleteDialog = false
+            onDelete()
+          }
+        ) {
+          Text("删除")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showDeleteDialog = false }) {
+          Text("取消")
         }
       },
     )

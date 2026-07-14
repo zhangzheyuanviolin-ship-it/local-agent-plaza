@@ -49,6 +49,39 @@ class AiKeyboardPipelineCatalogTest {
   }
 
   @Test
+  fun translatePromptUsesConfiguredTargetLanguage() {
+    val prompt =
+      AiKeyboardPipelineCatalog.buildPrompt(
+        presetId = "translate",
+        input = "今天晚上要不要一起吃饭？",
+        translationTargetLanguage = "英文",
+      )
+
+    assertTrue(prompt.contains("翻译为英文"))
+    assertTrue(prompt.contains("今天晚上要不要一起吃饭？"))
+  }
+
+  @Test
+  fun translatePromptSupportsCustomInstructionWithTargetLanguageVariable() {
+    val preset =
+      AiKeyboardPipelineCatalog.defaultPreset().copy(
+        id = "translate",
+        instruction = "请翻成{target_language}，保留礼貌语气。",
+      )
+
+    val prompt =
+      AiKeyboardPipelineCatalog.buildPrompt(
+        presetId = "translate",
+        input = "最近忙不忙？",
+        presetOverride = preset,
+        translationTargetLanguage = "日文",
+      )
+
+    assertTrue(prompt.contains("请翻成日文"))
+    assertTrue(prompt.contains("最近忙不忙？"))
+  }
+
+  @Test
   fun promptRejectsBlankInput() {
     val prompt = AiKeyboardPipelineCatalog.buildPrompt("polish", "   ")
 
