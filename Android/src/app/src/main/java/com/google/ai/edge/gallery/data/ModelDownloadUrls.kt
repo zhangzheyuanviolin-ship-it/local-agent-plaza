@@ -38,7 +38,8 @@ fun huggingFaceModelFileUrl(modelId: String, revision: String?, modelFile: Strin
 fun huggingFaceModelFileUrls(modelId: String, revision: String?, modelFile: String): List<String> {
   val resolvedRevision = revision?.takeIf { it.isNotBlank() } ?: "main"
   val path = "$modelId/resolve/$resolvedRevision/$modelFile?download=true"
-  return listOf(
+  return listOfNotNull(
+      modelScopeModelFileUrl(modelId = modelId, modelFile = modelFile),
       "https://hf-mirror.com/$path",
       "https://huggingface.co/$path",
     )
@@ -53,4 +54,13 @@ fun expandModelDownloadUrls(primaryUrl: String): List<String> {
   } else {
     listOf(primaryUrl)
   }
+}
+
+private fun modelScopeModelFileUrl(modelId: String, modelFile: String): String? {
+  val hasVerifiedModelScopeMirror =
+    modelId.startsWith("litert-community/") || modelId.startsWith("google/")
+  if (!hasVerifiedModelScopeMirror) return null
+
+  val encodedFile = modelFile.replace(" ", "%20")
+  return "https://modelscope.cn/models/$modelId/resolve/master/$encodedFile"
 }

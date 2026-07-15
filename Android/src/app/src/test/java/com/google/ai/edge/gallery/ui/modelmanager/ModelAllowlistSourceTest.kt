@@ -70,7 +70,7 @@ class ModelAllowlistSourceTest {
   }
 
   @Test
-  fun huggingFaceModelUrlsPreferChinaMirrorThenOfficialSource() {
+  fun huggingFaceModelUrlsPreferDomesticSourcesThenOfficialSource() {
     val urls =
       huggingFaceModelFileUrls(
         modelId = "litert-community/Qwen3-4B",
@@ -79,15 +79,33 @@ class ModelAllowlistSourceTest {
       )
 
     assertEquals(
+      "https://modelscope.cn/models/litert-community/Qwen3-4B/resolve/master/" +
+        "qwen3_4b_mixed_int4.litertlm",
+      urls[0],
+    )
+    assertEquals(
       "https://hf-mirror.com/litert-community/Qwen3-4B/resolve/abc123/" +
         "qwen3_4b_mixed_int4.litertlm?download=true",
-      urls[0],
+      urls[1],
     )
     assertEquals(
       "https://huggingface.co/litert-community/Qwen3-4B/resolve/abc123/" +
         "qwen3_4b_mixed_int4.litertlm?download=true",
-      urls[1],
+      urls[2],
     )
+  }
+
+  @Test
+  fun modelScopeCandidateIsLimitedToVerifiedNamespaces() {
+    val urls =
+      huggingFaceModelFileUrls(
+        modelId = "lyafence/MiniCPM5-1B-SFT-litertlm",
+        revision = "abc123",
+        modelFile = "MiniCPM5-1B-SFT.litertlm",
+      )
+
+    assertEquals(2, urls.size)
+    assertTrue(urls.first().startsWith("https://hf-mirror.com/"))
   }
 
   @Test

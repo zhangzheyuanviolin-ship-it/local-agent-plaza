@@ -1,5 +1,17 @@
 # Release Notes · 版本历史
 
+## v1.0.14-plaza.4 · 2026-07-15
+
+国内下载源补强版本。延续 `v1.0.14-plaza.3` 的 APK 内置 48 模型白名单修复，并进一步补齐模型文件下载候选源。
+
+**修复**
+- 下载候选源顺序调整为：已验证 ModelScope 同名模型文件、Hugging Face 中国镜像 `hf-mirror.com`、Hugging Face 官方源 `huggingface.co`。
+- 对 48 个内置模型逐项核查 ModelScope 同名仓库与同名 `.litertlm` 文件，其中 24 个能返回真实 `LITERTLM` 文件字节，因此这些模型会获得 ModelScope 下载候选。
+- 未通过 ModelScope 核查的模型不会强行伪造固定 ModelScope 地址，避免把 404 作为优先下载源长期暴露给用户。
+- 下载 worker 保持断点续传和多源失败回退；某一候选源失败后继续尝试下一候选源。
+
+---
+
 ## v1.0.14-plaza.3 · 2026-07-15
 
 紧急稳定修复版本。修复 `v1.0.14-plaza.2` 发布后清理历史 feature 分支导致应用回退到 Google 上游模型白名单的问题。

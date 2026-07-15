@@ -40,7 +40,7 @@ android {
   val localVersionCode =
     providers.environmentVariable("LOCAL_VERSION_CODE").orNull?.toIntOrNull() ?: 230
   val localVersionName =
-    providers.environmentVariable("LOCAL_VERSION_NAME").orNull ?: "1.0.14-plaza.3"
+    providers.environmentVariable("LOCAL_VERSION_NAME").orNull ?: "1.0.14-plaza.4"
   val releaseKeystorePath = providers.environmentVariable("ANDROID_RELEASE_KEYSTORE_PATH").orNull
 
   defaultConfig {
