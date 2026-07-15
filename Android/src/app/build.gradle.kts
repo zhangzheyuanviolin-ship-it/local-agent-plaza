@@ -38,9 +38,9 @@ android {
     providers.environmentVariable("APPLICATION_ID_SUFFIX").orNull ?: ""
   val appApplicationId = "com.localagent.plaza${appApplicationIdSuffix}"
   val localVersionCode =
-    providers.environmentVariable("LOCAL_VERSION_CODE").orNull?.toIntOrNull() ?: 101
+    providers.environmentVariable("LOCAL_VERSION_CODE").orNull?.toIntOrNull() ?: 230
   val localVersionName =
-    providers.environmentVariable("LOCAL_VERSION_NAME").orNull ?: "1.0.13-plaza.visual.1"
+    providers.environmentVariable("LOCAL_VERSION_NAME").orNull ?: "1.0.14-plaza.2"
   val releaseKeystorePath = providers.environmentVariable("ANDROID_RELEASE_KEYSTORE_PATH").orNull
 
   defaultConfig {

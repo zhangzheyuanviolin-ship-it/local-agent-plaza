@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "feature/**" ]
+    branches: [ "main", "experimental", "feature/**" ]
     paths:
       - 'Android/**'
       - '.github/workflows/build_android.yaml'
@@ -95,9 +95,14 @@ jobs:
             BRANCH="${REF_NAME}"
             case "$BRANCH" in
               main)
-                VNAME="1.0.13-plaza.main.$GITHUB_RUN_NUMBER"
+                VNAME="1.0.14-plaza.main.$GITHUB_RUN_NUMBER"
                 CHANNEL="main"
                 SUFFIX=""
+                ;;
+              experimental)
+                VNAME="1.0.14-experimental.$GITHUB_RUN_NUMBER"
+                CHANNEL="experimental"
+                SUFFIX=".experimental"
                 ;;
               feature/local-visual-creation)
                 VNAME="1.0.13-plaza.visual.$GITHUB_RUN_NUMBER"
