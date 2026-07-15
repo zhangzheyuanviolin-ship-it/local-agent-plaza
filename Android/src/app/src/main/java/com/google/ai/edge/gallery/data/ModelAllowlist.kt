@@ -75,7 +75,9 @@ data class AllowedModel(
     // Construct HF download url.
     var version = commitHash
     var downloadedFileName = modelFile
-    var downloadUrl = url ?: huggingFaceModelFileUrl(modelId, commitHash, modelFile)
+    var downloadUrls =
+      url?.let { expandModelDownloadUrls(it) } ?: huggingFaceModelFileUrls(modelId, commitHash, modelFile)
+    var downloadUrl = downloadUrls.firstOrNull().orEmpty()
     var sizeInBytes = sizeInBytes
 
     // Handle per-soc model files.
@@ -85,13 +87,14 @@ data class AllowedModel(
           Log.d(TAG, "Found soc-specific model files for model $name: $info")
           version = info.commitHash ?: "-"
           downloadedFileName = info.modelFile ?: "-"
-          downloadUrl =
-            info.url
-              ?: huggingFaceModelFileUrl(
+          downloadUrls =
+            info.url?.let { expandModelDownloadUrls(it) }
+              ?: huggingFaceModelFileUrls(
                 modelId = modelId,
                 revision = info.commitHash,
                 modelFile = info.modelFile ?: "-",
               )
+          downloadUrl = downloadUrls.firstOrNull().orEmpty()
           sizeInBytes = info.sizeInBytes ?: -1
         }
       }
@@ -190,6 +193,7 @@ data class AllowedModel(
 
     if (runtimeType == RuntimeType.AICORE) {
       downloadUrl = ""
+      downloadUrls = emptyList()
       learnMoreUrl = "https://developers.google.com/ml-kit/terms"
     }
 
@@ -205,6 +209,7 @@ data class AllowedModel(
       version = version,
       info = finalDescription,
       url = downloadUrl,
+      urls = downloadUrls,
       sizeInBytes = sizeInBytes,
       minDeviceMemoryInGb = minDeviceMemoryInGb,
       configs = configs,

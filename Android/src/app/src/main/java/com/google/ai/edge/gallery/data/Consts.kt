@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 
 // Keys used to send/receive data to Work.
 const val KEY_MODEL_URL = "KEY_MODEL_URL"
+const val KEY_MODEL_URLS = "KEY_MODEL_URLS"
 const val KEY_MODEL_NAME = "KEY_MODEL_NAME"
 const val KEY_MODEL_COMMIT_HASH = "KEY_MODEL_COMMIT_HASH"
 const val KEY_MODEL_DOWNLOAD_MODEL_DIR = "KEY_MODEL_DOWNLOAD_MODEL_DIR"

@@ -95,6 +95,7 @@ private const val TEXT_INPUT_HISTORY_MAX_SIZE = 50
 private const val MODEL_CONFIG_SECRET_PREFIX = "model_config___"
 private const val MODEL_ALLOWLIST_FILENAME = "model_allowlist.json"
 private const val MODEL_ALLOWLIST_TEST_FILENAME = "model_allowlist_test.json"
+private const val MODEL_ALLOWLIST_ASSET_DIR = "model_allowlists"
 
 private const val TEST_MODEL_ALLOW_LIST = ""
 
@@ -1070,11 +1071,28 @@ constructor(
           }
         }
 
+        // Custom downstream builds may append a local suffix such as "-plaza.2" or
+        // "-experimental.131". Allowlist files are versioned by the base semantic version.
+        val version = BuildConfig.VERSION_NAME.substringBefore("-").replace(".", "_")
+
         if (modelAllowlist == null) {
-          // Load from github.
-          // Custom downstream builds may append a local suffix such as "-ala.1".
-          // The upstream allowlist files are versioned only by the base semantic version.
-          val version = BuildConfig.VERSION_NAME.substringBefore("-").replace(".", "_")
+          Log.d(TAG, "Loading bundled model allowlist asset for version: $version")
+          val bundledAllowlistContent = readModelAllowlistContentFromAssets(version = version)
+          if (bundledAllowlistContent != null) {
+            modelAllowlist = parseModelAllowlist(content = bundledAllowlistContent)
+            if (modelAllowlist != null) {
+              saveModelAllowlistToDisk(modelAllowlistContent = bundledAllowlistContent)
+              Log.d(TAG, "Done: loading bundled model allowlist asset for version: $version")
+            }
+          }
+        }
+
+        if (modelAllowlist == null) {
+          Log.w(TAG, "Bundled model allowlist unavailable. Trying to load cached allowlist.")
+          modelAllowlist = readModelAllowlistFromDisk()
+        }
+
+        if (modelAllowlist == null) {
           var modelAllowlistContent = ""
           for (url in modelAllowlistUrls(version)) {
             Log.d(TAG, "Loading model allowlist from internet. Url: $url")
@@ -1088,10 +1106,7 @@ constructor(
             Log.w(TAG, "Failed to load model allowlist from internet: $url")
           }
 
-          if (modelAllowlist == null) {
-            Log.w(TAG, "Failed to load model allowlist from internet. Trying to load it from disk")
-            modelAllowlist = readModelAllowlistFromDisk()
-          } else {
+          if (modelAllowlist != null) {
             saveModelAllowlistToDisk(modelAllowlistContent = modelAllowlistContent.ifBlank { "{}" })
           }
         }
@@ -1262,6 +1277,25 @@ constructor(
     }
 
     return null
+  }
+
+  private fun readModelAllowlistContentFromAssets(version: String): String? {
+    val assetPath = "$MODEL_ALLOWLIST_ASSET_DIR/$version.json"
+    return try {
+      context.assets.open(assetPath).bufferedReader().use { it.readText() }
+    } catch (e: Exception) {
+      Log.w(TAG, "Failed to read bundled model allowlist asset: $assetPath", e)
+      null
+    }
+  }
+
+  private fun parseModelAllowlist(content: String): ModelAllowlist? {
+    return try {
+      Gson().fromJson(content, ModelAllowlist::class.java)
+    } catch (e: JsonSyntaxException) {
+      Log.e(TAG, "Failed to parse model allowlist", e)
+      null
+    }
   }
 
   private fun isModelPartiallyDownloaded(model: Model): Boolean {

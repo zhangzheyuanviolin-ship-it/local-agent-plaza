@@ -147,6 +147,9 @@ data class Model(
    */
   val url: String = "",
 
+  /** Candidate URLs for the primary model file, tried in order. */
+  val urls: List<String> = listOf(),
+
   /**
    * The size of the model file in bytes.
    *

@@ -1,0 +1,1220 @@
+{
+  "models": [
+    {
+      "name": "Gemma-4-E2B-it",
+      "modelId": "litert-community/gemma-4-E2B-it-litert-lm",
+      "modelFile": "gemma-4-E2B-it.litertlm",
+      "description": "A variant of Gemma 4 E2B ready for deployment on Android using [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/api/kotlin/getting_started.md). It supports multi-modality input, with up to 32K context length.",
+      "sizeInBytes": 2588147712,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "6e5c4f1e395deb959c494953478fa5cec4b8008f",
+      "llmSupportImage": true,
+      "llmSupportAudio": true,
+      "capabilities": [
+        "llm_thinking",
+        "speculative_decoding"
+      ],
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxContextLength": 32000,
+        "maxTokens": 4000,
+        "accelerators": "gpu,cpu",
+        "visionAccelerator": "gpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_ask_image",
+          "llm_ask_audio"
+        ],
+        "speculative_decoding": [
+          "llm_chat",
+          "llm_ask_image",
+          "llm_ask_audio",
+          "llm_prompt_lab"
+        ]
+      },
+      "updatableModelFiles": [
+        {
+          "fileName": "gemma-4-E2B-it.litertlm",
+          "commitHash": "7fa1d78473894f7e736a21d920c3aa80f950c0db"
+        }
+      ],
+      "updateInfo": "The updated model now leverages Gemma 4's built-in Multi Token Prediction (MTP) for faster decode on select workloads. You can enable or disable MTP using a new toggle in chat configuration."
+    },
+    {
+      "name": "Gemma-4-E4B-it",
+      "modelId": "litert-community/gemma-4-E4B-it-litert-lm",
+      "modelFile": "gemma-4-E4B-it.litertlm",
+      "description": "A variant of Gemma 4 E4B ready for deployment on Android using [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/api/kotlin/getting_started.md). It supports multi-modality input, with up to 32K context length.",
+      "sizeInBytes": 3659530240,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "28299f30ee4d43294517a4ac93abd6163412f07f",
+      "llmSupportImage": true,
+      "llmSupportAudio": true,
+      "capabilities": [
+        "llm_thinking",
+        "speculative_decoding"
+      ],
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxContextLength": 32000,
+        "maxTokens": 4000,
+        "accelerators": "gpu,cpu",
+        "visionAccelerator": "gpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_ask_image",
+          "llm_ask_audio"
+        ],
+        "speculative_decoding": [
+          "llm_chat",
+          "llm_ask_image",
+          "llm_ask_audio",
+          "llm_prompt_lab"
+        ]
+      },
+      "updatableModelFiles": [
+        {
+          "fileName": "gemma-4-E4B-it.litertlm",
+          "commitHash": "9695417f248178c63a9f318c6e0c56cb917cb837"
+        }
+      ],
+      "updateInfo": "The updated model now leverages Gemma 4's built-in Multi Token Prediction (MTP) for faster decode on select workloads."
+    },
+    {
+      "name": "Gemma-3n-E2B-it",
+      "modelId": "google/gemma-3n-E2B-it-litert-lm",
+      "modelFile": "gemma-3n-E2B-it-int4.litertlm",
+      "description": "A variant of [Gemma 3n E2B](https://ai.google.dev/gemma/docs/gemma-3n) ready for deployment on Android using [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md). It supports text, vision, and audio input, with 4096 context length.",
+      "sizeInBytes": 3655827456,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "ba9ca88da013b537b6ed38108be609b8db1c3a16",
+      "llmSupportImage": true,
+      "llmSupportAudio": true,
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "cpu,gpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ],
+      "bestForTaskTypes": [
+        "llm_ask_image",
+        "llm_ask_audio"
+      ]
+    },
+    {
+      "name": "Gemma-3n-E4B-it",
+      "modelId": "google/gemma-3n-E4B-it-litert-lm",
+      "modelFile": "gemma-3n-E4B-it-int4.litertlm",
+      "description": "A variant of [Gemma 3n E4B](https://ai.google.dev/gemma/docs/gemma-3n) ready for deployment on Android using [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/README.md). It supports text, vision, and audio input, with 4096 context length.",
+      "sizeInBytes": 4919541760,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "297ed75955702dec3503e00c2c2ecbbf475300bc",
+      "llmSupportImage": true,
+      "llmSupportAudio": true,
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "cpu,gpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ]
+    },
+    {
+      "name": "Gemma3-1B-IT",
+      "modelId": "litert-community/Gemma3-1B-IT",
+      "modelFile": "gemma3-1b-it-int4.litertlm",
+      "description": "A variant of [google/Gemma-3-1B-IT](https://huggingface.co/google/Gemma-3-1B-IT) with 4-bit quantization ready for deployment on Android.",
+      "sizeInBytes": 584417280,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "42d538a932e8d5b12e6b3b455f5572560bd60b2c",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 1024,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ]
+    },
+    {
+      "name": "Qwen2.5-1.5B-Instruct",
+      "modelId": "litert-community/Qwen2.5-1.5B-Instruct",
+      "modelFile": "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "A variant of [Qwen/Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) ready for deployment on Android.",
+      "sizeInBytes": 1597931520,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "19edb84c69a0212f29a6ef17ba0d6f278b6a1614",
+      "defaultConfig": {
+        "topK": 5,
+        "topP": 0.6,
+        "temperature": 0.2,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ]
+    },
+    {
+      "name": "DeepSeek-R1-Distill-Qwen-1.5B",
+      "modelId": "litert-community/DeepSeek-R1-Distill-Qwen-1.5B",
+      "modelFile": "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
+      "description": "A variant of [deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B) ready for deployment on Android.",
+      "sizeInBytes": 1833451520,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "e34bb88632342d1f9640bad579a45134eb1cf988",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ]
+    },
+    {
+      "name": "TinyGarden-270M",
+      "modelId": "litert-community/functiongemma-270m-ft-tiny-garden",
+      "modelFile": "tiny_garden_q8_ekv1024.litertlm",
+      "description": "Fine-tuned Function Gemma 270M model for Tiny Garden.",
+      "sizeInBytes": 288964608,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "c205853ff82da86141a1105faa2344a8b176dfe7",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.0,
+        "maxTokens": 1024,
+        "accelerators": "cpu"
+      },
+      "taskTypes": [
+        "llm_tiny_garden"
+      ],
+      "bestForTaskTypes": [
+        "llm_tiny_garden"
+      ]
+    },
+    {
+      "name": "MobileActions-270M",
+      "modelId": "litert-community/functiongemma-270m-ft-mobile-actions",
+      "modelFile": "mobile_actions_q8_ekv1024.litertlm",
+      "description": "Fine-tuned Function Gemma 270M model for Mobile Actions.",
+      "sizeInBytes": 288964608,
+      "minDeviceMemoryInGb": 6,
+      "commitHash": "38942192c9b723af836d489074823ff33d4a3e7a",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.0,
+        "maxTokens": 1024,
+        "accelerators": "cpu"
+      },
+      "taskTypes": [
+        "llm_mobile_actions"
+      ],
+      "bestForTaskTypes": [
+        "llm_mobile_actions"
+      ]
+    },
+    {
+      "name": "Qwen3-1.7B",
+      "modelId": "litert-community/Qwen3-1.7B",
+      "modelFile": "Qwen3_1.7B.litertlm",
+      "description": "Qwen3 1.7B LiteRT-LM model from litert-community. A small Chinese-capable baseline for chat, prompt lab, and agent tool-calling smoke tests.",
+      "sizeInBytes": 2056729520,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "5d8fd1f27c771dbbbb185c9f05c3547760dd3cbd",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen2.5-Coder-3B-Instruct",
+      "modelId": "litert-community/Qwen2.5-Coder-3B-Instruct",
+      "modelFile": "Qwen2.5_Coder_3B_It.litertlm",
+      "description": "Qwen2.5 Coder 3B Instruct LiteRT-LM model from litert-community. Candidate for workspace writing, code-oriented tool calls, and Chinese coding assistance.",
+      "sizeInBytes": 3433083824,
+      "minDeviceMemoryInGb": 10,
+      "commitHash": "a32e9f082c3fee8adcbe71990eae1eaca3eb0eb9",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 8192
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3-4B-Thinking-2507",
+      "modelId": "litert-community/Qwen3-4B-Thinking-2507",
+      "modelFile": "model.litertlm",
+      "description": "Qwen3 4B Thinking 2507 LiteRT-LM model from litert-community. Experimental Chinese reasoning candidate for agent tasks on high-memory Android devices.",
+      "sizeInBytes": 2474357680,
+      "minDeviceMemoryInGb": 10,
+      "commitHash": "78616fa434463090d2f6d64bed83ee5d8c6bae61",
+      "capabilities": [
+        "llm_thinking"
+      ],
+      "defaultConfig": {
+        "topK": 5,
+        "topP": 0.6,
+        "temperature": 0.2,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 32000
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_prompt_lab",
+          "llm_agent_chat"
+        ]
+      }
+    },
+    {
+      "name": "DeepSeek-R1-Distill-Qwen-7B",
+      "modelId": "litert-community/DeepSeek-R1-Distill-Qwen-7B",
+      "modelFile": "DeepSeek-R1-Distill-Qwen-7B_q4_block32_ekv4096.litertlm",
+      "description": "DeepSeek R1 Distill Qwen 7B LiteRT-LM model from litert-community. Experimental reasoning model for high-memory devices; useful as a Chinese reasoning baseline.",
+      "sizeInBytes": 4531978224,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "ab1a8fad8088987df0f74fe0b66547d276e90ebd",
+      "capabilities": [
+        "llm_thinking"
+      ],
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_prompt_lab",
+          "llm_agent_chat"
+        ]
+      }
+    },
+    {
+      "name": "Gemma-4-12B-it (experimental)",
+      "modelId": "litert-community/gemma-4-12B-it-litert-lm",
+      "modelFile": "gemma-4-12B-it.litertlm",
+      "description": "Official litert-community Gemma 4 12B text model in LiteRT-LM format. Verified by user to load and run on a 24GB Snapdragon 8 Gen3-class Android device. Native tool-call constrained decoding currently emits control tokens on this branch, so the Agent task defaults this model to compatibility tools while keeping it available for large-model text and prompt-lab testing. Base Gemma 4 family supports long context, but this Android branch defaults to a conservative 4K context for reliable loading; users can manually raise the total context length in model settings for testing.",
+      "sizeInBytes": 6547589312,
+      "minDeviceMemoryInGb": 16,
+      "commitHash": "44cf85a326f79b814fa86a60af414c042755b43a",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.8,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3-4B",
+      "modelId": "litert-community/Qwen3-4B",
+      "modelFile": "qwen3_4b_mixed_int4.litertlm",
+      "description": "Qwen3 4B (Alibaba) — strong native Chinese capability. INT4 mixed-precision for mobile deployment. Mixed INT4 artifact is capped to 2048 context in the model card; use INT8 or long-context variants for web-search agent tests.",
+      "sizeInBytes": 2659057664,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "84cc5a35c9c65cd18fcd65bb1f3a7d77a4acfe6e",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 1024,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 2048
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3-4B-Instruct-2507",
+      "modelId": "litert-community/Qwen3-4B-Instruct-2507",
+      "modelFile": "qwen3_4b_instruct_2507_mixed_int4.litertlm",
+      "description": "Qwen3 4B improved instruct release (2507). Strong Chinese, INT4 only. Mixed INT4 artifact is capped to 2048 context in the model card; use INT8 or long-context variants for web-search agent tests.",
+      "sizeInBytes": 2659057664,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "a7385088ed97778d7cf91a0b541fa1f95735f768",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 1024,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 2048
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3-8B",
+      "modelId": "litert-community/Qwen3-8B",
+      "modelFile": "qwen3_8b_mixed_int4.litertlm",
+      "description": "Qwen3 8B (Alibaba) — stronger Chinese reasoning. INT4 mixed-precision for mobile. Mixed INT4 artifact is capped to 2048 context in the model card; use INT8 or long-context variants for web-search agent tests.",
+      "sizeInBytes": 4887412736,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "71ff705588319d52d374977eff3da4eee0c0d26e",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 1024,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 2048
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3-14B (experimental)",
+      "modelId": "litert-community/Qwen3-14B",
+      "modelFile": "qwen3_14b_mixed_int4.litertlm",
+      "description": "Qwen3 14B (Alibaba) — densest LiteRT-LM model with strong Chinese. INT4. Requires 24GB+ RAM. LiteRT-LM does not yet support MoE/sparse architecture, so this is the largest dense Chinese option. Mixed INT4 artifact is capped to 2048 context in the model card; use INT8 or long-context variants for web-search agent tests.",
+      "sizeInBytes": 8655863808,
+      "minDeviceMemoryInGb": 16,
+      "commitHash": "e4122fd370cec85c61467274b180e0954e4f422d",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 1024,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 2048
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "SuperGemma4-E4B-abliterated (uncensored)",
+      "modelId": "salik7khan/supergemma4-e4b-abliterated-litert-lm",
+      "modelFile": "supergemma4-e4b-abliterated.litertlm",
+      "description": "Uncensored fine-tune of Gemma 4 E4B via abliteration (refusal direction removed). Source base Jiunsong/supergemma4-e4b-abliterated derived from google/gemma-4-E4B-it. Multimodal capabilities theoretically inherited from base (vision/audio) but not explicitly validated by uploader. INT8 quantization, 3.65GB.",
+      "sizeInBytes": 3920000000,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "50a1b03dd955fe876d7d6466e86192be04ee1e80",
+      "llmSupportImage": true,
+      "llmSupportAudio": true,
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image",
+        "llm_ask_audio"
+      ]
+    },
+    {
+      "name": "Gemma4-E4B-128k-MTP (long context)",
+      "modelId": "metricspace/gemma4-E4B-it-litert-128k-mtp",
+      "modelFile": "model.litertlm",
+      "description": "Gemma 4 E4B fine-tuned for 128K context length with Multi-Token Prediction. Long-document scenarios. Text-only.",
+      "sizeInBytes": 3656040448,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "49adb2050e18e9e6db798b0255aa84a3e2d81c58",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxContextLength": 128000,
+        "maxTokens": 4000,
+        "accelerators": "gpu,cpu"
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "MiniCPM5-1B-SFT No-Think 128K",
+      "modelId": "lyafence/MiniCPM5-1B-SFT-litertlm",
+      "modelFile": "MiniCPM5-1B-SFT.litertlm",
+      "description": "MiniCPM5 1B SFT LiteRT-LM No-Think variant. Model card reports 131K source context and tool-calling support; priority candidate for Chinese local agent tests with longer search-result context.",
+      "sizeInBytes": 1098058464,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "970ebb49658759c63d087c57ac450b64e9e037b6",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 32768
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "bestForTaskTypes": [
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "MiniCPM5-1B-SFT Think 128K",
+      "modelId": "lyafence/MiniCPM5-1B-SFT-litertlm",
+      "modelFile": "MiniCPM5-1B-SFT-think.litertlm",
+      "description": "MiniCPM5 1B SFT LiteRT-LM Think variant. Experimental tool-calling/reasoning candidate; may emit thinking content, so use after No-Think.",
+      "sizeInBytes": 1098058464,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "970ebb49658759c63d087c57ac450b64e9e037b6",
+      "capabilities": [
+        "llm_thinking"
+      ],
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 32768
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_prompt_lab",
+          "llm_agent_chat"
+        ]
+      }
+    },
+    {
+      "name": "Qwen3-4B INT8 FloatKV",
+      "modelId": "litert-community/Qwen3-4B",
+      "modelFile": "qwen3_4b_channelwise_int8_float32kv.litertlm",
+      "description": "Qwen3 4B channel-wise INT8 weights with float32 KV. Larger than the mixed INT4 file and not marked with the 2048 mixed-INT4 context cap in the model card; experimental high-memory Chinese agent candidate.",
+      "sizeInBytes": 5672370176,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "84cc5a35c9c65cd18fcd65bb1f3a7d77a4acfe6e",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 8192
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3-8B INT8 FloatKV",
+      "modelId": "litert-community/Qwen3-8B",
+      "modelFile": "qwen3_8b_channelwise_int8_float32kv.litertlm",
+      "description": "Qwen3 8B channel-wise INT8 weights with float32 KV. Larger Chinese model for high-memory devices; experimental because Qwen3 base may emit thinking unless template suppression works.",
+      "sizeInBytes": 8307720192,
+      "minDeviceMemoryInGb": 16,
+      "commitHash": "71ff705588319d52d374977eff3da4eee0c0d26e",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 8192
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3-14B INT8 FloatKV experimental",
+      "modelId": "litert-community/Qwen3-14B",
+      "modelFile": "qwen3_14b_channelwise_int8_float32kv.litertlm",
+      "description": "Qwen3 14B channel-wise INT8 with float32 KV. Very large Chinese dense model for 24GB RAM feasibility tests; may fail on memory or backend limits.",
+      "sizeInBytes": 14934671360,
+      "minDeviceMemoryInGb": 20,
+      "commitHash": "e4122fd370cec85c61467274b180e0954e4f422d",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen2.5-Coder-1.5B LiteRTLM community",
+      "modelId": "4ntoine/Qwen2.5-Coder-1.5B-Instruct-LiteRTLM",
+      "modelFile": "model.litertlm",
+      "description": "Community LiteRT-LM conversion of Qwen2.5-Coder 1.5B Instruct. Candidate for Chinese file/workspace tool tasks and code-oriented agent behavior.",
+      "sizeInBytes": 1567489440,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "b92bcbf1d435dd25cb06593cc53118f5fd1954ed",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 8192
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen2.5-Coder-3B LiteRTLM community",
+      "modelId": "4ntoine/Qwen2.5-Coder-3B-Instruct-LiteRTLM",
+      "modelFile": "model.litertlm",
+      "description": "Community LiteRT-LM conversion of Qwen2.5-Coder 3B Instruct. Candidate for workspace writing, coding, and tool-calling comparisons against litert-community conversion.",
+      "sizeInBytes": 3119887536,
+      "minDeviceMemoryInGb": 10,
+      "commitHash": "fb3b85f1ac9b7213aae79c7ea935651e6181fc4f",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 8192
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "LocoOperator-4B LiteRTLM",
+      "modelId": "4ntoine/LocoOperator-4B-LiteRTLM",
+      "modelFile": "model.litertlm",
+      "description": "LocoOperator 4B LiteRT-LM community conversion. Experimental local-agent candidate focused on operator/tool-style workflows.",
+      "sizeInBytes": 4059223584,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "6862d30e40d1c80d7b40207d91d66dfc2bec9b6a",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 8192
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Gemma4-E2B-64K-MTP long context",
+      "modelId": "metricspace/gemma4-E2B-it-litert-64k-mtp",
+      "modelFile": "model.litertlm",
+      "description": "Gemma 4 E2B LiteRT-LM long-context MTP variant. Model card reports 64K context on CPU/GPU; experimental candidate for large search-result and document workflows.",
+      "sizeInBytes": 2583756800,
+      "minDeviceMemoryInGb": 10,
+      "commitHash": "658c443af96a1da581a3be7578420c0d85b6590a",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 64000
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Gemma4-E4B-64K-MTP long context",
+      "modelId": "metricspace/gemma4-E4B-it-litert-64k-mtp",
+      "modelFile": "model.litertlm",
+      "description": "Gemma 4 E4B LiteRT-LM long-context MTP variant. Model card reports 64K context; useful to test whether longer context solves web-search summarization.",
+      "sizeInBytes": 3655254016,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "989ea0e867cb7917aad2fa6b1a417343c6d176ad",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 64000
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Gemma4-E2B-128K-MTP long context",
+      "modelId": "metricspace/gemma4-E2B-it-litert-128k-mtp",
+      "modelFile": "model.litertlm",
+      "description": "Gemma 4 E2B LiteRT-LM 128K/MTP variant. Experimental long-context model; library metadata is custom but repository contains .litertlm file.",
+      "sizeInBytes": 2583756800,
+      "minDeviceMemoryInGb": 10,
+      "commitHash": "4dae3505f550397923c206eaa63be84f17ee43cb",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 128000
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "JOSIE-1.1-4B-Instruct WI4",
+      "modelId": "Werve/JOSIE-1.1-4B-Instruct-litert-lm",
+      "modelFile": "JOSIE-1.1-4B-Instruct_DYNAMIC WI4 AFP32.litertlm",
+      "description": "JOSIE 1.1 4B Instruct LiteRT-LM dynamic WI4 conversion. Android/on-device model card; context 4096, included as a comparison agent candidate.",
+      "sizeInBytes": 2244326320,
+      "minDeviceMemoryInGb": 10,
+      "commitHash": "3028d1f2fe6bb50547e3eb827017336d405a9864",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "SmolLM3-3B Q4 4096",
+      "modelId": "litert-community/SmolLM3-3B",
+      "modelFile": "SmolLM3-3B_q4_block32_ekv4096.litertlm",
+      "description": "SmolLM3 3B LiteRT-LM Q4 with 4096 KV cache. Multilingual small-reasoner baseline, not primary Chinese model but useful for comparison.",
+      "sizeInBytes": 2002257840,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "a1498a492fc5e6d289f1355b49babe8e3005cd32",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "VibeThinker-3B LiteRTLM",
+      "modelId": "Tdamre/VibeThinker-3B-litert-lm",
+      "modelFile": "VibeThinker-3B.litertlm",
+      "description": "VibeThinker 3B LiteRT-LM mobile-safe template conversion. Experimental reasoning/tool-call candidate; may emit thinking.",
+      "sizeInBytes": 3446780848,
+      "minDeviceMemoryInGb": 10,
+      "commitHash": "f0a72081dd92aa0b0d8092764e5b8999d7ee24e7",
+      "capabilities": [
+        "llm_thinking"
+      ],
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_prompt_lab",
+          "llm_agent_chat"
+        ]
+      }
+    },
+    {
+      "name": "Gemma4-E2B Uncensored INT4 8192 experimental",
+      "modelId": "PeppX/gemma-4-e2b-uncensored-litertlm",
+      "modelFile": "gemma4_uncensored_INT4_8192.litertlm",
+      "description": "Recent community Gemma 4 E2B uncensored LiteRT-LM conversion with Android/on-device tags and an 8192-context INT4 artifact. Experimental model for comparing Gemma-family compatibility-tool behavior; not yet verified on this app.",
+      "sizeInBytes": 2570459088,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "c6127b57654fa9e956a97adcdf3e8d439ac4944a",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.8,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 8192
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Gemma4-E4B Abliterated community experimental",
+      "modelId": "olekk/gemma-4-E4B-it-abliterated-litert-lm",
+      "modelFile": "gemma-4-E4B-it-abliterated.litertlm",
+      "description": "Recent community Gemma 4 E4B abliterated LiteRT-LM conversion with Android/on-device tags. Experimental high-quality Gemma-family candidate; not yet verified on this app.",
+      "sizeInBytes": 3659530240,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "a4eecccd3b0ba1777660180cda60a396eedcb8aa",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.8,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 32768
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Gemma4-E4B QAT community experimental",
+      "modelId": "DarrenJiaImbue/gemma-4-E4B-it-qat-litertlm",
+      "modelFile": "gemma-4-E4B-it-qat.litertlm",
+      "description": "Recent community Gemma 4 E4B QAT mobile-transformers LiteRT-LM conversion. Experimental candidate for speed and stability comparison on Android GPU; not yet verified on this app.",
+      "sizeInBytes": 3254493296,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "a9c6beea02917b453bd60045cb6ee23e14d91535",
+      "defaultConfig": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 0.8,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 32768
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3.5-0.8B Multimodal Q8 experimental",
+      "modelId": "GabrieleConte/Qwen3.5-0.8B-LiteRT",
+      "modelFile": "qwen35_mm_q8_ekv2048.litertlm",
+      "description": "Community Qwen3.5 0.8B multimodal LiteRT-LM bundle. Model card reports full multimodal bundle, Apache-2.0 upstream, and KV cache length 2048. Experimental candidate for Chinese chat, prompt optimization, lightweight agent smoke tests, and image-aware tasks.",
+      "sizeInBytes": 1159757824,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "766ec4afaaeeda64da162c458bac1efc0d27cf9e",
+      "llmSupportImage": true,
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1024,
+        "accelerators": "gpu,cpu",
+        "visionAccelerator": "gpu",
+        "maxContextLength": 2048
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image"
+      ]
+    },
+    {
+      "name": "Qwen3.5-2B LiteRT-LM Q8 experimental",
+      "modelId": "paulsp94/Qwen3.5-2B-LiteRT-LM",
+      "modelFile": "qwen35_2b.litertlm",
+      "description": "Community Qwen3.5 2B LiteRT-LM bundle. Model card describes a working LiteRT-LM conversion of Qwen3.5 hybrid GatedDeltaNet architecture. Higher-priority Chinese candidate than older small Qwen models; context behavior must be verified on device.",
+      "sizeInBytes": 1901762208,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "f91f8c5e985350f10bd55e6aebdeb89b7c211fcc",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "bestForTaskTypes": [
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3.5-2B LiteRT-LM Q4 experimental",
+      "modelId": "paulsp94/Qwen3.5-2B-LiteRT-LM",
+      "modelFile": "qwen35_2b_q4.litertlm",
+      "description": "Smaller Q4 variant of the community Qwen3.5 2B LiteRT-LM bundle. Use it when the Q8 variant is too slow or too memory-heavy; tool-calling quality may differ from Q8.",
+      "sizeInBytes": 1069429648,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "f91f8c5e985350f10bd55e6aebdeb89b7c211fcc",
+      "parentModelName": "Qwen3.5-2B LiteRT-LM Q8 experimental",
+      "variantLabel": "Q4 smaller variant",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3.5-4B Multimodal experimental",
+      "modelId": "trevon/Qwen3.5-4B-LiteRT",
+      "modelFile": "model_multimodal.litertlm",
+      "description": "Community Qwen3.5 4B multimodal LiteRT package. Repository provides model_multimodal.litertlm and marks image-text-to-text; added as an experimental high-quality Chinese candidate for chat, agent, and image-aware testing.",
+      "sizeInBytes": 5263458304,
+      "minDeviceMemoryInGb": 14,
+      "commitHash": "8c81b3a5932f8544fd927c9f095f24baf4ca755a",
+      "llmSupportImage": true,
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "visionAccelerator": "gpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3.5-4B Quantized text experimental",
+      "modelId": "trevon/Qwen3.5-4B-LiteRT",
+      "modelFile": "model_quantized.litertlm",
+      "description": "Text-oriented quantized variant from the Qwen3.5 4B LiteRT repository. Smaller than the multimodal bundle and useful for isolating whether vision assets affect tool-call stability.",
+      "sizeInBytes": 4274913280,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "8c81b3a5932f8544fd927c9f095f24baf4ca755a",
+      "parentModelName": "Qwen3.5-4B Multimodal experimental",
+      "variantLabel": "Quantized text variant",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "Qwen3.5-9B Multimodal experimental",
+      "modelId": "trevon/Qwen3.5-9B-LiteRT",
+      "modelFile": "model_multimodal.litertlm",
+      "description": "Community Qwen3.5 9B multimodal LiteRT package. Large experimental Chinese candidate for 24GB-class phones; repository exposes a single model_multimodal.litertlm artifact and image-text-to-text metadata.",
+      "sizeInBytes": 9518678016,
+      "minDeviceMemoryInGb": 20,
+      "commitHash": "3b2a2a45f00ed50ddea31764d2e989659c2df878",
+      "llmSupportImage": true,
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "visionAccelerator": "gpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat",
+        "llm_ask_image"
+      ],
+      "bestForTaskTypes": [
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "TinySwallow-1.5B-Instruct",
+      "modelId": "litert-community/TinySwallow-1.5B-Instruct",
+      "modelFile": "TinySwallow-1.5B-Instruct.litertlm",
+      "description": "litert-community TinySwallow 1.5B Instruct LiteRT-LM model. Small multilingual/Japanese-oriented model, included as a lightweight comparison point for chat and agent compatibility.",
+      "sizeInBytes": 1567604736,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "cf67d4d779c4602a7fdf43331c21897bc63ee67f",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "VibeThinker-1.5B LiteRT-LM",
+      "modelId": "litert-community/VibeThinker-1.5B",
+      "modelFile": "VibeThinker-1.5B.litertlm",
+      "description": "litert-community VibeThinker 1.5B LiteRT-LM reasoning model. Experimental small reasoning/tool-calling comparison model; may emit reasoning-style text depending on template behavior.",
+      "sizeInBytes": 1567604736,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "10a5f89bb85a97b58585b0d962205dfda0fdac82",
+      "capabilities": [
+        "llm_thinking"
+      ],
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.6,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_prompt_lab",
+          "llm_agent_chat"
+        ]
+      }
+    },
+    {
+      "name": "MiniCPM5-1B Web Android-tested",
+      "modelId": "Tdamre/MiniCPM5-1B-litert-lm",
+      "modelFile": "MiniCPM5-1B-web.litertlm",
+      "description": "MiniCPM5 1B LiteRT-LM web/mobile bundle. Model card reports Android CPU/GPU smoke tests and seven-turn chat completion; included as a compact long-running conversation candidate. Context cache is 2048 for this artifact.",
+      "sizeInBytes": 1103486896,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "c18b7715fced1c691cc0697c479dee67113a084a",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 2048
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "MiniCPM5-1B CPU-GPU 4096",
+      "modelId": "Tdamre/MiniCPM5-1B-litert-lm",
+      "modelFile": "MiniCPM5-1B.litertlm",
+      "description": "MiniCPM5 1B LiteRT-LM CPU/GPU artifact with 4096 context cache according to the model card. Experimental alternative to the Android-tested web artifact when a larger local context is needed.",
+      "sizeInBytes": 1103486896,
+      "minDeviceMemoryInGb": 8,
+      "commitHash": "c18b7715fced1c691cc0697c479dee67113a084a",
+      "parentModelName": "MiniCPM5-1B Web Android-tested",
+      "variantLabel": "CPU/GPU 4096 context variant",
+      "defaultConfig": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 1536,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "name": "JOSIE-1.1-4B-Instruct WI8 experimental",
+      "modelId": "Werve/JOSIE-1.1-4B-Instruct-litert-lm",
+      "modelFile": "JOSIE-1.1-4B-Instruct_dynamic_wi8_afp32.litertlm",
+      "description": "WI8 AFP32 variant of the JOSIE 1.1 4B Instruct LiteRT-LM conversion. Larger than the existing WI4 artifact; included to test whether the higher precision variant improves Chinese output stability after tool results.",
+      "sizeInBytes": 4449940400,
+      "minDeviceMemoryInGb": 12,
+      "commitHash": "3028d1f2fe6bb50547e3eb827017336d405a9864",
+      "parentModelName": "JOSIE-1.1-4B-Instruct WI4",
+      "variantLabel": "WI8 higher precision variant",
+      "defaultConfig": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    }
+  ]
+}

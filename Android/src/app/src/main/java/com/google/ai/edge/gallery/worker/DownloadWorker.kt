@@ -44,6 +44,7 @@ import com.google.ai.edge.gallery.data.KEY_MODEL_START_UNZIPPING
 import com.google.ai.edge.gallery.data.KEY_MODEL_TOTAL_BYTES
 import com.google.ai.edge.gallery.data.KEY_MODEL_UNZIPPED_DIR
 import com.google.ai.edge.gallery.data.KEY_MODEL_URL
+import com.google.ai.edge.gallery.data.KEY_MODEL_URLS
 import com.google.ai.edge.gallery.data.TMP_FILE_EXT
 import java.io.BufferedInputStream
 import java.io.File
@@ -92,6 +93,14 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
 
   override suspend fun doWork(): Result {
     val fileUrl = inputData.getString(KEY_MODEL_URL)
+    val fileUrls =
+      inputData
+        .getString(KEY_MODEL_URLS)
+        ?.split("\n")
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        ?.distinct()
+        ?: fileUrl?.let { listOf(it) }
     val modelName = inputData.getString(KEY_MODEL_NAME) ?: "Model"
     val version = inputData.getString(KEY_MODEL_COMMIT_HASH)!!
     val fileName = inputData.getString(KEY_MODEL_DOWNLOAD_FILE_NAME)
@@ -105,7 +114,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
     val accessToken = inputData.getString(KEY_MODEL_DOWNLOAD_ACCESS_TOKEN)
 
     return withContext(Dispatchers.IO) {
-      if (fileUrl == null || fileName == null) {
+      if (fileUrls.isNullOrEmpty() || fileName == null) {
         Result.failure()
       } else {
         return@withContext try {
@@ -114,7 +123,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
 
           // Collect data for all files.
           val allFiles: MutableList<UrlAndFileName> = mutableListOf()
-          allFiles.add(UrlAndFileName(url = fileUrl, fileName = fileName))
+          allFiles.add(UrlAndFileName(url = fileUrls.joinToString("\n"), fileName = fileName))
           for (index in extraDataFileUrls.indices) {
             allFiles.add(
               UrlAndFileName(url = extraDataFileUrls[index], fileName = extraDataFileNames[index])
@@ -128,72 +137,84 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
           val bytesReadSizeBuffer: MutableList<Long> = mutableListOf()
           val bytesReadLatencyBuffer: MutableList<Long> = mutableListOf()
           for (file in allFiles) {
-            val url = URL(file.url)
+            val candidateUrls =
+              file.url.split("\n").map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            var downloadedCurrentFile = false
+            var lastDownloadError: IOException? = null
+            for (candidateUrl in candidateUrls) {
+              try {
+                val url = URL(candidateUrl)
 
-            val connection = url.openConnection() as HttpURLConnection
-            if (accessToken != null) {
-              Log.d(TAG, "Using access token: ${accessToken.subSequence(0, 10)}...")
-              connection.setRequestProperty("Authorization", "Bearer $accessToken")
-            }
+                val connection = url.openConnection() as HttpURLConnection
+                if (accessToken != null && candidateUrl.contains("huggingface.co")) {
+                  Log.d(TAG, "Using access token: ${accessToken.subSequence(0, 10)}...")
+                  connection.setRequestProperty("Authorization", "Bearer $accessToken")
+                }
 
-            // Prepare output file's dir.
-            val outputDir =
-              File(
-                applicationContext.getExternalFilesDir(null),
-                listOf(modelDir, version).joinToString(separator = File.separator),
-              )
-            if (!outputDir.exists()) {
-              outputDir.mkdirs()
-            }
+                // Prepare output file's dir.
+                val outputDir =
+                  File(
+                    applicationContext.getExternalFilesDir(null),
+                    listOf(modelDir, version).joinToString(separator = File.separator),
+                  )
+                if (!outputDir.exists()) {
+                  outputDir.mkdirs()
+                }
 
-            // Read the tmp file and see if it is partially downloaded.
-            val outputTmpFile =
-              File(
-                applicationContext.getExternalFilesDir(null),
-                listOf(modelDir, version, "${file.fileName}.$TMP_FILE_EXT")
-                  .joinToString(separator = File.separator),
-              )
-            val outputFileBytes = outputTmpFile.length()
-            if (outputFileBytes > 0) {
-              Log.d(
-                TAG,
-                "File '${outputTmpFile.name}' partial size: ${outputFileBytes}. Trying to resume download",
-              )
-              connection.setRequestProperty("Range", "bytes=${outputFileBytes}-")
-              // Force the server to send non-compressed data to make download resuming work.
-              connection.setRequestProperty("Accept-Encoding", "identity")
-            }
-            connection.connect()
-            Log.d(TAG, "response code: ${connection.responseCode}")
+                // Read the tmp file and see if it is partially downloaded.
+                val outputTmpFile =
+                  File(
+                    applicationContext.getExternalFilesDir(null),
+                    listOf(modelDir, version, "${file.fileName}.$TMP_FILE_EXT")
+                      .joinToString(separator = File.separator),
+                  )
+                val outputFileBytes = outputTmpFile.length()
+                if (outputFileBytes > 0) {
+                  Log.d(
+                    TAG,
+                    "File '${outputTmpFile.name}' partial size: ${outputFileBytes}. Trying to resume download",
+                  )
+                  connection.setRequestProperty("Range", "bytes=${outputFileBytes}-")
+                  // Force the server to send non-compressed data to make download resuming work.
+                  connection.setRequestProperty("Accept-Encoding", "identity")
+                }
+                connection.connect()
+                Log.d(TAG, "response code: ${connection.responseCode} url=$candidateUrl")
 
-            if (
-              connection.responseCode == HttpURLConnection.HTTP_OK ||
-                connection.responseCode == HttpURLConnection.HTTP_PARTIAL
-            ) {
-              val contentRange = connection.getHeaderField("Content-Range")
+                val appendToPartialFile: Boolean
+                if (
+                  connection.responseCode == HttpURLConnection.HTTP_OK ||
+                    connection.responseCode == HttpURLConnection.HTTP_PARTIAL
+                ) {
+                  val contentRange = connection.getHeaderField("Content-Range")
 
-              if (contentRange != null) {
-                // Parse the Content-Range header
-                val rangeParts = contentRange.substringAfter("bytes ").split("/")
-                val byteRange = rangeParts[0].split("-")
-                val startByte = byteRange[0].toLong()
-                val endByte = byteRange[1].toLong()
+                  if (contentRange != null) {
+                    // Parse the Content-Range header
+                    val rangeParts = contentRange.substringAfter("bytes ").split("/")
+                    val byteRange = rangeParts[0].split("-")
+                    val startByte = byteRange[0].toLong()
+                    val endByte = byteRange[1].toLong()
 
-                Log.d(
-                  TAG,
-                  "Content-Range: $contentRange. Start bytes: ${startByte}, end bytes: $endByte",
-                )
+                    Log.d(
+                      TAG,
+                      "Content-Range: $contentRange. Start bytes: ${startByte}, end bytes: $endByte",
+                    )
 
-                downloadedBytes += startByte
-              } else {
-                Log.d(TAG, "Download starts from beginning.")
-              }
-            } else {
-              throw IOException("HTTP error code: ${connection.responseCode}")
-            }
+                    downloadedBytes += startByte
+                    appendToPartialFile = true
+                  } else {
+                    if (outputFileBytes > 0) {
+                      outputTmpFile.delete()
+                    }
+                    Log.d(TAG, "Download starts from beginning.")
+                    appendToPartialFile = false
+                  }
+                } else {
+                  throw IOException("HTTP error code: ${connection.responseCode}")
+                }
 
-            val inputStream = connection.inputStream
-            val outputStream = FileOutputStream(outputTmpFile, true /* append */)
+                val inputStream = connection.inputStream
+                val outputStream = FileOutputStream(outputTmpFile, appendToPartialFile)
 
             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
             var bytesRead: Int
@@ -256,7 +277,17 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
               originalFile.delete()
             }
             outputTmpFile.renameTo(originalFile)
-            Log.d(TAG, "Download done")
+                Log.d(TAG, "Download done")
+                downloadedCurrentFile = true
+                break
+              } catch (e: IOException) {
+                lastDownloadError = e
+                Log.w(TAG, "Download source failed: $candidateUrl", e)
+              }
+            }
+            if (!downloadedCurrentFile) {
+              throw lastDownloadError ?: IOException("No download source succeeded")
+            }
 
             // Unzip if the downloaded file is a zip.
             if (isZip && unzippedDir != null) {

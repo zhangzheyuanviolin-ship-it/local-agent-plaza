@@ -18,7 +18,7 @@ package com.google.ai.edge.gallery.data
 
 private const val PLAZA_ALLOWLIST_BASE_URL =
   "https://raw.githubusercontent.com/zhangzheyuanviolin-ship-it/local-agent-plaza/" +
-    "feature/mcp-presets-and-runtime-fixes-20260701/model_allowlists"
+    "refs/heads/main/model_allowlists"
 
 private const val GOOGLE_ALLOWLIST_BASE_URL =
   "https://raw.githubusercontent.com/google-ai-edge/gallery/refs/heads/main/model_allowlists"
@@ -32,6 +32,25 @@ fun modelAllowlistUrls(version: String): List<String> {
 }
 
 fun huggingFaceModelFileUrl(modelId: String, revision: String?, modelFile: String): String {
+  return huggingFaceModelFileUrls(modelId, revision, modelFile).last()
+}
+
+fun huggingFaceModelFileUrls(modelId: String, revision: String?, modelFile: String): List<String> {
   val resolvedRevision = revision?.takeIf { it.isNotBlank() } ?: "main"
-  return "https://huggingface.co/$modelId/resolve/$resolvedRevision/$modelFile?download=true"
+  val path = "$modelId/resolve/$resolvedRevision/$modelFile?download=true"
+  return listOf(
+      "https://hf-mirror.com/$path",
+      "https://huggingface.co/$path",
+    )
+    .distinct()
+}
+
+fun expandModelDownloadUrls(primaryUrl: String): List<String> {
+  if (primaryUrl.isBlank()) return emptyList()
+  val hfPrefix = "https://huggingface.co/"
+  return if (primaryUrl.startsWith(hfPrefix)) {
+    listOf(primaryUrl.replaceFirst(hfPrefix, "https://hf-mirror.com/"), primaryUrl).distinct()
+  } else {
+    listOf(primaryUrl)
+  }
 }
