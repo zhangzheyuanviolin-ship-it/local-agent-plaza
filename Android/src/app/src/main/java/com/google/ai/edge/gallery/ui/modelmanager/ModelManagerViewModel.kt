@@ -33,6 +33,7 @@ import com.google.ai.edge.gallery.customtasks.aikeyboard.TASK_ID_AI_KEYBOARD
 import com.google.ai.edge.gallery.customtasks.aikeyboard.createAiKeyboardSettingsModel
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
 import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NARRATION
+import com.google.ai.edge.gallery.customtasks.videoqa.TASK_ID_VIDEO_QUESTION_ANSWER
 import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_LOCAL_VISUAL_CREATION
 import com.google.ai.edge.gallery.customtasks.visualcreation.createVisualCreationImageModels
 import com.google.ai.edge.gallery.data.Accelerator
@@ -185,6 +186,7 @@ private val RESET_CONVERSATION_TURN_COUNT_CONFIG =
 private val PREDEFINED_LLM_TASK_ORDER =
   listOf(
     BuiltInTaskId.LLM_ASK_IMAGE,
+    TASK_ID_VIDEO_QUESTION_ANSWER,
     TASK_ID_VISION_NARRATION,
     BuiltInTaskId.LLM_ASK_AUDIO,
     BuiltInTaskId.LLM_CHAT,
@@ -774,6 +776,7 @@ constructor(
       mutableSetOf(
         BuiltInTaskId.LLM_CHAT,
         BuiltInTaskId.LLM_ASK_IMAGE,
+        TASK_ID_VIDEO_QUESTION_ANSWER,
         TASK_ID_VISION_NARRATION,
         BuiltInTaskId.LLM_ASK_AUDIO,
         BuiltInTaskId.LLM_PROMPT_LAB,
@@ -790,12 +793,14 @@ constructor(
       }
       if (
         (task.id == BuiltInTaskId.LLM_ASK_IMAGE && model.llmSupportImage) ||
+          (task.id == TASK_ID_VIDEO_QUESTION_ANSWER && model.llmSupportImage) ||
           (task.id == TASK_ID_VISION_NARRATION && model.llmSupportImage) ||
           (task.id == BuiltInTaskId.LLM_ASK_AUDIO && model.llmSupportAudio) ||
           (task.id == BuiltInTaskId.LLM_TINY_GARDEN && model.llmSupportTinyGarden) ||
           (task.id == BuiltInTaskId.LLM_MOBILE_ACTIONS && model.llmSupportMobileActions) ||
           (task.id != BuiltInTaskId.LLM_ASK_IMAGE &&
             task.id != TASK_ID_VISION_NARRATION &&
+            task.id != TASK_ID_VIDEO_QUESTION_ANSWER &&
             task.id != BuiltInTaskId.LLM_ASK_AUDIO &&
             task.id != BuiltInTaskId.LLM_TINY_GARDEN &&
             task.id != BuiltInTaskId.LLM_MOBILE_ACTIONS)
@@ -1179,6 +1184,7 @@ constructor(
           }
           if (allowedModel.taskTypes.contains(BuiltInTaskId.LLM_ASK_IMAGE)) {
             curTasks.find { it.id == TASK_ID_VISION_NARRATION }?.models?.add(model)
+            curTasks.find { it.id == TASK_ID_VIDEO_QUESTION_ANSWER }?.models?.add(model)
           }
         }
 
@@ -1513,6 +1519,7 @@ constructor(
       if (model.llmSupportImage) {
         addModelIfMissing(BuiltInTaskId.LLM_ASK_IMAGE)
         addModelIfMissing(TASK_ID_VISION_NARRATION)
+        addModelIfMissing(TASK_ID_VIDEO_QUESTION_ANSWER)
       }
       if (model.llmSupportAudio) {
         addModelIfMissing(BuiltInTaskId.LLM_ASK_AUDIO)
@@ -1591,6 +1598,7 @@ constructor(
         listOf(
           BuiltInTaskId.LLM_CHAT,
           BuiltInTaskId.LLM_ASK_IMAGE,
+          TASK_ID_VIDEO_QUESTION_ANSWER,
           BuiltInTaskId.LLM_ASK_AUDIO,
         )
     }
@@ -1600,6 +1608,7 @@ constructor(
         listOf(
           BuiltInTaskId.LLM_CHAT,
           BuiltInTaskId.LLM_ASK_IMAGE,
+          TASK_ID_VIDEO_QUESTION_ANSWER,
           BuiltInTaskId.LLM_ASK_AUDIO,
           BuiltInTaskId.LLM_PROMPT_LAB,
         )
