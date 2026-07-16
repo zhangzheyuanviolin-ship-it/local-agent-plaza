@@ -18,8 +18,15 @@ package com.google.ai.edge.gallery.customtasks.videoqa
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import java.util.Locale
+import kotlin.math.min
 import kotlin.math.roundToLong
 
 private const val US_PER_MS = 1_000L
@@ -55,7 +62,7 @@ fun planEvenFrameTimesUs(durationMs: Long, frameCount: Int): List<Long> {
     return listOf(durationUs / 2L)
   }
   return List(safeFrameCount) { index ->
-    ((durationUs.toDouble() * index.toDouble()) / (safeFrameCount - 1).toDouble()).roundToLong()
+    ((durationUs.toDouble() * (index.toDouble() + 0.5)) / safeFrameCount.toDouble()).roundToLong()
   }
 }
 
@@ -154,6 +161,14 @@ fun extractVideoFrames(
   }
 }
 
+fun prepareVideoFrameBitmapsForModel(frames: List<VideoFrame>): List<Bitmap> {
+  return frames.mapIndexed { index, frame -> frame.bitmap.withFrameLabel(index, frame.timeUs) }
+}
+
+fun formatVideoFrameTimeSeconds(timeUs: Long): String {
+  return String.format(Locale.US, "%.2f", timeUs / US_PER_SECOND.toDouble())
+}
+
 private fun calculateScaledFrameSize(width: Int, height: Int, maxSide: Int): Pair<Int, Int> {
   val safeWidth = width.coerceAtLeast(1)
   val safeHeight = height.coerceAtLeast(1)
@@ -164,4 +179,29 @@ private fun calculateScaledFrameSize(width: Int, height: Int, maxSide: Int): Pai
   }
   val scaledWidth = (safeMaxSide * safeWidth.toDouble() / safeHeight.toDouble()).roundToLong()
   return scaledWidth.toInt().coerceAtLeast(1) to safeMaxSide
+}
+
+private fun Bitmap.withFrameLabel(index: Int, timeUs: Long): Bitmap {
+  val labeled = copy(Bitmap.Config.ARGB_8888, true)
+  val canvas = Canvas(labeled)
+  val label = "Frame ${index + 1}  ${formatVideoFrameTimeSeconds(timeUs)}s"
+  val textSize = (min(labeled.width, labeled.height) * 0.055f).coerceIn(20f, 44f)
+  val padding = (textSize * 0.35f).roundToLong().toFloat()
+  val textPaint =
+    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.WHITE
+      this.textSize = textSize
+      typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+  val backgroundPaint =
+    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.argb(205, 0, 0, 0)
+      style = Paint.Style.FILL
+    }
+  val textWidth = textPaint.measureText(label)
+  val height = textSize + padding * 2.2f
+  val rect = RectF(0f, 0f, (textWidth + padding * 2f).coerceAtMost(labeled.width.toFloat()), height)
+  canvas.drawRect(rect, backgroundPaint)
+  canvas.drawText(label, padding, padding + textSize, textPaint)
+  return labeled
 }

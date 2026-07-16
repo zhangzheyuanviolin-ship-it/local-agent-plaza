@@ -167,7 +167,7 @@ constructor(
       _videoUiState.update { it.copy(errorText = "请输入要询问视频的问题。") }
       return
     }
-    val bitmaps = state.frames.map { it.bitmap }
+    val bitmaps = prepareVideoFrameBitmapsForModel(state.frames)
     val runtimePrompt = buildRuntimePrompt(state = state, prompt = prompt)
     _videoUiState.update {
       it.copy(currentAnswer = "", lastSubmittedPrompt = prompt, errorText = "", statusText = "正在发送视频画面帧给本地模型。")
@@ -204,12 +204,13 @@ constructor(
   private fun buildRuntimePrompt(state: VideoQuestionAnswerUiState, prompt: String): String {
     val frameDescriptions =
       state.frames.mapIndexed { index, frame ->
-        "第 ${index + 1} 帧：视频时间 ${formatTimeSeconds(frame.timeUs)} 秒"
+        "Frame ${index + 1}：视频时间 ${formatVideoFrameTimeSeconds(frame.timeUs)} 秒"
       }
     val modeText =
       if (state.mode == VideoQaMode.COMPLETE_VIDEO) "完整视频描述模式" else "关键帧问答模式"
     return buildString {
       append("你正在分析一个视频。用户已经上传视频，系统从视频中抽取了多张画面帧并按时间顺序作为图片输入附加给你。\n")
+      append("每张图片左上角都写有 Frame 编号和视频时间戳。请优先以图片内的 Frame 编号为顺序依据，不要自行重排图片。\n")
       append("当前模式：")
       append(modeText)
       append("。\n")
@@ -235,8 +236,4 @@ constructor(
       } ?: VIDEO_QA_DEFAULT_FRAME_SIZE
     return VideoQuestionAnswerUiState(mode = mode, frameCount = frameCount, frameSize = frameSize)
   }
-}
-
-private fun formatTimeSeconds(timeUs: Long): String {
-  return String.format(java.util.Locale.US, "%.2f", timeUs / 1_000_000.0)
 }

@@ -21,10 +21,10 @@ import org.junit.Test
 
 class VideoFramePlannerTest {
   @Test
-  fun completeModeSpreadsFramesAcrossVideoDuration() {
+  fun completeModeSamplesSegmentCentersAcrossVideoDuration() {
     val frames = planEvenFrameTimesUs(durationMs = 20_000L, frameCount = 5)
 
-    assertEquals(listOf(0L, 5_000_000L, 10_000_000L, 15_000_000L, 20_000_000L), frames)
+    assertEquals(listOf(2_000_000L, 6_000_000L, 10_000_000L, 14_000_000L, 18_000_000L), frames)
   }
 
   @Test
