@@ -42,6 +42,7 @@ import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.firebaseAnalytics
 import com.google.ai.edge.gallery.worker.DownloadWorker
+import java.io.File
 import java.util.UUID
 import java.util.concurrent.Executors
 
@@ -248,9 +249,19 @@ class DefaultDownloadRepository(
                 modelName = "",
               )
             }
+            val partialFile = getPartialDownloadFile(model)
+            val partialBytes = partialFile.length()
+            if (partialBytes > 0L) {
+              status = ModelDownloadStatusType.PARTIALLY_DOWNLOADED
+            }
             onStatusUpdated(
               model,
-              ModelDownloadStatus(status = status, errorMessage = errorMessage),
+              ModelDownloadStatus(
+                status = status,
+                totalBytes = model.totalBytes,
+                receivedBytes = partialBytes,
+                errorMessage = errorMessage,
+              ),
             )
 
             val startTime = downloadStartTimeSharedPreferences.getLong(model.name, 0L)
@@ -271,6 +282,14 @@ class DefaultDownloadRepository(
         }
       }
     }
+  }
+
+  private fun getPartialDownloadFile(model: Model): File {
+    return File(
+      context.getExternalFilesDir(null),
+      listOf(model.normalizedName, model.version, "${model.downloadFileName}.$TMP_FILE_EXT")
+        .joinToString(File.separator),
+    )
   }
 
   private fun sendNotification(title: String, text: String, taskId: String, modelName: String) {

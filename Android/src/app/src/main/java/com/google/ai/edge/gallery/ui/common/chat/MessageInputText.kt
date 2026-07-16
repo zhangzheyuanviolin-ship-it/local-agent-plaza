@@ -360,6 +360,14 @@ fun MessageInputText(
 
         Spacer(modifier = Modifier.width(16.dp))
       }
+      if (pickedAudioClips.isNotEmpty()) {
+        Text(
+          "长音频会占用更多内存和推理时间；如果转写质量下降，请改用较短片段分批处理。",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+      }
     }
 
     Box(contentAlignment = Alignment.Center, modifier = Modifier.heightIn(min = 76.dp)) {
@@ -559,7 +567,7 @@ fun MessageInputText(
                               horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                               Icon(Icons.Rounded.AudioFile, contentDescription = null)
-                              Text("选择 WAV 文件")
+                              Text("选择音频或视频文件")
                             }
                           },
                           enabled = enableRecordAudioClipMenuItems,
@@ -570,10 +578,16 @@ fun MessageInputText(
                             val intent =
                               Intent(Intent.ACTION_GET_CONTENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
-                                type = "audio/*"
+                                type = "*/*"
 
-                                // Provide a list of more specific MIME types to filter for.
-                                val mimeTypes = arrayOf("audio/wav", "audio/x-wav")
+                                // Accept common audio containers and videos with audio tracks.
+                                val mimeTypes =
+                                  arrayOf(
+                                    "audio/*",
+                                    "video/mp4",
+                                    "video/quicktime",
+                                    "video/*",
+                                  )
                                 putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
 
                                 // Single select.

@@ -67,6 +67,7 @@ enum class IntentAction(val action: String) {
 object IntentHandler {
   private const val TAG = "IntentHandler"
   private const val DEFAULT_READ_MAX_BYTES = 16000
+  private const val DEFAULT_DOCUMENT_INPUT_MAX_BYTES = 20_000_000
   private const val DEFAULT_LIST_MAX_ENTRIES = 200
   private const val ASSISTANT_RESPONSE_PLACEHOLDER = "__ASSISTANT_RESPONSE__"
   private const val WORKSPACE_PATH_HINT =
@@ -363,18 +364,31 @@ object IntentHandler {
       return errorJson("File not found: $path. $WORKSPACE_PATH_HINT")
     }
 
-    val maxBytes = request.optInt("max_bytes", DEFAULT_READ_MAX_BYTES).coerceIn(256, 200000)
-    val bytes =
+    val maxBytes = request.optInt("max_bytes", DEFAULT_READ_MAX_BYTES).coerceIn(256, 500000)
+    val rawBytes =
       context.contentResolver.openInputStream(document.uri)?.use { input ->
-        readUpTo(input, maxBytes)
+        readUpTo(input, DEFAULT_DOCUMENT_INPUT_MAX_BYTES)
       } ?: return errorJson("Failed to open file: $path")
-    val content = bytes.first.toString(Charsets.UTF_8)
+    val extracted =
+      try {
+        WorkspaceDocumentTextExtractor.extract(
+          fileName = document.name ?: path,
+          bytes = rawBytes.first,
+          maxBytes = maxBytes,
+          context = context,
+        )
+      } catch (e: Exception) {
+        Log.e(TAG, "Failed to extract workspace document text.", e)
+        return errorJson("Failed to extract text from file: $path. ${e.message ?: "Unknown error"}")
+      }
     return successJson()
       .put("operation", "read_text")
       .put("path", normalizeDisplayPath(path))
-      .put("content", content)
-      .put("truncated", bytes.second)
-      .put("bytes_read", bytes.first.size)
+      .put("content", extracted.content)
+      .put("content_type", extracted.contentType)
+      .put("detected_format", extracted.detectedFormat)
+      .put("truncated", rawBytes.second || extracted.truncated)
+      .put("bytes_read", extracted.bytesRead)
       .toString()
   }
 

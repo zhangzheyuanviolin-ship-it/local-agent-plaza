@@ -148,16 +148,19 @@ fun DownloadAndTryButton(
   var downloadStarted by remember { mutableStateOf(false) }
   val sheetState = rememberModalBottomSheetState()
 
+  val isPartiallyDownloaded = downloadStatus == ModelDownloadStatusType.PARTIALLY_DOWNLOADED
   val needToDownloadFirst =
-    (downloadStatus == ModelDownloadStatusType.NOT_DOWNLOADED ||
-      downloadStatus == ModelDownloadStatusType.FAILED) &&
+    (
+      downloadStatus == ModelDownloadStatusType.NOT_DOWNLOADED ||
+        downloadStatus == ModelDownloadStatusType.FAILED ||
+        isPartiallyDownloaded
+      ) &&
       model.localFileRelativeDirPathOverride.isEmpty() &&
       model.runtimeType != RuntimeType.AICORE
   val inProgress = downloadStatus == ModelDownloadStatusType.IN_PROGRESS
   val downloadSucceeded = downloadStatus == ModelDownloadStatusType.SUCCEEDED
-  val isPartiallyDownloaded = downloadStatus == ModelDownloadStatusType.PARTIALLY_DOWNLOADED
   val showDownloadProgress =
-    !downloadSucceeded && (downloadStarted || checkingToken || inProgress || isPartiallyDownloaded)
+    !downloadSucceeded && (downloadStarted || checkingToken || inProgress)
 
   // A launcher for requesting notification permission.
   val permissionLauncher =
@@ -412,7 +415,7 @@ fun DownloadAndTryButton(
         if (!compact) {
           if (needToDownloadFirst) {
             Text(
-              stringResource(R.string.download),
+              if (isPartiallyDownloaded) "恢复下载" else stringResource(R.string.download),
               color = textColor,
               style = MaterialTheme.typography.titleMedium,
             )

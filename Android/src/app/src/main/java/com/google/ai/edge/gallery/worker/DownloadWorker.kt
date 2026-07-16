@@ -59,6 +59,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val TAG = "AGDownloadWorker"
+private const val DOWNLOAD_CONNECT_TIMEOUT_MS = 30_000
+private const val DOWNLOAD_READ_TIMEOUT_MS = 60_000
 
 data class UrlAndFileName(val url: String, val fileName: String)
 
@@ -145,7 +147,12 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
               try {
                 val url = URL(candidateUrl)
 
-                val connection = url.openConnection() as HttpURLConnection
+                val connection =
+                  (url.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = DOWNLOAD_CONNECT_TIMEOUT_MS
+                    readTimeout = DOWNLOAD_READ_TIMEOUT_MS
+                    setRequestProperty("Accept-Encoding", "identity")
+                  }
                 if (accessToken != null && candidateUrl.contains("huggingface.co")) {
                   Log.d(TAG, "Using access token: ${accessToken.subSequence(0, 10)}...")
                   connection.setRequestProperty("Authorization", "Bearer $accessToken")
@@ -175,8 +182,6 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
                     "File '${outputTmpFile.name}' partial size: ${outputFileBytes}. Trying to resume download",
                   )
                   connection.setRequestProperty("Range", "bytes=${outputFileBytes}-")
-                  // Force the server to send non-compressed data to make download resuming work.
-                  connection.setRequestProperty("Accept-Encoding", "identity")
                 }
                 connection.connect()
                 Log.d(TAG, "response code: ${connection.responseCode} url=$candidateUrl")
@@ -258,7 +263,9 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
                 )
                 setForeground(
                   createForegroundInfo(
-                    progress = (downloadedBytes * 100 / totalBytes).toInt(),
+                    progress =
+                      if (totalBytes > 0L) (downloadedBytes * 100 / totalBytes).toInt()
+                      else 0,
                     modelName = modelName,
                   )
                 )

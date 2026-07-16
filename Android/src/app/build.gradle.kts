@@ -155,6 +155,7 @@ dependencies {
   implementation(libs.mcp.kotlin.sdk)
   implementation(libs.ktor.client.android)
   implementation(libs.ktor.client.core)
+  implementation("com.tom-roush:pdfbox-android:2.0.27.0")
   implementation("net.java.dev.jna:jna:5.18.1@aar")
   implementation("com.alphacephei:vosk-android:0.3.75@aar")
 }

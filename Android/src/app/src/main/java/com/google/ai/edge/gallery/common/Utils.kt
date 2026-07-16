@@ -20,6 +20,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -44,6 +47,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -116,9 +120,9 @@ inline fun <reified T> parseJson(response: String): T? {
 fun convertWavToMonoWithMaxSeconds(
   context: Context,
   stereoUri: Uri,
-  maxSeconds: Int = 30,
+  maxSeconds: Int? = null,
 ): AudioClip? {
-  Log.d(TAG, "Start to convert wav file to mono channel")
+  Log.d(TAG, "Start to normalize audio file to mono PCM")
 
   try {
     val inputStream =
@@ -132,16 +136,20 @@ fun convertWavToMonoWithMaxSeconds(
 
     // Read WAV header
     if (originalBytes.size < 44) {
-      // Not a valid WAV file
-      Log.e(TAG, "Not a valid wav file")
-      return null
+      Log.d(TAG, "Not a valid wav file. Trying Android media decoder.")
+      return decodeAudioWithMediaCodec(context = context, uri = stereoUri, maxSeconds = maxSeconds)
     }
 
     val headerBuffer = ByteBuffer.wrap(originalBytes, 0, 44).order(ByteOrder.LITTLE_ENDIAN)
+    val audioFormat = headerBuffer.getShort(20).toInt()
     val channels = headerBuffer.getShort(22)
     var sampleRate = headerBuffer.getInt(24)
     val bitDepth = headerBuffer.getShort(34)
     Log.d(TAG, "File metadata: channels: $channels, sampleRate: $sampleRate, bitDepth: $bitDepth")
+    if (audioFormat != 1 || channels.toInt() !in 1..2 || bitDepth.toInt() !in setOf(8, 16)) {
+      Log.d(TAG, "Unsupported wav encoding. Trying Android media decoder.")
+      return decodeAudioWithMediaCodec(context = context, uri = stereoUri, maxSeconds = maxSeconds)
+    }
 
     // Normalize audio to 16-bit.
     val audioDataBytes = originalBytes.copyOfRange(fromIndex = 44, toIndex = originalBytes.size)
@@ -160,14 +168,6 @@ fun convertWavToMonoWithMaxSeconds(
     var pcmSamples = ShortArray(shortBuffer.remaining())
     shortBuffer.get(pcmSamples)
 
-    // Resample if sample rate is less than 16000 Hz ---
-    if (sampleRate < SAMPLE_RATE) {
-      Log.d(TAG, "Resampling from $sampleRate Hz to $SAMPLE_RATE Hz.")
-      pcmSamples = resample(pcmSamples, sampleRate, SAMPLE_RATE, channels.toInt())
-      sampleRate = SAMPLE_RATE
-      Log.d(TAG, "Resampling complete. New sample count: ${pcmSamples.size}")
-    }
-
     // Convert stereo to mono if necessary
     var monoSamples =
       if (channels.toInt() == 2) {
@@ -179,14 +179,25 @@ fun convertWavToMonoWithMaxSeconds(
           mono[i] = ((left + right) / 2).toShort()
         }
         mono
+      } else if (channels.toInt() > 2) {
+        Log.d(TAG, "Converting ${channels.toInt()} channels to mono by taking the first channel.")
+        ShortArray(pcmSamples.size / channels.toInt()) { index -> pcmSamples[index * channels.toInt()] }
       } else {
         Log.d(TAG, "Audio is already mono. No channel conversion needed.")
         pcmSamples
       }
 
-    // Trim the audio to maxSeconds ---
-    val maxSamples = maxSeconds * sampleRate
-    if (monoSamples.size > maxSamples) {
+    // Resample to the model-friendly rate after channel normalization.
+    if (sampleRate != SAMPLE_RATE) {
+      Log.d(TAG, "Resampling from $sampleRate Hz to $SAMPLE_RATE Hz.")
+      monoSamples = resample(monoSamples, sampleRate, SAMPLE_RATE, 1)
+      sampleRate = SAMPLE_RATE
+      Log.d(TAG, "Resampling complete. New sample count: ${monoSamples.size}")
+    }
+
+    // Trim only when a caller explicitly requests a cap. File uploads are no longer hard-limited.
+    val maxSamples = maxAudioSamples(sampleRate = sampleRate, maxSeconds = maxSeconds)
+    if (maxSamples != null && monoSamples.size > maxSamples) {
       Log.d(TAG, "Trimming clip from ${monoSamples.size} samples to $maxSamples samples.")
       monoSamples = monoSamples.copyOfRange(0, maxSamples)
     }
@@ -198,6 +209,169 @@ fun convertWavToMonoWithMaxSeconds(
     Log.e(TAG, "Failed to convert wav to mono", e)
     return null
   }
+}
+
+fun maxAudioSamples(sampleRate: Int, maxSeconds: Int?): Int? {
+  if (maxSeconds == null || maxSeconds <= 0 || sampleRate <= 0) return null
+  return sampleRate * maxSeconds
+}
+
+private fun decodeAudioWithMediaCodec(
+  context: Context,
+  uri: Uri,
+  maxSeconds: Int? = null,
+): AudioClip? {
+  val extractor = MediaExtractor()
+  var codec: MediaCodec? = null
+  return try {
+    extractor.setDataSource(context, uri, null)
+    val trackIndex =
+      (0 until extractor.trackCount).firstOrNull { index ->
+        extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+      } ?: return null
+    extractor.selectTrack(trackIndex)
+    val inputFormat = extractor.getTrackFormat(trackIndex)
+    val mime = inputFormat.getString(MediaFormat.KEY_MIME) ?: return null
+    codec = MediaCodec.createDecoderByType(mime)
+    codec!!.configure(inputFormat, null, null, 0)
+    codec!!.start()
+
+    var outputFormat = codec!!.outputFormat
+    var sampleRate =
+      outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE).takeIf { it > 0 }
+        ?: inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+    var channels =
+      outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT).takeIf { it > 0 }
+        ?: inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+    val output = ByteArrayOutputStream()
+    val bufferInfo = MediaCodec.BufferInfo()
+    var inputDone = false
+    var outputDone = false
+    var samplesWritten = 0
+    val maxSamples = maxAudioSamples(sampleRate = SAMPLE_RATE, maxSeconds = maxSeconds)
+
+    while (!outputDone) {
+      if (!inputDone) {
+        val inputBufferIndex = codec!!.dequeueInputBuffer(10_000)
+        if (inputBufferIndex >= 0) {
+          val inputBuffer = codec!!.getInputBuffer(inputBufferIndex)
+          inputBuffer?.clear()
+          val sampleSize = if (inputBuffer == null) -1 else extractor.readSampleData(inputBuffer, 0)
+          if (sampleSize < 0) {
+            codec!!.queueInputBuffer(
+              inputBufferIndex,
+              0,
+              0,
+              0L,
+              MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+            )
+            inputDone = true
+          } else {
+            codec!!.queueInputBuffer(
+              inputBufferIndex,
+              0,
+              sampleSize,
+              extractor.sampleTime.coerceAtLeast(0L),
+              0,
+            )
+            extractor.advance()
+          }
+        }
+      }
+
+      when (val outputBufferIndex = codec!!.dequeueOutputBuffer(bufferInfo, 10_000)) {
+        MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+          outputFormat = codec!!.outputFormat
+          sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+          channels = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+        }
+        MediaCodec.INFO_TRY_AGAIN_LATER -> {}
+        else -> {
+          if (outputBufferIndex >= 0) {
+            val outputBuffer = codec!!.getOutputBuffer(outputBufferIndex)
+            if (outputBuffer != null && bufferInfo.size > 0) {
+              outputBuffer.position(bufferInfo.offset)
+              outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+              val pcmBytes = ByteArray(bufferInfo.size)
+              outputBuffer.get(pcmBytes)
+              samplesWritten +=
+                appendNormalizedPcmChunk(
+                  output = output,
+                  pcmBytes = pcmBytes,
+                  sampleRate = sampleRate,
+                  channels = channels,
+                  maxSamples = maxSamples,
+                  samplesAlreadyWritten = samplesWritten,
+                )
+            }
+            outputBuffer?.clear()
+            codec!!.releaseOutputBuffer(outputBufferIndex, false)
+            if (
+              (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0 ||
+                (maxSamples != null && samplesWritten >= maxSamples)
+            ) {
+              outputDone = true
+            }
+          }
+        }
+      }
+    }
+    AudioClip(audioData = output.toByteArray(), sampleRate = SAMPLE_RATE)
+  } catch (e: Exception) {
+    Log.e(TAG, "Failed to decode audio with Android media decoder", e)
+    null
+  } finally {
+    try {
+      codec?.stop()
+    } catch (_: Exception) {}
+    try {
+      codec?.release()
+    } catch (_: Exception) {}
+    extractor.release()
+  }
+}
+
+private fun appendNormalizedPcmChunk(
+  output: ByteArrayOutputStream,
+  pcmBytes: ByteArray,
+  sampleRate: Int,
+  channels: Int,
+  maxSamples: Int?,
+  samplesAlreadyWritten: Int,
+): Int {
+  if (pcmBytes.size < 2 || sampleRate <= 0 || channels <= 0) return 0
+  val shortBuffer = ByteBuffer.wrap(pcmBytes).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+  val pcmSamples = ShortArray(shortBuffer.remaining())
+  shortBuffer.get(pcmSamples)
+  val monoSamples =
+    if (channels == 2) {
+      ShortArray(pcmSamples.size / 2) { index ->
+        ((pcmSamples[index * 2] + pcmSamples[index * 2 + 1]) / 2).toShort()
+      }
+    } else if (channels > 2) {
+      ShortArray(pcmSamples.size / channels) { index -> pcmSamples[index * channels] }
+    } else {
+      pcmSamples
+    }
+  val normalizedSamples =
+    if (sampleRate != SAMPLE_RATE) {
+      resample(monoSamples, sampleRate, SAMPLE_RATE, 1)
+    } else {
+      monoSamples
+    }
+  val samplesToWrite =
+    if (maxSamples == null) {
+      normalizedSamples
+    } else {
+      normalizedSamples.copyOfRange(
+        0,
+        (maxSamples - samplesAlreadyWritten).coerceIn(0, normalizedSamples.size),
+      )
+    }
+  val monoByteBuffer = ByteBuffer.allocate(samplesToWrite.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+  monoByteBuffer.asShortBuffer().put(samplesToWrite)
+  output.write(monoByteBuffer.array())
+  return samplesToWrite.size
 }
 
 /** Converts 8-bit unsigned PCM audio data to 16-bit signed PCM. */
