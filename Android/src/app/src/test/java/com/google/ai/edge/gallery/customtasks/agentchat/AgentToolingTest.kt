@@ -215,4 +215,25 @@ class AgentToolingTest {
     assertFalse(prompt.contains("\\/"))
     assertTrue(prompt.length < 8000)
   }
+
+  @Test
+  fun compatToolResultPromptUsesWorkspaceReadContentInsteadOfSummary() {
+    val prompt =
+      buildCompatToolResultPrompt(
+        toolName = "read_workspace_text_file",
+        originalUserRequest = "读取 PDF 内容",
+        result =
+          linkedMapOf(
+            "status" to "succeeded",
+            "operation" to "read_text",
+            "path" to "昆明天气报告_2026-07-17.pdf",
+            "content" to "真实天气：阴，中雨，18到28度，紫外线弱。",
+            "bytes_read" to 65128,
+            "summary" to "Read 昆明天气报告_2026-07-17.pdf (65128 bytes).",
+          ),
+      )
+
+    assertTrue(prompt.contains("真实天气：阴，中雨，18到28度，紫外线弱。"))
+    assertFalse(prompt.contains("Read 昆明天气报告_2026-07-17.pdf (65128 bytes)."))
+  }
 }

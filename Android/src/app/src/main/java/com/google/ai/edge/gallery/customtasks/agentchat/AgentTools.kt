@@ -1034,9 +1034,13 @@ private fun buildConfiguredIntentResult(
       val content = payload.optString("content")
       flattened["content"] = content
       flattened["bytes_read"] = payload.optInt("bytes_read", content.toByteArray(Charsets.UTF_8).size)
+      flattened["content_chars"] = payload.optInt("content_chars", content.length)
+      flattened["content_bytes"] = payload.optInt("content_bytes", content.toByteArray(Charsets.UTF_8).size)
+      putIfNotBlank(flattened, "detected_format", payload.optString("detected_format"))
+      putIfNotBlank(flattened, "content_type", payload.optString("content_type"))
       flattened["truncated"] = payload.optBoolean("truncated", false)
       flattened["summary"] =
-        "Read ${flattened["path"] ?: "file"} (${flattened["bytes_read"]} bytes${if (payload.optBoolean("truncated", false)) ", truncated" else ""})."
+        "Read ${flattened["path"] ?: "file"} (${flattened["bytes_read"]} file bytes, ${flattened["content_chars"]} text chars${if (payload.optString("detected_format").isNotBlank()) ", ${payload.optString("detected_format")}" else ""}${if (payload.optBoolean("truncated", false)) ", truncated" else ""})."
     }
     "prepare_write_text" -> {
       flattened["summary"] =

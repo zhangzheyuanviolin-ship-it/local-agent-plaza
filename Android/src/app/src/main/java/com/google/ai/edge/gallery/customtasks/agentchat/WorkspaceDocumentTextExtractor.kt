@@ -24,6 +24,8 @@ data class WorkspaceExtractedText(
   val contentType: String,
   val truncated: Boolean,
   val bytesRead: Int,
+  val contentChars: Int,
+  val contentBytes: Int,
 )
 
 object WorkspaceDocumentTextExtractor {
@@ -50,6 +52,8 @@ object WorkspaceDocumentTextExtractor {
       contentType = contentTypeForFormat(extracted.second),
       truncated = capped.second,
       bytesRead = bytes.size,
+      contentChars = capped.first.length,
+      contentBytes = capped.first.toByteArray(Charsets.UTF_8).size,
     )
   }
 

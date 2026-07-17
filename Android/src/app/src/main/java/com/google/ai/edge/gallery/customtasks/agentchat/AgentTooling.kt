@@ -198,7 +198,7 @@ fun buildCompatToolResultPayload(
 fun compactCompatToolResultForModel(result: Map<String, Any?>): String {
   val status = result["status"]?.toString().orEmpty()
   val resultText =
-    listOf("result", "summary", "content", "text", "output")
+    listOf("result", "content", "text", "output", "summary")
       .asSequence()
       .mapNotNull { key -> result[key]?.toString()?.takeIf { it.isNotBlank() } }
       .firstOrNull()

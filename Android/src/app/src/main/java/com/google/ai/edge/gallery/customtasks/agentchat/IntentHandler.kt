@@ -389,6 +389,8 @@ object IntentHandler {
       .put("detected_format", extracted.detectedFormat)
       .put("truncated", rawBytes.second || extracted.truncated)
       .put("bytes_read", extracted.bytesRead)
+      .put("content_chars", extracted.contentChars)
+      .put("content_bytes", extracted.contentBytes)
       .toString()
   }
 
