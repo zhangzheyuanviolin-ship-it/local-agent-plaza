@@ -501,7 +501,8 @@ private fun buildAvailableCompatToolsList(selectedSkillNames: Set<String>): Stri
   }
   if (selectedSkillNames.contains(FILE_WORKSPACE_SKILL_NAME)) {
     tools += "- list_workspace arguments: {\"path\":\".\"} . Lists files in the mounted workspace."
-    tools += "- read_workspace_text_file arguments: {\"path\":\"notes/input.txt\",\"max_bytes\":16000} . Reads text from txt, md, csv, json, xml, log, html, pdf, docx, or xlsx files in the mounted workspace."
+    tools +=
+      "- read_workspace_text_file arguments: {\"path\":\"notes/input.txt\",\"max_bytes\":64000} . Reads text from txt, md, csv, json, xml, log, html, pdf, docx, or xlsx files in the mounted workspace. Use a larger max_bytes for spreadsheets or long documents when details matter."
     tools += "- write_workspace_file arguments: {\"path\":\"notes/output.txt\",\"content\":\"...\"} . Writes text directly into the mounted workspace."
     tools += "- delete_workspace_file arguments: {\"path\":\"notes/output.txt\"} . Deletes a workspace file or empty directory."
   }

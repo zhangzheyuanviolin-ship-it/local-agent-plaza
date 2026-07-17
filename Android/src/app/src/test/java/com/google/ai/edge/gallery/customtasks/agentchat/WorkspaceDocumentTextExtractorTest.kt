@@ -85,8 +85,10 @@ class WorkspaceDocumentTextExtractorTest {
       WorkspaceDocumentTextExtractor.extract(fileName = "sample.xlsx", bytes = bytes, maxBytes = 4000)
 
     assertTrue(result.content.contains("工作表: 执行摘要"))
-    assertTrue(result.content.contains("第 2 行: 核心指标=市场规模; 2025 年数值=95 亿美元; 增长率=+53%"))
-    assertTrue(result.content.contains("不要把相邻行列的数字重新解释为其他指标"))
+    assertTrue(result.content.contains("FACT|执行摘要!R2|A[核心指标]=市场规模|B[2025 年数值]=95 亿美元|C[增长率]=+53%"))
+    assertTrue(result.content.contains("| 行号 | A 核心指标 | B 2025 年数值 | C 增长率 |"))
+    assertTrue(result.content.contains("| 2 | 市场规模 | 95 亿美元 | +53% |"))
+    assertTrue(result.content.contains("只根据下面的单元格事实和表格回答"))
   }
 
   private fun zipBytes(vararg entries: Pair<String, String>): ByteArray {

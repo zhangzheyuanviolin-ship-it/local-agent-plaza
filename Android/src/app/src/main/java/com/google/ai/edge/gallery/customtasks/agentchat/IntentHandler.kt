@@ -66,7 +66,7 @@ enum class IntentAction(val action: String) {
 
 object IntentHandler {
   private const val TAG = "IntentHandler"
-  private const val DEFAULT_READ_MAX_BYTES = 16000
+  private const val DEFAULT_READ_MAX_BYTES = 64000
   private const val DEFAULT_DOCUMENT_INPUT_MAX_BYTES = 20_000_000
   private const val DEFAULT_LIST_MAX_ENTRIES = 200
   private const val ASSISTANT_RESPONSE_PLACEHOLDER = "__ASSISTANT_RESPONSE__"
