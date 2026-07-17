@@ -585,7 +585,11 @@ private fun buildAvailableCompatToolsList(selectedSkillNames: Set<String>): Stri
   }
   if (selectedSkillNames.contains(EDGE_TTS_SKILL_NAME)) {
     tools += "- list_edge_tts_voices arguments: {} . Lists up to 15 curated Microsoft Edge TTS voices."
-    tools += "- edge_tts_synthesize arguments: {\"text\":\"要转换成语音的文字\",\"voice\":\"zh-CN-XiaoxiaoNeural\",\"output_path\":\"media/output.mp3\"} . Synthesizes text to an MP3 file in the mounted workspace. Use input_path instead of text to synthesize a workspace text file."
+    tools += "- edge_tts_synthesize arguments: {\"input_path\":\"file/story.txt\",\"voice\":\"zh-CN-XiaoxiaoNeural\",\"output_path\":\"media/output.mp3\"} . Synthesizes text to an MP3 file in the mounted workspace. If the text is already in a workspace file, MUST pass input_path directly and MUST NOT read the file first or copy its full text into text."
+  }
+  if (selectedSkillNames.contains(AGNES_OMNI_SKILL_NAME)) {
+    tools += "- generate_agnes_image arguments: {\"prompt\":\"image prompt\",\"output_path\":\"media/image.png\"} . Generates an image using the configured Agnes model, size, and ratio, then saves it into the workspace media folder."
+    tools += "- generate_agnes_video arguments: {\"prompt\":\"video prompt\",\"output_path\":\"media/video.mp4\"} . Generates a video using the configured Agnes model, duration, and resolution, then saves it into the workspace media folder."
   }
   if (selectedSkillNames.contains(FILE_WORKSPACE_SKILL_NAME)) {
     tools += "- list_workspace arguments: {\"path\":\".\"} . Lists files in the mounted workspace."

@@ -228,7 +228,8 @@ constructor(
                   skillProto?.let {
                     // Apply the previous selection state if it exists, otherwise default to
                     // true.
-                    val selectedState = builtInSelectionMap[it.name] ?: true
+                    val selectedState =
+                      builtInSelectionMap[it.name] ?: if (it.name == AGNES_OMNI_SKILL_NAME) false else true
                     builtInSkills.add(it.toBuilder().setSelected(selectedState).build())
                     Log.d(TAG, "Added built-in skill: ${it.name}")
                   }

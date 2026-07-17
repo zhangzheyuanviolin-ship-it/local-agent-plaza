@@ -38,7 +38,9 @@ Rules:
 - The user must configure a writable workspace folder for this skill before saving audio.
 - Prefer the `media/` folder for generated MP3 files.
 - Use `zh-CN-XiaoxiaoNeural` if the user does not choose a voice.
-- For long text already in a file, prefer `input_path` to avoid wasting context.
+- If the user asks to synthesize the contents of an existing workspace file, you MUST pass that workspace file path as `input_path` directly.
+- Do NOT call `read_text` first and do NOT copy the file content into the `text` argument when the source is already a workspace file.
+- For long text already in a file, always use `input_path` to avoid wasting context.
 - After synthesis, tell the user the saved MP3 path and voice used.
 
 Examples:

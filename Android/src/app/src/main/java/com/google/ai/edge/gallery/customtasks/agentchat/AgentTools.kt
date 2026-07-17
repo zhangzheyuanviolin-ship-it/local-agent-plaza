@@ -46,7 +46,7 @@ import java.util.Date
 import java.util.Locale
 
 private const val TAG = "AGAgentTools"
-private const val MAX_LIST_SUMMARY_ENTRIES = 12
+private const val MAX_LIST_SUMMARY_ENTRIES = 200
 
 open class AgentTools() : ToolSet {
   lateinit var context: Context
@@ -453,6 +453,17 @@ open class AgentTools() : ToolSet {
           key = getSkillConfigKey(skillName = skillName)
         ) ?: ""
 
+      if (skill.name == AGNES_OMNI_SKILL_NAME) {
+        val request = JSONObject(parameters.ifBlank { "{}" })
+        val prompt = request.optString("prompt").ifBlank { request.optString("description") }
+        val outputPath = request.optString("output_path").ifBlank { request.optString("path") }
+        return@runBlocking runAgnesGeneration(
+          operation = intent,
+          prompt = prompt,
+          outputPath = outputPath,
+        )
+      }
+
       _actionChannel.send(
         SkillProgressAgentAction(
           label = "Executing configured intent \"$intent\"",
@@ -676,6 +687,120 @@ open class AgentTools() : ToolSet {
     }
   }
 
+  fun agnesGenerateImage(
+    prompt: String,
+    outputPath: String,
+  ): Map<String, Any> {
+    return runBlocking(Dispatchers.IO) {
+      runAgnesGeneration(operation = "agnes_generate_image", prompt = prompt, outputPath = outputPath)
+    }
+  }
+
+  fun agnesGenerateVideo(
+    prompt: String,
+    outputPath: String,
+  ): Map<String, Any> {
+    return runBlocking(Dispatchers.IO) {
+      runAgnesGeneration(operation = "agnes_generate_video", prompt = prompt, outputPath = outputPath)
+    }
+  }
+
+  private suspend fun runAgnesGeneration(
+    operation: String,
+    prompt: String,
+    outputPath: String,
+  ): Map<String, Any> {
+    val normalizedOperation = operation.trim().lowercase()
+    if (prompt.trim().isBlank()) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "Prompt is required.",
+        "recovery_hint" to "Retry with a concise visual prompt.",
+      )
+    }
+    if (!skillManagerViewModel.isSkillSelected(AGNES_OMNI_SKILL_NAME)) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "Skill \"$AGNES_OMNI_SKILL_NAME\" is disabled. Enable it before using Agnes generation.",
+      )
+    }
+    val secret =
+      skillManagerViewModel.dataStoreRepository.readSecret(
+        getSkillSecretKey(AGNES_OMNI_SKILL_NAME)
+      ) ?: ""
+    if (secret.trim().isBlank()) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "Agnes API key is not configured.",
+        "recovery_hint" to "Open the skill manager, enable Agnes 全模态工具箱, and fill its API key.",
+      )
+    }
+    val workspaceConfig = readFileWorkspaceConfig(skillManagerViewModel.dataStoreRepository)
+    if (workspaceConfig.treeUri.isBlank()) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "No workspace folder is configured.",
+        "recovery_hint" to "Configure the file workspace folder before generating media.",
+      )
+    }
+    val config = readAgnesOmniConfig(skillManagerViewModel.dataStoreRepository)
+    _actionChannel.send(
+      SkillProgressAgentAction(
+        label = "Calling Agnes generation",
+        inProgress = true,
+        addItemTitle = "Agnes generation",
+        addItemDescription = "Operation: $normalizedOperation",
+      )
+    )
+    val raw =
+      try {
+        when (normalizedOperation) {
+          "agnes_generate_image", "generate_agnes_image" ->
+            AgentAgnesSupport.generateImage(
+              context = context,
+              apiKey = secret,
+              config = config,
+              workspaceConfig = workspaceConfig,
+              prompt = prompt,
+              outputPath = outputPath,
+            )
+          "agnes_generate_video", "generate_agnes_video" ->
+            AgentAgnesSupport.generateVideo(
+              context = context,
+              apiKey = secret,
+              config = config,
+              workspaceConfig = workspaceConfig,
+              prompt = prompt,
+              outputPath = outputPath,
+            )
+          else -> JSONObject().put("status", "failed").put("operation", normalizedOperation)
+            .put("error", "Unsupported Agnes operation: $operation")
+        }
+      } catch (e: Exception) {
+        JSONObject()
+          .put("status", "failed")
+          .put("operation", normalizedOperation)
+          .put("error", e.message ?: "Agnes generation failed.")
+      }
+    _actionChannel.send(
+      SkillProgressAgentAction(
+        label = "Agnes generation finished",
+        inProgress = false,
+        addItemTitle = "Agnes result",
+        addItemDescription = raw.toString().take(500),
+      )
+    )
+    return buildConfiguredIntentResult(
+      intent = "agnes_generation",
+      parameters = JSONObject().put("operation", normalizedOperation).toString(),
+      result = raw.toString(),
+    )
+  }
+
   fun executeCompatToolCall(
     toolName: String,
     arguments: JSONObject,
@@ -816,6 +941,48 @@ open class AgentTools() : ToolSet {
                 ),
             )
             .mapValues { it.value }
+        "generate_agnes_image",
+        "agnes_generate_image",
+        "generate_image" ->
+          if (!skillManagerViewModel.isSkillSelected(AGNES_OMNI_SKILL_NAME)) {
+            mapOf(
+              "status" to "failed",
+              "error" to "Skill \"$AGNES_OMNI_SKILL_NAME\" is disabled. Enable it before using Agnes generation.",
+            )
+          } else agnesGenerateImage(
+              prompt =
+                getRequiredStringArgument(
+                  arguments = arguments,
+                  names = listOf("prompt", "description", "text", "提示词"),
+                ),
+              outputPath =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("output_path", "outputPath", "path"),
+                  defaultValue = "",
+                ),
+            )
+        "generate_agnes_video",
+        "agnes_generate_video",
+        "generate_video" ->
+          if (!skillManagerViewModel.isSkillSelected(AGNES_OMNI_SKILL_NAME)) {
+            mapOf(
+              "status" to "failed",
+              "error" to "Skill \"$AGNES_OMNI_SKILL_NAME\" is disabled. Enable it before using Agnes generation.",
+            )
+          } else agnesGenerateVideo(
+              prompt =
+                getRequiredStringArgument(
+                  arguments = arguments,
+                  names = listOf("prompt", "description", "text", "提示词"),
+                ),
+              outputPath =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("output_path", "outputPath", "path"),
+                  defaultValue = "",
+                ),
+            )
         TAVILY_SEARCH_SKILL_NAME,
         EXA_SEARCH_SKILL_NAME,
         LANGSEARCH_SEARCH_SKILL_NAME ->
@@ -1260,6 +1427,14 @@ private fun buildConfiguredIntentResult(
       flattened["summary"] =
         "Downloaded ${flattened["url"] ?: "URL"} to ${flattened["path"] ?: "file"} (${flattened["final_bytes"]} bytes, resumed=${flattened["resumed"]})."
     }
+    "agnes_generate_image", "agnes_generate_video" -> {
+      putIfNotBlank(flattened, "prompt", payload.optString("prompt"))
+      putIfNotBlank(flattened, "model", payload.optString("model"))
+      putIfNotBlank(flattened, "url", payload.optString("url"))
+      flattened["bytes_written"] = payload.optLong("bytes_written", 0L)
+      flattened["summary"] =
+        "Generated ${if (operation == "agnes_generate_image") "image" else "video"} with ${flattened["model"] ?: "Agnes"} to ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
+    }
     "edge_tts_synthesize" -> {
       flattened["voice"] = payload.optString("voice")
       flattened["input_path"] = payload.optString("input_path")
@@ -1309,6 +1484,8 @@ private fun putIfNotBlank(target: MutableMap<String, Any>, key: String, value: S
 
 private fun buildRecoveryHint(operation: String, error: String): String {
   return when {
+    operation == "agnes_generate_image" || operation == "agnes_generate_video" ->
+      "Check the Agnes API key, workspace folder, prompt, and network. Retry with a concise prompt and optional output_path."
     operation == "edge_tts_synthesize" && error.contains("HTTP 403", ignoreCase = true) ->
       "Edge TTS service rejected the WebSocket handshake. Retry once; if it persists, switch network or update the app."
     operation == "edge_tts_synthesize" && error.contains("timed out", ignoreCase = true) ->

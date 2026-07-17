@@ -215,7 +215,29 @@ class AgentToolingTest {
     assertTrue(prompt.contains("query_weather"))
     assertTrue(prompt.contains("list_edge_tts_voices"))
     assertTrue(prompt.contains("edge_tts_synthesize"))
+    assertTrue(prompt.contains("MUST pass input_path directly"))
     assertFalse(prompt.contains("read_workspace_text_file"))
+    assertFalse(prompt.contains("generate_agnes_image"))
+  }
+
+  @Test
+  fun compatPromptOnlyAdvertisesAgnesToolsWhenAgnesSkillIsEnabled() {
+    val withoutAgnes =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("edge-tts: synthesize speech"),
+      )
+    val withAgnes =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("agnes-omni: generate images and videos"),
+      )
+
+    assertFalse(withoutAgnes.contains("generate_agnes_image"))
+    assertFalse(withoutAgnes.contains("generate_agnes_video"))
+    assertTrue(withAgnes.contains("generate_agnes_image"))
+    assertTrue(withAgnes.contains("generate_agnes_video"))
+    assertTrue(withAgnes.contains("configured Agnes model"))
   }
 
   @Test

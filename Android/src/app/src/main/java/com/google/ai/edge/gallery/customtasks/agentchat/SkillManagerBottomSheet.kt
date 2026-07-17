@@ -780,6 +780,14 @@ fun SkillManagerBottomSheet(
               skillToConfigure = null
             },
           )
+        isAgnesSkill(skill.name) ->
+          AgnesOmniConfigDialog(
+            dataStoreRepository = skillManagerViewModel.dataStoreRepository,
+            onDismiss = {
+              showSkillConfigDialog = false
+              skillToConfigure = null
+            },
+          )
       }
     }
   }
