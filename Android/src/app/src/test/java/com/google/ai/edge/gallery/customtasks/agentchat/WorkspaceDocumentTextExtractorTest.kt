@@ -66,6 +66,29 @@ class WorkspaceDocumentTextExtractorTest {
     assertEquals("xlsx", result.detectedFormat)
   }
 
+  @Test
+  fun xlsxExtractionBindsDataRowsToHeaders() {
+    val bytes =
+      zipBytes(
+        "xl/workbook.xml" to
+          "<workbook><sheets><sheet name=\"执行摘要\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+        "xl/worksheets/sheet1.xml" to
+          """
+          <worksheet><sheetData>
+            <row r="1"><c r="A1" t="inlineStr"><is><t>核心指标</t></is></c><c r="B1" t="inlineStr"><is><t>2025 年数值</t></is></c><c r="C1" t="inlineStr"><is><t>增长率</t></is></c></row>
+            <row r="2"><c r="A2" t="inlineStr"><is><t>市场规模</t></is></c><c r="B2" t="inlineStr"><is><t>95 亿美元</t></is></c><c r="C2" t="inlineStr"><is><t>+53%</t></is></c></row>
+          </sheetData></worksheet>
+          """.trimIndent(),
+      )
+
+    val result =
+      WorkspaceDocumentTextExtractor.extract(fileName = "sample.xlsx", bytes = bytes, maxBytes = 4000)
+
+    assertTrue(result.content.contains("工作表: 执行摘要"))
+    assertTrue(result.content.contains("第 2 行: 核心指标=市场规模; 2025 年数值=95 亿美元; 增长率=+53%"))
+    assertTrue(result.content.contains("不要把相邻行列的数字重新解释为其他指标"))
+  }
+
   private fun zipBytes(vararg entries: Pair<String, String>): ByteArray {
     val output = ByteArrayOutputStream()
     ZipOutputStream(output).use { zip ->
