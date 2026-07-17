@@ -33,9 +33,10 @@ private const val MAX_COMPAT_MODEL_TOOL_RESULT_CHARS = 12000
 private const val COMPAT_TOOL_RESULT_PROMPT_OVERHEAD_TOKENS = 1400
 
 object AgentToolModeValues {
+  const val AUTO = "自动"
   const val NATIVE = "原生"
   const val COMPAT = "兼容"
-  val options = listOf(NATIVE, COMPAT)
+  val options = listOf(AUTO, NATIVE, COMPAT)
 }
 
 enum class ResolvedAgentToolMode {
@@ -81,11 +82,13 @@ fun supportsNativeAgentTools(model: Model): Boolean {
 }
 
 fun defaultAgentToolMode(model: Model): String {
-  return if (supportsNativeAgentTools(model)) AgentToolModeValues.NATIVE else AgentToolModeValues.COMPAT
+  return AgentToolModeValues.AUTO
 }
 
 fun resolveAgentToolMode(model: Model): ResolvedAgentToolMode {
   return when (getConfiguredAgentToolMode(model)) {
+    AgentToolModeValues.AUTO ->
+      if (supportsNativeAgentTools(model)) ResolvedAgentToolMode.NATIVE else ResolvedAgentToolMode.COMPAT
     AgentToolModeValues.NATIVE ->
       if (supportsNativeAgentTools(model)) {
         ResolvedAgentToolMode.NATIVE
@@ -577,17 +580,20 @@ private fun buildAvailableCompatToolsList(selectedSkillNames: Set<String>): Stri
   ) {
     tools += "- search_web arguments: {\"query\":\"...\"} . Searches the web using an enabled search skill selected by the app."
   }
+  tools += "- query_weather arguments: {\"location\":\"昆明\",\"mode\":\"current|24h|week\"} . Gets current weather, next 24 hours, or next 7 days. Use a city name for stable results; use location=current only when the user asks for current device location. If current location is unavailable, ask for a city name instead of guessing."
+  tools += "- list_edge_tts_voices arguments: {} . Lists up to 15 curated Microsoft Edge TTS voices."
+  tools += "- edge_tts_synthesize arguments: {\"text\":\"要转换成语音的文字\",\"voice\":\"zh-CN-XiaoxiaoNeural\",\"output_path\":\"media/output.mp3\"} . Synthesizes text to an MP3 file in the mounted workspace. Use input_path instead of text to synthesize a workspace text file."
   if (selectedSkillNames.contains(FILE_WORKSPACE_SKILL_NAME)) {
     tools += "- list_workspace arguments: {\"path\":\".\"} . Lists files in the mounted workspace."
     tools +=
-      "- read_workspace_text_file arguments: {\"path\":\"notes/input.txt\",\"max_bytes\":64000} . Reads text from txt, md, csv, json, xml, log, html, pdf, docx, or xlsx files in the mounted workspace. Use a larger max_bytes for spreadsheets or long documents when details matter."
+      "- read_workspace_text_file arguments: {\"path\":\"file/input.txt\",\"max_bytes\":64000} . Reads text from txt, md, csv, json, xml, log, html, pdf, docx, or xlsx files in the mounted workspace. Workspace folders: file for text/documents, media for generated media, download for downloaded files, tool-audit for exact tool logs."
     tools +=
-      "- download_workspace_file arguments: {\"url\":\"https://.../file.pdf\",\"path\":\"downloads/file.pdf\",\"resume\":true} . Downloads a file into the mounted workspace with resumable HTTP Range support when the server supports it."
-    tools += "- write_workspace_file arguments: {\"path\":\"notes/output.txt\",\"content\":\"...\"} . Writes text directly into the mounted workspace."
-    tools += "- delete_workspace_file arguments: {\"path\":\"notes/output.txt\"} . Deletes a workspace file or empty directory."
+      "- download_workspace_file arguments: {\"url\":\"https://.../file.pdf\",\"path\":\"download/file.pdf\",\"resume\":true} . Downloads a file into the mounted workspace with resumable HTTP Range support when the server supports it."
+    tools += "- write_workspace_file arguments: {\"path\":\"file/output.txt\",\"content\":\"...\"} . Writes text directly into the mounted workspace. Prefer file/ for text and documents."
+    tools += "- delete_workspace_file arguments: {\"path\":\"file/output.txt\"} . Deletes a workspace file or empty directory."
   }
   if (selectedSkillNames.contains(LONG_TEXT_WRITER_SKILL_NAME)) {
-    tools += "- write_workspace_text_file arguments: {\"path\":\"notes/output.md\",\"content\":\"...\"} . Writes the full final text into the workspace."
+    tools += "- write_workspace_text_file arguments: {\"path\":\"file/output.md\",\"content\":\"...\"} . Writes the full final text into the workspace."
   }
   return tools.joinToString("\n").ifBlank { "- No compatibility tools are enabled. Answer directly without tool calls." }
 }

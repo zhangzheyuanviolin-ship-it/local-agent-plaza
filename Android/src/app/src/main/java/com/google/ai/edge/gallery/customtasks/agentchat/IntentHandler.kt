@@ -303,6 +303,7 @@ object IntentHandler {
         "stat" -> handleStat(root = root, request = request)
         "read_text" -> handleReadText(context = context, root = root, request = request)
         "download_url" -> handleDownloadUrl(context = context, root = root, request = request)
+        "edge_tts_synthesize" -> handleEdgeTtsSynthesize(context = context, root = root, request = request)
         "write_text" -> handleWriteText(context = context, root = root, request = request)
         "append_text" -> handleAppendText(context = context, root = root, request = request)
         "create_dir" -> handleCreateDir(root = root, request = request)
@@ -311,7 +312,7 @@ object IntentHandler {
         "move" -> handleMove(context = context, root = root, request = request)
         else ->
           errorJson(
-            "Unsupported file workspace operation \"$operation\". Supported operations: status, list, stat, read_text, download_url, write_text, append_text, create_dir, delete, copy, move."
+            "Unsupported file workspace operation \"$operation\". Supported operations: status, list, stat, read_text, download_url, edge_tts_synthesize, write_text, append_text, create_dir, delete, copy, move."
           )
       }
     } catch (e: Exception) {
@@ -416,7 +417,7 @@ object IntentHandler {
       url.path.substringAfterLast('/').substringBefore('?').ifBlank {
         "download-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())}.bin"
       }
-    val path = request.optString("path").ifBlank { fallbackName }
+    val path = request.optString("path").ifBlank { "download/$fallbackName" }
     val existing = resolveExistingDocument(root, path)
     if (existing != null && existing.isDirectory) {
       return errorJson("Target path is a directory: $path")
@@ -482,6 +483,63 @@ object IntentHandler {
       .put("existing_bytes", existingBytes)
       .put("bytes_written", written)
       .put("final_bytes", document.length())
+      .toString()
+  }
+
+  private fun handleEdgeTtsSynthesize(context: Context, root: DocumentFile, request: JSONObject): String {
+    val inputPath = request.optString("input_path").ifBlank { request.optString("source_path") }.trim()
+    val directText = request.optString("text").trim()
+    val text =
+      when {
+        directText.isNotBlank() -> directText
+        inputPath.isNotBlank() -> {
+          val source =
+            resolveExistingDocument(root, inputPath)
+              ?: return errorJson("Input text file not found: $inputPath. $WORKSPACE_PATH_HINT")
+          if (!source.isFile) {
+            return errorJson("Input path is not a file: $inputPath")
+          }
+          context.contentResolver.openInputStream(source.uri)?.use { input ->
+            readUpTo(input, DEFAULT_READ_MAX_BYTES).first.toString(Charsets.UTF_8)
+          } ?: return errorJson("Failed to open input text file: $inputPath")
+        }
+        else -> return errorJson("Either text or input_path is required for edge_tts_synthesize.")
+      }
+    val voice = request.optString("voice").ifBlank { "zh-CN-XiaoxiaoNeural" }
+    val outputPath =
+      AgentEdgeTtsSupport.ensureMediaPath(
+        request.optString("output_path").ifBlank { request.optString("path") }
+      )
+    val audioBytes =
+      try {
+        AgentEdgeTtsSupport.synthesize(
+          text = text,
+          voice = voice,
+          rate = request.optString("rate").ifBlank { "+0%" },
+          pitch = request.optString("pitch").ifBlank { "+0Hz" },
+          volume = request.optString("volume").ifBlank { "+0%" },
+        )
+      } catch (e: Exception) {
+        Log.e(TAG, "Edge TTS synthesis failed.", e)
+        return errorJson("Edge TTS synthesis failed: ${e.message ?: "Unknown error"}")
+      }
+    val document =
+      ensureWritableFile(
+        root = root,
+        path = outputPath,
+        createParents = request.optBoolean("create_parents", true),
+        overwrite = true,
+      ) ?: return errorJson("Failed to create output audio file: $outputPath")
+    context.contentResolver.openOutputStream(document.uri, "wt")?.use { output ->
+      output.write(audioBytes)
+    } ?: return errorJson("Failed to open output audio file: $outputPath")
+    return successJson()
+      .put("operation", "edge_tts_synthesize")
+      .put("path", normalizeDisplayPath(outputPath))
+      .put("input_path", normalizeDisplayPath(inputPath))
+      .put("voice", voice)
+      .put("text_chars", text.length)
+      .put("bytes_written", audioBytes.size)
       .toString()
   }
 

@@ -498,7 +498,7 @@ open class AgentTools() : ToolSet {
   ): Map<String, Any> {
     return runBlocking(Dispatchers.Default) {
       val skillName = LONG_TEXT_WRITER_SKILL_NAME
-      val trimmedPath = path.trim()
+      val trimmedPath = normalizeWorkspacePathForOperation(operation = "write_text", path = path.trim())
       if (trimmedPath.isBlank()) {
         return@runBlocking mapOf(
           "action" to "write_workspace_text_file",
@@ -606,6 +606,76 @@ open class AgentTools() : ToolSet {
     }
   }
 
+  @Tool(
+    description =
+      "Query weather for a city or current device location. Supports current weather, next 24 hours, and next 7 days."
+  )
+  fun queryWeather(
+    @ToolParam(description = "City or place name, such as 昆明, 北京, London, New York. Use current only when the user asks for current device location.")
+    location: String,
+    @ToolParam(description = "Weather mode: current, 24h, or week.")
+    mode: String,
+  ): Map<String, Any> {
+    return runBlocking(Dispatchers.IO) {
+      try {
+        AgentWeatherSupport.query(context = context, location = location, mode = mode)
+      } catch (e: Exception) {
+        mapOf(
+          "status" to "failed",
+          "operation" to "weather_query",
+          "error" to (e.message ?: "Weather query failed."),
+          "recovery_hint" to "Retry with a city name and mode current, 24h, or week.",
+        )
+      }
+    }
+  }
+
+  @Tool(description = "List curated Microsoft Edge TTS voices. The list is capped to 15 voices.")
+  fun listEdgeTtsVoices(): Map<String, Any> {
+    return mapOf(
+      "status" to "succeeded",
+      "operation" to "edge_tts_list_voices",
+      "voices" to AgentEdgeTtsSupport.voicesJson().toString(),
+      "summary" to
+        AgentEdgeTtsSupport.voices.joinToString("; ") {
+          "${it.id} (${it.locale}, ${it.description})"
+        },
+    )
+  }
+
+  @Tool(
+    description =
+      "Synthesize text or a workspace text file to an MP3 file using Microsoft Edge TTS. The MP3 is saved into the mounted workspace, preferably under media/."
+  )
+  fun edgeTtsSynthesize(
+    @ToolParam(description = "Text to synthesize. Leave empty when using inputPath.")
+    text: String,
+    @ToolParam(description = "Workspace text file path to read, such as file/input.txt. Leave empty when using text.")
+    inputPath: String,
+    @ToolParam(description = "Voice id such as zh-CN-XiaoxiaoNeural, zh-CN-YunxiNeural, en-US-JennyNeural.")
+    voice: String,
+    @ToolParam(description = "Output MP3 workspace path, such as media/output.mp3. Leave empty for an automatic name.")
+    outputPath: String,
+  ): Map<String, Any> {
+    return runBlocking(Dispatchers.IO) {
+      val parameters =
+        JSONObject()
+          .put("operation", "edge_tts_synthesize")
+          .put("text", text)
+          .put("input_path", inputPath)
+          .put("voice", voice.ifBlank { "zh-CN-XiaoxiaoNeural" })
+          .put("output_path", outputPath)
+          .toString()
+      val flattened =
+        runConfiguredIntent(
+          skillName = FILE_WORKSPACE_SKILL_NAME,
+          intent = IntentAction.FILE_WORKSPACE.action,
+          parameters = parameters,
+        )
+      flattened
+    }
+  }
+
   fun executeCompatToolCall(
     toolName: String,
     arguments: JSONObject,
@@ -678,6 +748,59 @@ open class AgentTools() : ToolSet {
                 ),
             )
             .mapValues { it.value }
+        "query_weather",
+        "weather_query",
+        "get_weather" ->
+          queryWeather(
+              location =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("location", "city", "place", "地区", "城市"),
+                  defaultValue = "",
+                ),
+              mode =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("mode", "type", "forecast", "range"),
+                  defaultValue = "current",
+                ),
+            )
+            .mapValues { it.value }
+        "list_edge_tts_voices",
+        "edge_tts_list_voices",
+        "list_tts_voices" ->
+          listEdgeTtsVoices().mapValues { it.value }
+        "edge_tts_synthesize",
+        "text_to_speech",
+        "synthesize_speech",
+        "tts_synthesize" ->
+          edgeTtsSynthesize(
+              text =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("text", "content", "input"),
+                  defaultValue = "",
+                ),
+              inputPath =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("input_path", "inputPath", "source_path", "sourcePath"),
+                  defaultValue = "",
+                ),
+              voice =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("voice", "voice_id", "voiceId"),
+                  defaultValue = "zh-CN-XiaoxiaoNeural",
+                ),
+              outputPath =
+                getOptionalStringArgument(
+                  arguments = arguments,
+                  names = listOf("output_path", "outputPath", "path"),
+                  defaultValue = "",
+                ),
+            )
+            .mapValues { it.value }
         TAVILY_SEARCH_SKILL_NAME,
         EXA_SEARCH_SKILL_NAME,
         LANGSEARCH_SEARCH_SKILL_NAME ->
@@ -734,7 +857,7 @@ open class AgentTools() : ToolSet {
           mapOf(
             "status" to "failed",
             "error" to "Unknown compatibility tool \"$toolName\".",
-            "recovery_hint" to "Retry with an enabled compatibility tool such as search_web, list_workspace, read_workspace_text_file, write_workspace_file, delete_workspace_file, run_js, or run_configured_intent.",
+            "recovery_hint" to "Retry with an enabled compatibility tool such as query_weather, list_edge_tts_voices, edge_tts_synthesize, search_web, list_workspace, read_workspace_text_file, write_workspace_file, delete_workspace_file, run_js, or run_configured_intent.",
           )
       }
     return CompatToolExecutionResult(toolName = normalizedToolName, result = result)
@@ -752,6 +875,11 @@ open class AgentTools() : ToolSet {
           if (defaultPath != null && !has("path")) {
             put("path", defaultPath)
           }
+          val currentPath = optString("path")
+          val normalizedPath = normalizeWorkspacePathForOperation(operation = operation, path = currentPath)
+          if (normalizedPath != currentPath) {
+            put("path", normalizedPath)
+          }
         }
         .toString()
     return runConfiguredIntent(
@@ -760,6 +888,21 @@ open class AgentTools() : ToolSet {
         parameters = parameters,
       )
       .mapValues { it.value }
+  }
+
+  private fun normalizeWorkspacePathForOperation(operation: String, path: String): String {
+    val trimmed = path.replace('\\', '/').trim()
+    if (trimmed.isBlank() || trimmed == "." || trimmed.startsWith("/")) {
+      return trimmed
+    }
+    if ('/' in trimmed) {
+      return trimmed
+    }
+    return when (operation) {
+      "write_text", "append_text" -> "file/$trimmed"
+      "download_url" -> "download/$trimmed"
+      else -> trimmed
+    }
   }
 
   fun saveCompatToolAudit(
@@ -1101,6 +1244,14 @@ private fun buildConfiguredIntentResult(
       flattened["final_bytes"] = payload.optLong("final_bytes", 0L)
       flattened["summary"] =
         "Downloaded ${flattened["url"] ?: "URL"} to ${flattened["path"] ?: "file"} (${flattened["final_bytes"]} bytes, resumed=${flattened["resumed"]})."
+    }
+    "edge_tts_synthesize" -> {
+      flattened["voice"] = payload.optString("voice")
+      flattened["input_path"] = payload.optString("input_path")
+      flattened["text_chars"] = payload.optInt("text_chars", 0)
+      flattened["bytes_written"] = payload.optInt("bytes_written", 0)
+      flattened["summary"] =
+        "Synthesized ${flattened["text_chars"]} characters with ${flattened["voice"]} to ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
     }
     "prepare_write_text" -> {
       flattened["summary"] =

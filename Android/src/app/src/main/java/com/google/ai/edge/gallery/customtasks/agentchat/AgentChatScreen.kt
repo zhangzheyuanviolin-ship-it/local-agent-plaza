@@ -16,12 +16,16 @@
 
 package com.google.ai.edge.gallery.customtasks.agentchat
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -72,6 +76,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.R
@@ -127,6 +132,28 @@ fun AgentChatScreen(
   mcpManagerViewModel: McpManagerViewModel = hiltViewModel(),
 ) {
   val context = LocalContext.current
+  val locationPermissionLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+      permissions ->
+      val granted =
+        permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+          permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "weather.location_permission",
+        message = if (granted) "Location permission granted" else "Location permission denied",
+      )
+    }
+  LaunchedEffect(Unit) {
+    if (!hasWeatherLocationPermission(context)) {
+      locationPermissionLauncher.launch(
+        arrayOf(
+          Manifest.permission.ACCESS_FINE_LOCATION,
+          Manifest.permission.ACCESS_COARSE_LOCATION,
+        )
+      )
+    }
+  }
   agentTools.context = context
   agentTools.skillManagerViewModel = skillManagerViewModel
   agentTools.mcpManagerViewModel = mcpManagerViewModel
@@ -905,6 +932,13 @@ fun AgentChatScreen(
       },
     )
   }
+}
+
+private fun hasWeatherLocationPermission(context: Context): Boolean {
+  return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+    PackageManager.PERMISSION_GRANTED ||
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+      PackageManager.PERMISSION_GRANTED
 }
 
 private fun updateProgressPanel(viewModel: LlmChatViewModel, model: Model, agentTools: AgentTools) {

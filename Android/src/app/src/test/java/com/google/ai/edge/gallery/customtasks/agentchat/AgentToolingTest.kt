@@ -25,9 +25,11 @@ import org.junit.Test
 
 class AgentToolingTest {
   @Test
-  fun toolModeOptionsExposeOnlyNativeAndCompat() {
-    assertEquals(listOf(AgentToolModeValues.NATIVE, AgentToolModeValues.COMPAT), AgentToolModeValues.options)
-    assertFalse(AgentToolModeValues.options.contains("自动"))
+  fun toolModeOptionsExposeAutoNativeAndCompat() {
+    assertEquals(
+      listOf(AgentToolModeValues.AUTO, AgentToolModeValues.NATIVE, AgentToolModeValues.COMPAT),
+      AgentToolModeValues.options,
+    )
   }
 
   @Test
@@ -190,6 +192,21 @@ class AgentToolingTest {
     assertTrue(prompt.contains("download_workspace_file"))
     assertTrue(prompt.contains("write_workspace_file"))
     assertTrue(prompt.contains("delete_workspace_file"))
+    assertTrue(prompt.contains("query_weather"))
+    assertTrue(prompt.contains("list_edge_tts_voices"))
+    assertTrue(prompt.contains("edge_tts_synthesize"))
+    assertTrue(prompt.contains("file/input.txt"))
+    assertTrue(prompt.contains("media"))
+    assertTrue(prompt.contains("download"))
+  }
+
+  @Test
+  fun edgeTtsVoiceListIsCuratedAndMediaPathDefaults() {
+    assertTrue(AgentEdgeTtsSupport.voices.size <= 15)
+    assertTrue(AgentEdgeTtsSupport.voices.any { it.id == "zh-CN-XiaoxiaoNeural" })
+    assertTrue(AgentEdgeTtsSupport.voices.any { it.id == "en-US-JennyNeural" })
+    assertEquals("media/demo.mp3", AgentEdgeTtsSupport.ensureMediaPath("demo"))
+    assertEquals("media/output.mp3", AgentEdgeTtsSupport.ensureMediaPath("media/output.mp3"))
   }
 
   @Test
