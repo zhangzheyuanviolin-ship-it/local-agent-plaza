@@ -20,6 +20,7 @@ import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -36,8 +37,13 @@ object AgentEdgeTtsSupport {
   private const val TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"
   private const val WSS_URL =
     "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1"
+  private const val SEC_MS_GEC_VERSION = "1-143.0.3650.75"
+  private const val USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+      "(KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0"
   private const val MAX_TEXT_CHARS = 20000
   private const val CHUNK_CHARS = 3500
+  @Volatile private var clockSkewSeconds = 0L
   private val client =
     OkHttpClient.Builder()
       .connectTimeout(20, TimeUnit.SECONDS)
@@ -157,20 +163,60 @@ object AgentEdgeTtsSupport {
     pitch: String,
     volume: String,
   ): ByteArray {
+    var lastFailure: EdgeTtsFailure? = null
+    repeat(2) { attempt ->
+      val result =
+        trySynthesizeChunk(
+          text = text,
+          voice = voice,
+          rate = rate,
+          pitch = pitch,
+          volume = volume,
+        )
+      if (result.failure == null) {
+        return result.audio
+      }
+      lastFailure = result.failure
+      if (
+        attempt == 0 &&
+          result.failure.statusCode == 403 &&
+          adjustClockSkewFromServerDate(result.failure.serverDate)
+      ) {
+        return@repeat
+      }
+      throw IllegalStateException(result.failure.message)
+    }
+    throw IllegalStateException(lastFailure?.message ?: "Edge TTS request failed.")
+  }
+
+  private fun trySynthesizeChunk(
+    text: String,
+    voice: String,
+    rate: String,
+    pitch: String,
+    volume: String,
+  ): EdgeTtsChunkResult {
     val connectionId = UUID.randomUUID().toString().replace("-", "")
+    val secMsGec = buildSecMsGec()
     val request =
       Request.Builder()
-        .url("$WSS_URL?TrustedClientToken=$TRUSTED_CLIENT_TOKEN&ConnectionId=$connectionId")
+        .url(
+          "$WSS_URL?TrustedClientToken=$TRUSTED_CLIENT_TOKEN" +
+            "&ConnectionId=$connectionId" +
+            "&Sec-MS-GEC=$secMsGec" +
+            "&Sec-MS-GEC-Version=$SEC_MS_GEC_VERSION"
+        )
         .header("Origin", "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold")
-        .header("User-Agent", "Mozilla/5.0")
+        .header("User-Agent", USER_AGENT)
+        .header("Accept-Encoding", "gzip, deflate, br, zstd")
+        .header("Accept-Language", "en-US,en;q=0.9")
         .header("Pragma", "no-cache")
         .header("Cache-Control", "no-cache")
-        .header("Sec-MS-GEC", buildSecMsGec())
-        .header("Sec-MS-GEC-Version", "1-130.0.2849.68")
+        .header("Cookie", "muid=${generateMuid()};")
         .build()
     val latch = CountDownLatch(1)
     val audio = ByteArrayOutputStream()
-    val error = arrayOfNulls<String>(1)
+    val failure = arrayOfNulls<EdgeTtsFailure>(1)
     val listener =
       object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -194,7 +240,20 @@ object AgentEdgeTtsSupport {
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-          error[0] = t.message ?: "Edge TTS request failed."
+          val status = response?.code
+          val serverDate = response?.header("Date")
+          val serverMessage =
+            when {
+              status != null -> "HTTP $status ${response.message}".trim()
+              else -> t.message ?: "Edge TTS request failed."
+            }
+          val dateHint = serverDate?.let { " Server-Date=$it." } ?: ""
+          failure[0] =
+            EdgeTtsFailure(
+              message = "$serverMessage.${dateHint} ${t.message ?: ""}".trim(),
+              statusCode = status,
+              serverDate = serverDate,
+            )
           latch.countDown()
         }
 
@@ -205,14 +264,25 @@ object AgentEdgeTtsSupport {
     val webSocket = client.newWebSocket(request, listener)
     if (!latch.await(120, TimeUnit.SECONDS)) {
       webSocket.cancel()
-      throw IllegalStateException("Edge TTS timed out.")
+      return EdgeTtsChunkResult(
+        audio = ByteArray(0),
+        failure = EdgeTtsFailure("Edge TTS timed out.", statusCode = null, serverDate = null),
+      )
     }
-    error[0]?.let { throw IllegalStateException(it) }
+    failure[0]?.let { return EdgeTtsChunkResult(audio = ByteArray(0), failure = it) }
     val bytes = audio.toByteArray()
     if (bytes.isEmpty()) {
-      throw IllegalStateException("Edge TTS returned empty audio.")
+      return EdgeTtsChunkResult(
+        audio = ByteArray(0),
+        failure =
+          EdgeTtsFailure(
+            message = "Edge TTS returned empty audio.",
+            statusCode = null,
+            serverDate = null,
+          ),
+      )
     }
-    return bytes
+    return EdgeTtsChunkResult(audio = bytes, failure = null)
   }
 
   private fun buildSpeechConfigMessage(): String {
@@ -259,15 +329,40 @@ object AgentEdgeTtsSupport {
   }
 
   private fun buildSecMsGec(): String {
-    val ticks = (System.currentTimeMillis() / 1000L + 11644473600L) * 10_000_000L
-    val roundedTicks = ticks - ticks % 3_000_000_000L
+    val unixSeconds = System.currentTimeMillis() / 1000L + clockSkewSeconds
+    val roundedUnixSeconds = unixSeconds - unixSeconds % 300L
+    val roundedTicks = (roundedUnixSeconds + 11644473600L) * 10_000_000L
     val input = "$roundedTicks$TRUSTED_CLIENT_TOKEN"
     val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
     return digest.joinToString("") { "%02X".format(it.toInt() and 0xff) }
   }
 
+  private fun adjustClockSkewFromServerDate(serverDate: String?): Boolean {
+    if (serverDate.isNullOrBlank()) {
+      return false
+    }
+    val parser =
+      SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("GMT")
+      }
+    val serverMillis =
+      try {
+        parser.parse(serverDate)?.time
+      } catch (_: Exception) {
+        null
+      } ?: return false
+    clockSkewSeconds = (serverMillis - System.currentTimeMillis()) / 1000L
+    return true
+  }
+
+  private fun generateMuid(): String {
+    return UUID.randomUUID().toString().replace("-", "").uppercase(Locale.US)
+  }
+
   private fun edgeDate(): String {
-    return SimpleDateFormat("EEE MMM dd yyyy HH:mm:ss 'GMT'Z (zzzz)", Locale.US).format(Date())
+    return SimpleDateFormat("EEE MMM dd yyyy HH:mm:ss 'GMT'Z (zzzz)", Locale.US)
+      .apply { timeZone = TimeZone.getTimeZone("GMT") }
+      .format(Date())
   }
 
   private fun escapeXml(text: String): String {
@@ -284,5 +379,16 @@ object AgentEdgeTtsSupport {
     val name: String,
     val locale: String,
     val description: String,
+  )
+
+  private data class EdgeTtsChunkResult(
+    val audio: ByteArray,
+    val failure: EdgeTtsFailure?,
+  )
+
+  private data class EdgeTtsFailure(
+    val message: String,
+    val statusCode: Int?,
+    val serverDate: String?,
   )
 }

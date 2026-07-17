@@ -1309,6 +1309,12 @@ private fun putIfNotBlank(target: MutableMap<String, Any>, key: String, value: S
 
 private fun buildRecoveryHint(operation: String, error: String): String {
   return when {
+    operation == "edge_tts_synthesize" && error.contains("HTTP 403", ignoreCase = true) ->
+      "Edge TTS service rejected the WebSocket handshake. Retry once; if it persists, switch network or update the app."
+    operation == "edge_tts_synthesize" && error.contains("timed out", ignoreCase = true) ->
+      "Edge TTS synthesis timed out. Retry with shorter text or a more stable network."
+    operation == "edge_tts_synthesize" ->
+      "Retry with text or input_path, a valid Edge TTS voice, and a workspace-relative output_path ending in .mp3."
     error.contains("__ASSISTANT_RESPONSE__", ignoreCase = true) ->
       "Do not use __ASSISTANT_RESPONSE__. Retry one write_text call and put the full final text directly in content."
     error.contains("workspace-relative", ignoreCase = true) ||
