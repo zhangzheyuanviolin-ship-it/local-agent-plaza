@@ -331,6 +331,7 @@ fun AgentChatScreen(
               toolName = executionResult.toolName,
               result = executionResult.result,
               originalUserRequest = originalUserRequest,
+              model = model,
             )
           val auditPath =
             agentTools.saveCompatToolAudit(

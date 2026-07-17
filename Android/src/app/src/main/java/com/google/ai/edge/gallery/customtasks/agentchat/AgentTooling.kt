@@ -17,6 +17,7 @@
 package com.google.ai.edge.gallery.customtasks.agentchat
 
 import com.google.ai.edge.gallery.data.ConfigKey
+import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.proto.Skill
 import org.json.JSONObject
@@ -26,7 +27,10 @@ private const val TOOL_CALL_CLOSE_TAG = "</tool_call>"
 private const val THINK_OPEN_TAG = "<think>"
 private const val THINK_CLOSE_TAG = "</think>"
 const val MAX_COMPAT_TOOL_STEPS = 8
-private const val MAX_COMPAT_MODEL_TOOL_RESULT_CHARS = 20000
+private const val DEFAULT_COMPAT_MODEL_TOOL_RESULT_CHARS = 6000
+private const val MIN_COMPAT_MODEL_TOOL_RESULT_CHARS = 1200
+private const val MAX_COMPAT_MODEL_TOOL_RESULT_CHARS = 12000
+private const val COMPAT_TOOL_RESULT_PROMPT_OVERHEAD_TOKENS = 1400
 
 object AgentToolModeValues {
   const val NATIVE = "原生"
@@ -158,12 +162,15 @@ fun buildCompatToolResultPrompt(
   toolName: String,
   result: Map<String, Any?>,
   originalUserRequest: String = "",
+  model: Model? = null,
 ): String {
+  val maxResultChars = resolveCompatToolResultCharBudget(model = model)
   val compactPayload =
     buildCompatToolResultPayload(
       toolName = toolName,
       result = result,
       originalUserRequest = originalUserRequest,
+      maxResultChars = maxResultChars,
     )
   return """
 TOOL_RESULT
@@ -176,6 +183,7 @@ ${compactPayload["result"]}
 You are in compatibility tool mode.
 Use this tool result to answer the original user request directly in Chinese. Do not output $THINK_OPEN_TAG, $THINK_CLOSE_TAG, hidden reasoning, analysis text, scratchpad text, raw JSON, or another tool call unless the result explicitly says the tool failed.
 If the tool result contains XLSX row facts, treat each "行事实" line as authoritative. Preserve the exact metric name, unit, year, and value from the same line. Do not say a unit is missing when the value already contains text such as 亿美元, 亿, 万张, %, CAGR, or 人.
+If the payload says it was truncated for context safety, answer only from the visible payload and tell the user that the full exact tool output is available in the saved audit file.
 Keep the answer concise and stop after the answer is complete.
 """
     .trimIndent()
@@ -185,18 +193,22 @@ fun buildCompatToolResultPayload(
   toolName: String,
   result: Map<String, Any?>,
   originalUserRequest: String = "",
+  maxResultChars: Int = DEFAULT_COMPAT_MODEL_TOOL_RESULT_CHARS,
 ): Map<String, Any?> {
   return mapOf(
     "original_user_request" to originalUserRequest,
     "tool" to toolName,
     "status" to (result["status"]?.toString().orEmpty().ifBlank { "succeeded" }),
-    "result" to compactCompatToolResultForModel(result),
+    "result" to compactCompatToolResultForModel(result = result, maxResultChars = maxResultChars),
     "instruction" to
       "请基于这个工具结果，用中文直接回答原始用户请求；不要输出思考过程、工具调用、原始JSON或无关重复内容。",
   )
 }
 
-fun compactCompatToolResultForModel(result: Map<String, Any?>): String {
+fun compactCompatToolResultForModel(
+  result: Map<String, Any?>,
+  maxResultChars: Int = DEFAULT_COMPAT_MODEL_TOOL_RESULT_CHARS,
+): String {
   val status = result["status"]?.toString().orEmpty()
   val resultText =
     listOf("result", "content", "text", "output", "summary")
@@ -206,25 +218,29 @@ fun compactCompatToolResultForModel(result: Map<String, Any?>): String {
       .orEmpty()
   val error = result["error"]?.toString().orEmpty()
   val recoveryHint = result["recovery_hint"]?.toString().orEmpty()
-  val normalizedResult =
-    resultText
-      .replace("\\n", "\n")
-      .replace("\\/", "/")
-      .lines()
-      .map { it.trim() }
-      .filter { it.isNotBlank() }
-      .joinToString("\n")
-      .take(MAX_COMPAT_MODEL_TOOL_RESULT_CHARS)
+  val normalizedResult = normalizeCompatToolResultText(resultText)
+  val prioritizedResult = prioritizeCompatToolResultForModel(normalizedResult)
+  val safeMaxResultChars =
+    maxResultChars.coerceIn(
+      MIN_COMPAT_MODEL_TOOL_RESULT_CHARS,
+      MAX_COMPAT_MODEL_TOOL_RESULT_CHARS,
+    )
+  val truncated = prioritizedResult.length > safeMaxResultChars
+  val modelResult = prioritizedResult.take(safeMaxResultChars)
   return buildString {
     if (status.isNotBlank()) {
       append("status: ")
       append(status)
       append('\n')
     }
-    if (normalizedResult.isNotBlank()) {
+    if (modelResult.isNotBlank()) {
       append("result:\n")
-      append(normalizedResult)
+      append(modelResult)
       append('\n')
+    }
+    if (truncated) {
+      append("context_safety_note: Tool output was truncated before being sent to the model. ")
+      append("The saved audit JSON contains the complete exact tool output.\n")
     }
     if (error.isNotBlank()) {
       append("error: ")
@@ -237,6 +253,67 @@ fun compactCompatToolResultForModel(result: Map<String, Any?>): String {
       append('\n')
     }
   }.trim()
+}
+
+fun resolveCompatToolResultCharBudget(model: Model?): Int {
+  if (model == null) {
+    return DEFAULT_COMPAT_MODEL_TOOL_RESULT_CHARS
+  }
+  val contextWindow = model.getConfiguredContextWindow().takeIf { it > 0 } ?: model.llmMaxContextLength ?: 0
+  if (contextWindow <= 0) {
+    return DEFAULT_COMPAT_MODEL_TOOL_RESULT_CHARS
+  }
+  val reservedOutputTokens =
+    model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = model.llmMaxToken)
+      .coerceAtLeast(512)
+  val availableToolTokens =
+    (contextWindow - reservedOutputTokens - COMPAT_TOOL_RESULT_PROMPT_OVERHEAD_TOKENS)
+      .coerceAtLeast(900)
+  return (availableToolTokens * 1.35f).toInt()
+    .coerceIn(MIN_COMPAT_MODEL_TOOL_RESULT_CHARS, MAX_COMPAT_MODEL_TOOL_RESULT_CHARS)
+}
+
+private fun normalizeCompatToolResultText(text: String): String {
+  return text
+    .replace("\\n", "\n")
+    .replace("\\/", "/")
+    .lines()
+    .map { it.trim() }
+    .filter { it.isNotBlank() }
+    .joinToString("\n")
+}
+
+private fun prioritizeCompatToolResultForModel(text: String): String {
+  if (!text.contains("行事实") && !text.contains("xlsx", ignoreCase = true)) {
+    return text
+  }
+  val lines = text.lines()
+  val headerLines =
+    lines.filter { line ->
+      line.startsWith("Read ") ||
+        line.contains("工作表") ||
+        line.contains("表格") ||
+        line.contains("xlsx", ignoreCase = true)
+    }
+  val factLines = lines.filter { it.contains("行事实") }
+  if (factLines.isEmpty()) {
+    return text
+  }
+  val otherUsefulLines =
+    lines.filter { line ->
+      !line.contains("行事实") &&
+        (
+          line.contains("列") ||
+            line.contains("字段") ||
+            line.contains("单位") ||
+            line.contains("年份") ||
+            line.contains("指标")
+        )
+    }
+  return (headerLines + otherUsefulLines + factLines)
+    .distinct()
+    .joinToString("\n")
+    .ifBlank { text }
 }
 
 fun summarizeCompatToolResult(result: Map<String, Any?>): String {

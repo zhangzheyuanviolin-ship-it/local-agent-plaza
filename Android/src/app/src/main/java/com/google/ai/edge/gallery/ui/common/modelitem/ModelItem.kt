@@ -35,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.UnfoldLess
 import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.DropdownMenu
@@ -55,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
@@ -62,11 +64,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.ai.edge.gallery.R
+import com.google.ai.edge.gallery.data.BuiltInTaskId
+import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
+import com.google.ai.edge.gallery.data.ModelCapability
 import com.google.ai.edge.gallery.data.ModelDownloadStatus
 import com.google.ai.edge.gallery.data.ModelDownloadStatusType
 import com.google.ai.edge.gallery.data.RuntimeType
 import com.google.ai.edge.gallery.data.Task
+import com.google.ai.edge.gallery.data.convertValueToTargetType
+import com.google.ai.edge.gallery.data.normalizeContextWindowAndMaxTokens
+import com.google.ai.edge.gallery.ui.common.ConfigDialog
 import com.google.ai.edge.gallery.ui.common.MarkdownText
 import com.google.ai.edge.gallery.ui.common.tos.TosViewModel
 import com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel
@@ -157,6 +165,7 @@ fun ModelItem(
               showBenchmarkButton = showBenchmarkButton,
               showDeleteButton =
                 showDeleteButton && model.localFileRelativeDirPathOverride.isEmpty() && !isAicore,
+              task = task,
               onBenchmarkClicked = { onBenchmarkClicked(model) },
               modifier = Modifier.offset(y = (-12).dp),
             )
@@ -396,6 +405,7 @@ fun ModelVariantHeader(
           showDeleteButton &&
             variantModel.localFileRelativeDirPathOverride.isEmpty() &&
             variantModel.runtimeType != RuntimeType.AICORE,
+        task = task,
         onBenchmarkClicked = { onBenchmarkClicked(variantModel) },
         modifier = menuModifier.offset(y = (-12).dp),
       )
@@ -411,10 +421,13 @@ fun ModelItemActionMenu(
   showBenchmarkButton: Boolean,
   onBenchmarkClicked: () -> Unit,
   showDeleteButton: Boolean,
+  task: Task?,
   modifier: Modifier = Modifier,
 ) {
   var showMenu by remember { mutableStateOf(false) }
   var showConfirmDeleteDialog by remember { mutableStateOf(false) }
+  var showConfigDialog by remember { mutableStateOf(false) }
+  val context = LocalContext.current
 
   Box(modifier = modifier) {
     IconButton(onClick = { showMenu = true }) {
@@ -425,6 +438,23 @@ fun ModelItemActionMenu(
       )
     }
     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+      if (model.configs.isNotEmpty()) {
+        DropdownMenuItem(
+          text = {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              Icon(Icons.Rounded.Tune, contentDescription = null)
+              Text(stringResource(R.string.model_configurations_title))
+            }
+          },
+          onClick = {
+            showMenu = false
+            showConfigDialog = true
+          },
+        )
+      }
       if (showBenchmarkButton) {
         DropdownMenuItem(
           text = {
@@ -468,6 +498,77 @@ fun ModelItemActionMenu(
           showConfirmDeleteDialog = false
         },
         onDismiss = { showConfirmDeleteDialog = false },
+      )
+    }
+    if (showConfigDialog) {
+      val modelConfigs =
+        model.configs.toMutableList().apply {
+          if (task?.id != BuiltInTaskId.LLM_TINY_GARDEN) {
+            removeIf { it.key == ConfigKeys.RESET_CONVERSATION_TURN_COUNT }
+          }
+          if (task != null && !task.allowCapability(ModelCapability.LLM_THINKING, model)) {
+            removeIf { it.key == ConfigKeys.ENABLE_THINKING }
+          }
+          if (task != null && !task.allowCapability(ModelCapability.SPECULATIVE_DECODING, model)) {
+            removeIf { it.key == ConfigKeys.ENABLE_SPECULATIVE_DECODING }
+          }
+        }
+      val configSubtitle =
+        buildList {
+            model.getConfiguredContextWindow().takeIf { it > 0 }?.let {
+              add(context.getString(R.string.model_config_context_limit, it))
+            }
+            val currentMaxTokens =
+              model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = model.llmMaxToken)
+            if (currentMaxTokens > 0) {
+              add(context.getString(R.string.model_config_output_limit, currentMaxTokens))
+            }
+          }
+          .joinToString("  •  ")
+      ConfigDialog(
+        title = stringResource(R.string.model_configurations_title),
+        configs = modelConfigs,
+        initialValues = model.configValues,
+        onDismissed = { showConfigDialog = false },
+        okBtnLabel = stringResource(R.string.save),
+        subtitle = configSubtitle,
+        showSystemPromptEditorTab = false,
+        onOk = { curConfigValues, _, _ ->
+          showConfigDialog = false
+          var same = true
+          for (config in modelConfigs) {
+            val key = config.key.label
+            val oldValue =
+              convertValueToTargetType(
+                value = model.configValues.getValue(key),
+                valueType = config.valueType,
+              )
+            val newValue =
+              convertValueToTargetType(
+                value = curConfigValues.getValue(key),
+                valueType = config.valueType,
+              )
+            if (oldValue != newValue) {
+              same = false
+              break
+            }
+          }
+          if (!same) {
+            val normalizedConfigValues =
+              if (model.isLlm) {
+                normalizeContextWindowAndMaxTokens(
+                  values = curConfigValues,
+                  defaultContextWindow = model.llmMaxContextLength,
+                )
+              } else {
+                curConfigValues
+              }
+            model.prevConfigValues = model.configValues
+            model.configValues = normalizedConfigValues
+            modelManagerViewModel.persistModelConfigValues(model)
+            modelManagerViewModel.updateConfigValuesUpdateTrigger()
+          }
+        },
       )
     }
   }

@@ -16,6 +16,7 @@
 
 package com.google.ai.edge.gallery.customtasks.agentchat
 
+import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -255,5 +256,47 @@ class AgentToolingTest {
 
     assertTrue(prompt.contains(marker))
     assertTrue(prompt.contains("Preserve the exact metric name"))
+  }
+
+  @Test
+  fun compatToolResultPromptFitsEightKContextAndKeepsXlsxFacts() {
+    val marker = "行事实|执行摘要!R99|核心指标 是 市场规模；2026 年数值 是 40 亿美元；CAGR 是 5.8%。"
+    val model =
+      Model(
+          name = "Gemma-4-12B-it (experimental)",
+          isLlm = true,
+          llmMaxToken = 2048,
+          llmMaxContextLength = 8192,
+        )
+        .also {
+          it.configValues =
+            mapOf(
+              ConfigKeys.MAX_CONTEXT_LENGTH.label to 8192,
+              ConfigKeys.MAX_TOKENS.label to 2048,
+            )
+        }
+    val prompt =
+      buildCompatToolResultPrompt(
+        toolName = "read_workspace_text_file",
+        originalUserRequest = "汇报表格",
+        model = model,
+        result =
+          linkedMapOf(
+            "status" to "succeeded",
+            "operation" to "read_text",
+            "content" to
+              (
+                "Read 全球古典音乐市场研究报告_优化版.xlsx (17687 file bytes, 29700 text chars, xlsx).\n" +
+                  "普通说明\n".repeat(5000) +
+                  marker +
+                  "\n" +
+                  "后置内容\n".repeat(5000)
+              ),
+          ),
+      )
+
+    assertTrue(prompt.contains(marker))
+    assertTrue(prompt.contains("context_safety_note"))
+    assertTrue(prompt.length < 9000)
   }
 }
