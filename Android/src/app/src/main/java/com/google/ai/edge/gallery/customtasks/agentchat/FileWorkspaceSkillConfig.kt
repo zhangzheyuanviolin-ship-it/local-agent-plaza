@@ -21,6 +21,8 @@ import org.json.JSONObject
 
 const val FILE_WORKSPACE_SKILL_NAME = "file-workspace"
 const val LONG_TEXT_WRITER_SKILL_NAME = "long-text-writer"
+const val EDGE_TTS_SKILL_NAME = "edge-tts"
+const val WEATHER_QUERY_SKILL_NAME = "weather-query"
 
 data class FileWorkspaceConfig(
   val treeUri: String = "",
@@ -32,7 +34,9 @@ fun hasSkillConfig(skillName: String): Boolean {
 }
 
 fun isWorkspaceSkill(skillName: String): Boolean {
-  return skillName == FILE_WORKSPACE_SKILL_NAME || skillName == LONG_TEXT_WRITER_SKILL_NAME
+  return skillName == FILE_WORKSPACE_SKILL_NAME ||
+    skillName == LONG_TEXT_WRITER_SKILL_NAME ||
+    skillName == EDGE_TTS_SKILL_NAME
 }
 
 fun readFileWorkspaceConfig(dataStoreRepository: DataStoreRepository): FileWorkspaceConfig {

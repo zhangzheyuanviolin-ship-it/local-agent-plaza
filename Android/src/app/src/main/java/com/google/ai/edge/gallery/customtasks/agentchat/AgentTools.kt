@@ -364,6 +364,21 @@ open class AgentTools() : ToolSet {
     parameters: String,
   ): Map<String, String> {
     return runBlocking(Dispatchers.Default) {
+      requiredSkillForIntent(intent)?.let { requiredSkill ->
+        if (!skillManagerViewModel.isSkillSelected(requiredSkill)) {
+          val error = "Skill \"$requiredSkill\" is disabled. Enable it in the skill manager before using this intent."
+          AgentDiagnosticsLogger.log(
+            context = context,
+            category = "tool.run_intent.blocked",
+            message = "Blocked intent $intent because $requiredSkill is disabled",
+          )
+          return@runBlocking mapOf(
+            "action" to intent,
+            "parameters" to parameters,
+            "result" to JSONObject().put("status", "failed").put("error", error).toString(),
+          )
+        }
+      }
       AgentDiagnosticsLogger.log(
         context = context,
         category = "tool.run_intent.start",
@@ -606,14 +621,8 @@ open class AgentTools() : ToolSet {
     }
   }
 
-  @Tool(
-    description =
-      "Query weather for a city or current device location. Supports current weather, next 24 hours, and next 7 days."
-  )
   fun queryWeather(
-    @ToolParam(description = "City or place name, such as 昆明, 北京, London, New York. Use current only when the user asks for current device location.")
     location: String,
-    @ToolParam(description = "Weather mode: current, 24h, or week.")
     mode: String,
   ): Map<String, Any> {
     return runBlocking(Dispatchers.IO) {
@@ -630,7 +639,6 @@ open class AgentTools() : ToolSet {
     }
   }
 
-  @Tool(description = "List curated Microsoft Edge TTS voices. The list is capped to 15 voices.")
   fun listEdgeTtsVoices(): Map<String, Any> {
     return mapOf(
       "status" to "succeeded",
@@ -643,18 +651,10 @@ open class AgentTools() : ToolSet {
     )
   }
 
-  @Tool(
-    description =
-      "Synthesize text or a workspace text file to an MP3 file using Microsoft Edge TTS. The MP3 is saved into the mounted workspace, preferably under media/."
-  )
   fun edgeTtsSynthesize(
-    @ToolParam(description = "Text to synthesize. Leave empty when using inputPath.")
     text: String,
-    @ToolParam(description = "Workspace text file path to read, such as file/input.txt. Leave empty when using text.")
     inputPath: String,
-    @ToolParam(description = "Voice id such as zh-CN-XiaoxiaoNeural, zh-CN-YunxiNeural, en-US-JennyNeural.")
     voice: String,
-    @ToolParam(description = "Output MP3 workspace path, such as media/output.mp3. Leave empty for an automatic name.")
     outputPath: String,
   ): Map<String, Any> {
     return runBlocking(Dispatchers.IO) {
@@ -668,7 +668,7 @@ open class AgentTools() : ToolSet {
           .toString()
       val flattened =
         runConfiguredIntent(
-          skillName = FILE_WORKSPACE_SKILL_NAME,
+          skillName = EDGE_TTS_SKILL_NAME,
           intent = IntentAction.FILE_WORKSPACE.action,
           parameters = parameters,
         )
@@ -751,7 +751,12 @@ open class AgentTools() : ToolSet {
         "query_weather",
         "weather_query",
         "get_weather" ->
-          queryWeather(
+          if (!skillManagerViewModel.isSkillSelected(WEATHER_QUERY_SKILL_NAME)) {
+            mapOf(
+              "status" to "failed",
+              "error" to "Skill \"$WEATHER_QUERY_SKILL_NAME\" is disabled. Enable it before using weather tools.",
+            )
+          } else queryWeather(
               location =
                 getOptionalStringArgument(
                   arguments = arguments,
@@ -769,12 +774,22 @@ open class AgentTools() : ToolSet {
         "list_edge_tts_voices",
         "edge_tts_list_voices",
         "list_tts_voices" ->
-          listEdgeTtsVoices().mapValues { it.value }
+          if (!skillManagerViewModel.isSkillSelected(EDGE_TTS_SKILL_NAME)) {
+            mapOf(
+              "status" to "failed",
+              "error" to "Skill \"$EDGE_TTS_SKILL_NAME\" is disabled. Enable it before using Edge TTS.",
+            )
+          } else listEdgeTtsVoices().mapValues { it.value }
         "edge_tts_synthesize",
         "text_to_speech",
         "synthesize_speech",
         "tts_synthesize" ->
-          edgeTtsSynthesize(
+          if (!skillManagerViewModel.isSkillSelected(EDGE_TTS_SKILL_NAME)) {
+            mapOf(
+              "status" to "failed",
+              "error" to "Skill \"$EDGE_TTS_SKILL_NAME\" is disabled. Enable it before using Edge TTS.",
+            )
+          } else edgeTtsSynthesize(
               text =
                 getOptionalStringArgument(
                   arguments = arguments,
@@ -857,7 +872,7 @@ open class AgentTools() : ToolSet {
           mapOf(
             "status" to "failed",
             "error" to "Unknown compatibility tool \"$toolName\".",
-            "recovery_hint" to "Retry with an enabled compatibility tool such as query_weather, list_edge_tts_voices, edge_tts_synthesize, search_web, list_workspace, read_workspace_text_file, write_workspace_file, delete_workspace_file, run_js, or run_configured_intent.",
+            "recovery_hint" to "Retry only with a compatibility tool listed in the current system instruction. Disabled skills are not available.",
           )
       }
     return CompatToolExecutionResult(toolName = normalizedToolName, result = result)
@@ -1324,4 +1339,14 @@ fun getSkillConfigKey(skillName: String): String {
     return "skill_config___${FILE_WORKSPACE_SKILL_NAME}"
   }
   return "skill_config___${skillName}"
+}
+
+private fun requiredSkillForIntent(intent: String): String? {
+  return when (intent.trim()) {
+    IntentAction.SEND_EMAIL.action -> "send-email"
+    IntentAction.CREATE_CALENDAR_EVENT.action -> "create-calendar-event"
+    IntentAction.QUERY_WEATHER.action -> WEATHER_QUERY_SKILL_NAME
+    IntentAction.LIST_EDGE_TTS_VOICES.action -> EDGE_TTS_SKILL_NAME
+    else -> null
+  }
 }

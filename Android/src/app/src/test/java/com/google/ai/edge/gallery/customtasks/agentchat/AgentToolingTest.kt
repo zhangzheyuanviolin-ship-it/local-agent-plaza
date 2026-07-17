@@ -192,12 +192,30 @@ class AgentToolingTest {
     assertTrue(prompt.contains("download_workspace_file"))
     assertTrue(prompt.contains("write_workspace_file"))
     assertTrue(prompt.contains("delete_workspace_file"))
-    assertTrue(prompt.contains("query_weather"))
-    assertTrue(prompt.contains("list_edge_tts_voices"))
-    assertTrue(prompt.contains("edge_tts_synthesize"))
+    assertFalse(prompt.contains("query_weather"))
+    assertFalse(prompt.contains("list_edge_tts_voices"))
+    assertFalse(prompt.contains("edge_tts_synthesize"))
     assertTrue(prompt.contains("file/input.txt"))
     assertTrue(prompt.contains("media"))
     assertTrue(prompt.contains("download"))
+  }
+
+  @Test
+  fun compatPromptOnlyAdvertisesWeatherAndTtsWhenThoseSkillsAreEnabled() {
+    val prompt =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries =
+          listOf(
+            "weather-query: query weather",
+            "edge-tts: synthesize speech",
+          ),
+      )
+
+    assertTrue(prompt.contains("query_weather"))
+    assertTrue(prompt.contains("list_edge_tts_voices"))
+    assertTrue(prompt.contains("edge_tts_synthesize"))
+    assertFalse(prompt.contains("read_workspace_text_file"))
   }
 
   @Test

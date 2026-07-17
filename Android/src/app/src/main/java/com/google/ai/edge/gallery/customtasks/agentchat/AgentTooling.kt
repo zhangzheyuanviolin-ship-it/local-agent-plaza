@@ -580,9 +580,13 @@ private fun buildAvailableCompatToolsList(selectedSkillNames: Set<String>): Stri
   ) {
     tools += "- search_web arguments: {\"query\":\"...\"} . Searches the web using an enabled search skill selected by the app."
   }
-  tools += "- query_weather arguments: {\"location\":\"昆明\",\"mode\":\"current|24h|week\"} . Gets current weather, next 24 hours, or next 7 days. Use a city name for stable results; use location=current only when the user asks for current device location. If current location is unavailable, ask for a city name instead of guessing."
-  tools += "- list_edge_tts_voices arguments: {} . Lists up to 15 curated Microsoft Edge TTS voices."
-  tools += "- edge_tts_synthesize arguments: {\"text\":\"要转换成语音的文字\",\"voice\":\"zh-CN-XiaoxiaoNeural\",\"output_path\":\"media/output.mp3\"} . Synthesizes text to an MP3 file in the mounted workspace. Use input_path instead of text to synthesize a workspace text file."
+  if (selectedSkillNames.contains(WEATHER_QUERY_SKILL_NAME)) {
+    tools += "- query_weather arguments: {\"location\":\"昆明\",\"mode\":\"current|24h|week\"} . Gets current weather, next 24 hours, or next 7 days. Use a city name for stable results; use location=current only when the user asks for current device location. If current location is unavailable, ask for a city name instead of guessing."
+  }
+  if (selectedSkillNames.contains(EDGE_TTS_SKILL_NAME)) {
+    tools += "- list_edge_tts_voices arguments: {} . Lists up to 15 curated Microsoft Edge TTS voices."
+    tools += "- edge_tts_synthesize arguments: {\"text\":\"要转换成语音的文字\",\"voice\":\"zh-CN-XiaoxiaoNeural\",\"output_path\":\"media/output.mp3\"} . Synthesizes text to an MP3 file in the mounted workspace. Use input_path instead of text to synthesize a workspace text file."
+  }
   if (selectedSkillNames.contains(FILE_WORKSPACE_SKILL_NAME)) {
     tools += "- list_workspace arguments: {\"path\":\".\"} . Lists files in the mounted workspace."
     tools +=

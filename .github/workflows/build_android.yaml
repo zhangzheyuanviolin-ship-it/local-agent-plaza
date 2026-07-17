@@ -65,9 +65,9 @@ jobs:
                 VNAME="${ALLOWLIST_BASE}-mcp.${GITHUB_RUN_NUMBER}"
                 ;;
               *experimental*)
-                CHANNEL="experimental"
-                SUFFIX=".experimental"
-                VNAME="${ALLOWLIST_BASE}-experimental.${GITHUB_RUN_NUMBER}"
+                CHANNEL="mcp"
+                SUFFIX=".mcp"
+                VNAME="${ALLOWLIST_BASE}-mcp.${GITHUB_RUN_NUMBER}"
                 ;;
               *visual*)
                 CHANNEL="visual"
@@ -100,9 +100,9 @@ jobs:
                 SUFFIX=""
                 ;;
               experimental)
-                VNAME="1.0.14-experimental.$GITHUB_RUN_NUMBER"
-                CHANNEL="experimental"
-                SUFFIX=".experimental"
+                VNAME="1.0.14-mcp.$GITHUB_RUN_NUMBER"
+                CHANNEL="mcp"
+                SUFFIX=".mcp"
                 ;;
               feature/*)
                 SAFE_VERSION="$(printf '%s' "$BRANCH" | sed 's|^feature/||; s|[^a-zA-Z0-9.-]|-|g; s|^-*||; s|-*$||')"
@@ -140,7 +140,13 @@ jobs:
       - name: Verify APK signing and version
         run: |
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk
-          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/aapt" dump badging app/build/outputs/apk/release/app-release.apk | head -n 1
+          BADGING="$("$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/aapt" dump badging app/build/outputs/apk/release/app-release.apk | head -n 1)"
+          echo "$BADGING"
+          case "$LOCAL_VERSION_NAME" in
+            *mcp*)
+              echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+              ;;
+          esac
       - name: Rename APK to channel-aware filename
         id: rename
         run: |

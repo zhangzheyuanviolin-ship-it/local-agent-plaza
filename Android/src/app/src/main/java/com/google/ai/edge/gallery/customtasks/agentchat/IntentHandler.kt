@@ -59,6 +59,8 @@ enum class IntentAction(val action: String) {
   SEND_SMS("send_sms"),
   CREATE_CALENDAR_EVENT("create_calendar_event"),
   GET_CURRENT_DATE_AND_TIME("get_current_date_and_time"),
+  QUERY_WEATHER("query_weather"),
+  LIST_EDGE_TTS_VOICES("list_edge_tts_voices"),
   FILE_WORKSPACE("file_workspace");
 
   companion object {
@@ -171,6 +173,32 @@ object IntentHandler {
           "get_current_date_and_time via handleAction. Current date and time: $currentDateAndTime",
         )
         currentDateAndTime
+      }
+      IntentAction.QUERY_WEATHER -> {
+        try {
+          val request = JSONObject(parameters.ifBlank { "{}" })
+          val result =
+            AgentWeatherSupport.query(
+              context = context,
+              location = request.optString("location").ifBlank { request.optString("city") },
+              mode = request.optString("mode").ifBlank { "current" },
+            )
+          JSONObject().apply { result.forEach { (key, value) -> put(key, value) } }.toString()
+        } catch (e: Exception) {
+          errorJson("Weather query failed: ${e.message ?: "Unknown error"}")
+        }
+      }
+      IntentAction.LIST_EDGE_TTS_VOICES -> {
+        successJson()
+          .put("operation", "edge_tts_list_voices")
+          .put("voices", AgentEdgeTtsSupport.voicesJson())
+          .put(
+            "summary",
+            AgentEdgeTtsSupport.voices.joinToString("; ") {
+              "${it.id} (${it.locale}, ${it.description})"
+            },
+          )
+          .toString()
       }
       IntentAction.FILE_WORKSPACE ->
         errorJson(
