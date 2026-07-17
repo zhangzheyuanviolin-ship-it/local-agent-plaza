@@ -326,13 +326,35 @@ fun AgentChatScreen(
             screenWidthDp = screenWidthDp.value,
           )
           updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
-          continueCompatConversation?.invoke(
-            model,
+          val toolResultPrompt =
             buildCompatToolResultPrompt(
               toolName = executionResult.toolName,
               result = executionResult.result,
               originalUserRequest = originalUserRequest,
-            ),
+            )
+          val auditPath =
+            agentTools.saveCompatToolAudit(
+              toolName = executionResult.toolName,
+              originalUserRequest = originalUserRequest,
+              result = executionResult.result,
+              modelPrompt = toolResultPrompt,
+            )
+          if (auditPath != null) {
+            appendProgressLog(
+              viewModel = viewModel,
+              model = model,
+              level = LogMessageLevel.Info,
+              source = "tool_audit",
+              message = "完整工具调用审计已保存到 $auditPath",
+            )
+            viewModel.addMessage(
+              model = model,
+              message = ChatMessageInfo(content = "工具调用审计已保存：$auditPath"),
+            )
+          }
+          continueCompatConversation?.invoke(
+            model,
+            toolResultPrompt,
           )
         }
         return@handleGenerationDone

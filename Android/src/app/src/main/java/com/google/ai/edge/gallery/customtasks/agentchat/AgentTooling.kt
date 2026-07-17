@@ -26,7 +26,7 @@ private const val TOOL_CALL_CLOSE_TAG = "</tool_call>"
 private const val THINK_OPEN_TAG = "<think>"
 private const val THINK_CLOSE_TAG = "</think>"
 const val MAX_COMPAT_TOOL_STEPS = 8
-private const val MAX_COMPAT_MODEL_TOOL_RESULT_CHARS = 2400
+private const val MAX_COMPAT_MODEL_TOOL_RESULT_CHARS = 20000
 
 object AgentToolModeValues {
   const val NATIVE = "原生"
@@ -175,6 +175,7 @@ ${compactPayload["result"]}
 
 You are in compatibility tool mode.
 Use this tool result to answer the original user request directly in Chinese. Do not output $THINK_OPEN_TAG, $THINK_CLOSE_TAG, hidden reasoning, analysis text, scratchpad text, raw JSON, or another tool call unless the result explicitly says the tool failed.
+If the tool result contains XLSX row facts, treat each "行事实" line as authoritative. Preserve the exact metric name, unit, year, and value from the same line. Do not say a unit is missing when the value already contains text such as 亿美元, 亿, 万张, %, CAGR, or 人.
 Keep the answer concise and stop after the answer is complete.
 """
     .trimIndent()
@@ -503,6 +504,8 @@ private fun buildAvailableCompatToolsList(selectedSkillNames: Set<String>): Stri
     tools += "- list_workspace arguments: {\"path\":\".\"} . Lists files in the mounted workspace."
     tools +=
       "- read_workspace_text_file arguments: {\"path\":\"notes/input.txt\",\"max_bytes\":64000} . Reads text from txt, md, csv, json, xml, log, html, pdf, docx, or xlsx files in the mounted workspace. Use a larger max_bytes for spreadsheets or long documents when details matter."
+    tools +=
+      "- download_workspace_file arguments: {\"url\":\"https://.../file.pdf\",\"path\":\"downloads/file.pdf\",\"resume\":true} . Downloads a file into the mounted workspace with resumable HTTP Range support when the server supports it."
     tools += "- write_workspace_file arguments: {\"path\":\"notes/output.txt\",\"content\":\"...\"} . Writes text directly into the mounted workspace."
     tools += "- delete_workspace_file arguments: {\"path\":\"notes/output.txt\"} . Deletes a workspace file or empty directory."
   }

@@ -186,6 +186,7 @@ class AgentToolingTest {
 
     assertTrue(prompt.contains("list_workspace"))
     assertTrue(prompt.contains("read_workspace_text_file"))
+    assertTrue(prompt.contains("download_workspace_file"))
     assertTrue(prompt.contains("write_workspace_file"))
     assertTrue(prompt.contains("delete_workspace_file"))
   }
@@ -235,5 +236,24 @@ class AgentToolingTest {
 
     assertTrue(prompt.contains("真实天气：阴，中雨，18到28度，紫外线弱。"))
     assertFalse(prompt.contains("Read 昆明天气报告_2026-07-17.pdf (65128 bytes)."))
+  }
+
+  @Test
+  fun compatToolResultPromptKeepsLargeWorkspaceReadContent() {
+    val marker = "行事实|执行摘要!R5|核心指标 是 市场规模；2025 年数值 是 95 亿美元；增长率 是 +53%。"
+    val prompt =
+      buildCompatToolResultPrompt(
+        toolName = "read_workspace_text_file",
+        originalUserRequest = "汇报表格",
+        result =
+          linkedMapOf(
+            "status" to "succeeded",
+            "operation" to "read_text",
+            "content" to ("前置内容\n" + "数据行\n".repeat(500) + marker),
+          ),
+      )
+
+    assertTrue(prompt.contains(marker))
+    assertTrue(prompt.contains("Preserve the exact metric name"))
   }
 }

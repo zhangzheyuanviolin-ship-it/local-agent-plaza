@@ -41,6 +41,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private const val TAG = "AGAgentTools"
 private const val MAX_LIST_SUMMARY_ENTRIES = 12
@@ -707,6 +710,10 @@ open class AgentTools() : ToolSet {
           )
         "read_workspace_text_file" ->
           runFileWorkspaceCompatOperation(operation = "read_text", arguments = arguments)
+        "download_workspace_file",
+        "download_file_to_workspace",
+        "download_url_to_workspace" ->
+          runFileWorkspaceCompatOperation(operation = "download_url", arguments = arguments)
         "write_workspace_text_file",
         "write_workspace_file" ->
           runFileWorkspaceCompatOperation(operation = "write_text", arguments = arguments)
@@ -753,6 +760,48 @@ open class AgentTools() : ToolSet {
         parameters = parameters,
       )
       .mapValues { it.value }
+  }
+
+  fun saveCompatToolAudit(
+    toolName: String,
+    originalUserRequest: String,
+    result: Map<String, Any?>,
+    modelPrompt: String,
+  ): String? {
+    return runBlocking(Dispatchers.IO) {
+      val config =
+        skillManagerViewModel.dataStoreRepository.readSecret(
+          key = getSkillConfigKey(skillName = FILE_WORKSPACE_SKILL_NAME)
+        ) ?: return@runBlocking null
+      val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())
+      val safeToolName = toolName.replace(Regex("[^A-Za-z0-9._-]+"), "_").ifBlank { "tool" }
+      val path = "tool-audit/$timestamp-$safeToolName.json"
+      val content =
+        JSONObject()
+          .put("timestamp", timestamp)
+          .put("tool_name", toolName)
+          .put("original_user_request", originalUserRequest)
+          .put("model_prompt", modelPrompt)
+          .put("tool_result", JSONObject(result))
+          .toString(2)
+      val parameters =
+        JSONObject()
+          .put("operation", "write_text")
+          .put("path", path)
+          .put("content", content)
+          .put("create_parents", true)
+          .toString()
+      val writeResult =
+        IntentHandler.handleConfiguredAction(
+          context = context,
+          skillName = FILE_WORKSPACE_SKILL_NAME,
+          action = IntentAction.FILE_WORKSPACE.action,
+          parameters = parameters,
+          config = config,
+        )
+      val status = runCatching { JSONObject(writeResult).optString("status") }.getOrDefault("")
+      if (status == "succeeded") path else null
+    }
   }
 
   private fun runSearchCompatTool(skillName: String, arguments: JSONObject): Map<String, Any?> {
@@ -976,6 +1025,7 @@ private fun buildConfiguredIntentResult(
     linkedMapOf<String, Any>(
       "action" to intent,
       "status" to status,
+      "raw_result_json" to result,
     )
   if (operation.isNotBlank()) {
     flattened["operation"] = operation
@@ -1042,6 +1092,16 @@ private fun buildConfiguredIntentResult(
       flattened["summary"] =
         "Read ${flattened["path"] ?: "file"} (${flattened["bytes_read"]} file bytes, ${flattened["content_chars"]} text chars${if (payload.optString("detected_format").isNotBlank()) ", ${payload.optString("detected_format")}" else ""}${if (payload.optBoolean("truncated", false)) ", truncated" else ""})."
     }
+    "download_url" -> {
+      flattened["url"] = payload.optString("url")
+      flattened["response_code"] = payload.optInt("response_code", 0)
+      flattened["resumed"] = payload.optBoolean("resumed", false)
+      flattened["existing_bytes"] = payload.optLong("existing_bytes", 0L)
+      flattened["bytes_written"] = payload.optLong("bytes_written", 0L)
+      flattened["final_bytes"] = payload.optLong("final_bytes", 0L)
+      flattened["summary"] =
+        "Downloaded ${flattened["url"] ?: "URL"} to ${flattened["path"] ?: "file"} (${flattened["final_bytes"]} bytes, resumed=${flattened["resumed"]})."
+    }
     "prepare_write_text" -> {
       flattened["summary"] =
         payload.optString("summary").ifBlank {
@@ -1094,6 +1154,8 @@ private fun buildRecoveryHint(operation: String, error: String): String {
       "Retry with both path and destination_path."
     error.contains("required", ignoreCase = true) && operation == "read_text" ->
       "Retry with operation=read_text and a workspace-relative path."
+    error.contains("required", ignoreCase = true) && operation == "download_url" ->
+      "Retry with operation=download_url plus url and a workspace-relative path."
     error.contains("required", ignoreCase = true) && operation == "write_text" ->
       "Retry with operation=write_text plus path and content."
     error.contains("Directory is not empty", ignoreCase = true) ->

@@ -27,6 +27,8 @@ import com.squareup.moshi.Moshi
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.lang.Exception
+import java.net.HttpURLConnection
+import java.net.URL
 import java.net.URLConnection
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -300,6 +302,7 @@ object IntentHandler {
         "list" -> handleList(root = root, request = request)
         "stat" -> handleStat(root = root, request = request)
         "read_text" -> handleReadText(context = context, root = root, request = request)
+        "download_url" -> handleDownloadUrl(context = context, root = root, request = request)
         "write_text" -> handleWriteText(context = context, root = root, request = request)
         "append_text" -> handleAppendText(context = context, root = root, request = request)
         "create_dir" -> handleCreateDir(root = root, request = request)
@@ -308,7 +311,7 @@ object IntentHandler {
         "move" -> handleMove(context = context, root = root, request = request)
         else ->
           errorJson(
-            "Unsupported file workspace operation \"$operation\". Supported operations: status, list, stat, read_text, write_text, append_text, create_dir, delete, copy, move."
+            "Unsupported file workspace operation \"$operation\". Supported operations: status, list, stat, read_text, download_url, write_text, append_text, create_dir, delete, copy, move."
           )
       }
     } catch (e: Exception) {
@@ -391,6 +394,94 @@ object IntentHandler {
       .put("bytes_read", extracted.bytesRead)
       .put("content_chars", extracted.contentChars)
       .put("content_bytes", extracted.contentBytes)
+      .toString()
+  }
+
+  private fun handleDownloadUrl(context: Context, root: DocumentFile, request: JSONObject): String {
+    val urlString = request.optString("url").ifBlank { request.optString("download_url") }.trim()
+    if (urlString.isBlank()) {
+      return errorJson("url is required for download_url.")
+    }
+    val url =
+      runCatching { URL(urlString) }.getOrElse {
+        return errorJson("Invalid url: $urlString")
+      }
+    if (url.protocol.lowercase(Locale.US) !in setOf("http", "https")) {
+      return errorJson("Only http and https URLs are supported.")
+    }
+    val createParents = request.optBoolean("create_parents", true)
+    val resume = request.optBoolean("resume", true)
+    val overwrite = request.optBoolean("overwrite", false)
+    val fallbackName =
+      url.path.substringAfterLast('/').substringBefore('?').ifBlank {
+        "download-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())}.bin"
+      }
+    val path = request.optString("path").ifBlank { fallbackName }
+    val existing = resolveExistingDocument(root, path)
+    if (existing != null && existing.isDirectory) {
+      return errorJson("Target path is a directory: $path")
+    }
+    if (existing != null && overwrite && !existing.delete()) {
+      return errorJson("Failed to overwrite existing file: $path")
+    }
+    val document =
+      ensureWritableFile(
+        root = root,
+        path = path,
+        createParents = createParents,
+        overwrite = false,
+      ) ?: return errorJson("Failed to create target file: $path")
+
+    var existingBytes = if (resume && !overwrite) document.length().coerceAtLeast(0L) else 0L
+    var connection = (url.openConnection() as HttpURLConnection)
+    connection.instanceFollowRedirects = true
+    connection.connectTimeout = request.optInt("connect_timeout_ms", 15000).coerceIn(1000, 120000)
+    connection.readTimeout = request.optInt("read_timeout_ms", 60000).coerceIn(1000, 300000)
+    if (existingBytes > 0L) {
+      connection.setRequestProperty("Range", "bytes=$existingBytes-")
+    }
+    val responseCode = connection.responseCode
+    val append = existingBytes > 0L && responseCode == HttpURLConnection.HTTP_PARTIAL
+    if (existingBytes > 0L && !append) {
+      existingBytes = 0L
+    }
+
+    val input =
+      try {
+        connection.inputStream
+      } catch (e: Exception) {
+        connection.errorStream?.use { errorStream ->
+          val errorText = readUpTo(errorStream, 4096).first.toString(Charsets.UTF_8)
+          return errorJson("Download failed with HTTP $responseCode: $errorText")
+        }
+        return errorJson("Download failed with HTTP $responseCode.")
+      }
+    val outputMode = if (append) "wa" else "wt"
+    var written = 0L
+    input.use { inStream ->
+      context.contentResolver.openOutputStream(document.uri, outputMode)?.use { outStream ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+          val read = inStream.read(buffer)
+          if (read <= 0) {
+            break
+          }
+          outStream.write(buffer, 0, read)
+          written += read
+        }
+      } ?: return errorJson("Failed to open file for writing: $path")
+    }
+    connection.disconnect()
+
+    return successJson()
+      .put("operation", "download_url")
+      .put("url", urlString)
+      .put("path", normalizeDisplayPath(path))
+      .put("response_code", responseCode)
+      .put("resumed", append)
+      .put("existing_bytes", existingBytes)
+      .put("bytes_written", written)
+      .put("final_bytes", document.length())
       .toString()
   }
 
