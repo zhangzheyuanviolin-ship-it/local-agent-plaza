@@ -241,6 +241,31 @@ class AgentToolingTest {
   }
 
   @Test
+  fun compatPromptOnlyAdvertisesMiniMaxToolsWhenMiniMaxSkillIsEnabled() {
+    val withoutMiniMax =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("agnes-omni: generate images and videos"),
+      )
+    val withMiniMax =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("minimax-omni: MiniMax multimodal tools"),
+      )
+
+    assertFalse(withoutMiniMax.contains("minimax_generate_image"))
+    assertFalse(withoutMiniMax.contains("minimax_analyze_video"))
+    assertTrue(withMiniMax.contains("minimax_generate_text"))
+    assertTrue(withMiniMax.contains("minimax_generate_image"))
+    assertTrue(withMiniMax.contains("minimax_tts_synthesize"))
+    assertTrue(withMiniMax.contains("minimax_generate_music"))
+    assertTrue(withMiniMax.contains("minimax_analyze_image"))
+    assertTrue(withMiniMax.contains("minimax_analyze_video"))
+    assertTrue(withMiniMax.contains("minimax_search_web"))
+    assertTrue(withMiniMax.contains("MUST pass input_path directly"))
+  }
+
+  @Test
   fun edgeTtsVoiceListIsCuratedAndMediaPathDefaults() {
     assertTrue(AgentEdgeTtsSupport.voices.size <= 15)
     assertTrue(AgentEdgeTtsSupport.voices.any { it.id == "zh-CN-XiaoxiaoNeural" })

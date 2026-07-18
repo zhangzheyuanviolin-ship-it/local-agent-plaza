@@ -463,6 +463,17 @@ open class AgentTools() : ToolSet {
           outputPath = outputPath,
         )
       }
+      if (skill.name == MINIMAX_OMNI_SKILL_NAME) {
+        val request = JSONObject(parameters.ifBlank { "{}" })
+        return@runBlocking runMiniMaxOperation(
+          operation = intent,
+          prompt = request.optString("prompt").ifBlank { request.optString("description") },
+          text = request.optString("text").ifBlank { request.optString("content") },
+          query = request.optString("query").ifBlank { request.optString("q") },
+          inputPath = request.optString("input_path").ifBlank { request.optString("path") },
+          outputPath = request.optString("output_path"),
+        )
+      }
 
       _actionChannel.send(
         SkillProgressAgentAction(
@@ -801,6 +812,171 @@ open class AgentTools() : ToolSet {
     )
   }
 
+  private suspend fun runMiniMaxOperation(
+    operation: String,
+    prompt: String = "",
+    text: String = "",
+    query: String = "",
+    inputPath: String = "",
+    outputPath: String = "",
+  ): Map<String, Any> {
+    val normalizedOperation = operation.trim().lowercase()
+    if (!skillManagerViewModel.isSkillSelected(MINIMAX_OMNI_SKILL_NAME)) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "Skill \"$MINIMAX_OMNI_SKILL_NAME\" is disabled. Enable it before using MiniMax.",
+      )
+    }
+    val secret =
+      skillManagerViewModel.dataStoreRepository.readSecret(
+        getSkillSecretKey(MINIMAX_OMNI_SKILL_NAME)
+      ) ?: ""
+    if (secret.trim().isBlank()) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "MiniMax API key is not configured.",
+        "recovery_hint" to "Open the skill manager, enable MiniMax 全模态工具箱, and fill its API key.",
+      )
+    }
+    val workspaceConfig = readFileWorkspaceConfig(skillManagerViewModel.dataStoreRepository)
+    val needsWorkspace =
+      normalizedOperation in
+        setOf(
+          "minimax_generate_image",
+          "minimax_tts_synthesize",
+          "minimax_generate_music",
+          "minimax_analyze_image",
+          "minimax_analyze_video",
+        )
+    if (needsWorkspace && workspaceConfig.treeUri.isBlank()) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "No workspace folder is configured.",
+        "recovery_hint" to "Configure the file workspace folder before using MiniMax media tools.",
+      )
+    }
+    val config = readMiniMaxOmniConfig(skillManagerViewModel.dataStoreRepository)
+    _actionChannel.send(
+      SkillProgressAgentAction(
+        label = "Calling MiniMax",
+        inProgress = true,
+        addItemTitle = "MiniMax tool",
+        addItemDescription = "Operation: $normalizedOperation",
+      )
+    )
+    val raw =
+      try {
+        when (normalizedOperation) {
+          "minimax_generate_text" ->
+            AgentMiniMaxSupport.generateText(
+              apiKey = secret,
+              config = config,
+              prompt = prompt.ifBlank { text },
+            )
+          "minimax_generate_image" ->
+            AgentMiniMaxSupport.generateImage(
+              context = context,
+              apiKey = secret,
+              config = config,
+              workspaceConfig = workspaceConfig,
+              prompt = prompt.ifBlank { text },
+              outputPath = outputPath,
+            )
+          "minimax_tts_synthesize" ->
+            AgentMiniMaxSupport.synthesizeSpeech(
+              context = context,
+              apiKey = secret,
+              config = config,
+              workspaceConfig = workspaceConfig,
+              text = text.ifBlank { prompt },
+              inputPath = inputPath,
+              outputPath = outputPath,
+            )
+          "minimax_generate_music" ->
+            AgentMiniMaxSupport.generateMusic(
+              context = context,
+              apiKey = secret,
+              config = config,
+              workspaceConfig = workspaceConfig,
+              prompt = prompt.ifBlank { text },
+              outputPath = outputPath,
+            )
+          "minimax_analyze_image" ->
+            AgentMiniMaxSupport.analyzeImage(
+              context = context,
+              apiKey = secret,
+              config = config,
+              workspaceConfig = workspaceConfig,
+              inputPath = inputPath,
+              prompt = prompt.ifBlank { "Describe this image in the user's language." },
+            )
+          "minimax_analyze_video" ->
+            AgentMiniMaxSupport.analyzeVideo(
+              context = context,
+              apiKey = secret,
+              config = config,
+              workspaceConfig = workspaceConfig,
+              inputPath = inputPath,
+              prompt = prompt.ifBlank { "Describe this video in the user's language." },
+            )
+          "minimax_search_web" ->
+            AgentMiniMaxSupport.searchWeb(
+              apiKey = secret,
+              config = config,
+              query = query.ifBlank { prompt.ifBlank { text } },
+            )
+          "minimax_list_voices" ->
+            JSONObject()
+              .put("status", "succeeded")
+              .put("operation", "minimax_list_voices")
+              .put("voices", AgentMiniMaxSupport.voicesSummary())
+          else -> JSONObject().put("status", "failed").put("operation", normalizedOperation)
+            .put("error", "Unsupported MiniMax operation: $operation")
+        }
+      } catch (e: Exception) {
+        JSONObject()
+          .put("status", "failed")
+          .put("operation", normalizedOperation)
+          .put("error", e.message ?: "MiniMax operation failed.")
+      }
+    _actionChannel.send(
+      SkillProgressAgentAction(
+        label = "MiniMax tool finished",
+        inProgress = false,
+        addItemTitle = "MiniMax result",
+        addItemDescription = raw.toString().take(500),
+      )
+    )
+    return buildConfiguredIntentResult(
+      intent = normalizedOperation,
+      parameters = JSONObject().put("operation", normalizedOperation).toString(),
+      result = raw.toString(),
+    )
+  }
+
+  private fun runMiniMaxOperationSync(
+    operation: String,
+    prompt: String = "",
+    text: String = "",
+    query: String = "",
+    inputPath: String = "",
+    outputPath: String = "",
+  ): Map<String, Any> {
+    return runBlocking(Dispatchers.IO) {
+      runMiniMaxOperation(
+        operation = operation,
+        prompt = prompt,
+        text = text,
+        query = query,
+        inputPath = inputPath,
+        outputPath = outputPath,
+      )
+    }
+  }
+
   fun executeCompatToolCall(
     toolName: String,
     arguments: JSONObject,
@@ -983,6 +1159,108 @@ open class AgentTools() : ToolSet {
                   defaultValue = "",
                 ),
             )
+        "minimax_generate_text",
+        "minimax_text" ->
+          runMiniMaxOperationSync(
+            operation = "minimax_generate_text",
+            prompt =
+              getRequiredStringArgument(
+                arguments = arguments,
+                names = listOf("prompt", "text", "content", "message"),
+              ),
+          )
+        "minimax_generate_image" ->
+          runMiniMaxOperationSync(
+            operation = "minimax_generate_image",
+            prompt =
+              getRequiredStringArgument(
+                arguments = arguments,
+                names = listOf("prompt", "description", "text", "提示词"),
+              ),
+            outputPath =
+              getOptionalStringArgument(
+                arguments = arguments,
+                names = listOf("output_path", "outputPath", "path"),
+                defaultValue = "",
+              ),
+          )
+        "minimax_tts_synthesize",
+        "minimax_text_to_speech" ->
+          runMiniMaxOperationSync(
+            operation = "minimax_tts_synthesize",
+            text =
+              getOptionalStringArgument(
+                arguments = arguments,
+                names = listOf("text", "content", "input"),
+                defaultValue = "",
+              ),
+            inputPath =
+              getOptionalStringArgument(
+                arguments = arguments,
+                names = listOf("input_path", "inputPath", "source_path", "sourcePath", "path"),
+                defaultValue = "",
+              ),
+            outputPath =
+              getOptionalStringArgument(
+                arguments = arguments,
+                names = listOf("output_path", "outputPath"),
+                defaultValue = "",
+              ),
+          )
+        "minimax_generate_music" ->
+          runMiniMaxOperationSync(
+            operation = "minimax_generate_music",
+            prompt =
+              getRequiredStringArgument(
+                arguments = arguments,
+                names = listOf("prompt", "description", "text", "提示词"),
+              ),
+            outputPath =
+              getOptionalStringArgument(
+                arguments = arguments,
+                names = listOf("output_path", "outputPath", "path"),
+                defaultValue = "",
+              ),
+          )
+        "minimax_analyze_image" ->
+          runMiniMaxOperationSync(
+            operation = "minimax_analyze_image",
+            inputPath =
+              getRequiredStringArgument(
+                arguments = arguments,
+                names = listOf("input_path", "inputPath", "path", "image_path", "imagePath"),
+              ),
+            prompt =
+              getOptionalStringArgument(
+                arguments = arguments,
+                names = listOf("prompt", "question", "query"),
+                defaultValue = "",
+              ),
+          )
+        "minimax_analyze_video" ->
+          runMiniMaxOperationSync(
+            operation = "minimax_analyze_video",
+            inputPath =
+              getRequiredStringArgument(
+                arguments = arguments,
+                names = listOf("input_path", "inputPath", "path", "video_path", "videoPath"),
+              ),
+            prompt =
+              getOptionalStringArgument(
+                arguments = arguments,
+                names = listOf("prompt", "question", "query"),
+                defaultValue = "",
+              ),
+          )
+        "minimax_search_web" ->
+          runMiniMaxOperationSync(
+            operation = "minimax_search_web",
+            query =
+              getRequiredStringArgument(
+                arguments = arguments,
+                names = listOf("query", "q", "search_query", "searchQuery", "topic"),
+              ),
+          )
         TAVILY_SEARCH_SKILL_NAME,
         EXA_SEARCH_SKILL_NAME,
         LANGSEARCH_SEARCH_SKILL_NAME ->
@@ -1435,6 +1713,36 @@ private fun buildConfiguredIntentResult(
       flattened["summary"] =
         "Generated ${if (operation == "agnes_generate_image") "image" else "video"} with ${flattened["model"] ?: "Agnes"} to ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
     }
+    "minimax_generate_text",
+    "minimax_generate_image",
+    "minimax_tts_synthesize",
+    "minimax_generate_music",
+    "minimax_analyze_image",
+    "minimax_analyze_video",
+    "minimax_search_web",
+    "minimax_list_voices" -> {
+      putIfNotBlank(flattened, "prompt", payload.optString("prompt"))
+      putIfNotBlank(flattened, "query", payload.optString("query"))
+      putIfNotBlank(flattened, "model", payload.optString("model"))
+      putIfNotBlank(flattened, "voice", payload.optString("voice"))
+      putIfNotBlank(flattened, "url", payload.optString("url"))
+      putIfNotBlank(flattened, "content", payload.optString("content"))
+      putIfNotBlank(flattened, "results", payload.optJSONArray("results")?.toString().orEmpty())
+      putIfNotBlank(flattened, "voices", payload.optJSONArray("voices")?.toString().orEmpty())
+      flattened["bytes_written"] = payload.optLong("bytes_written", 0L)
+      flattened["summary"] =
+        when (operation) {
+          "minimax_generate_text" -> "Generated text with ${flattened["model"] ?: "MiniMax"}."
+          "minimax_generate_image" -> "Generated MiniMax image to ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
+          "minimax_tts_synthesize" -> "Synthesized MiniMax speech to ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
+          "minimax_generate_music" -> "Generated MiniMax music to ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
+          "minimax_analyze_image" -> "Analyzed image ${flattened["path"] ?: ""} with ${flattened["model"] ?: "MiniMax"}."
+          "minimax_analyze_video" -> "Analyzed video ${flattened["path"] ?: ""} with ${flattened["model"] ?: "MiniMax"}."
+          "minimax_search_web" -> "Searched MiniMax web for ${flattened["query"] ?: "query"}."
+          "minimax_list_voices" -> "Listed curated MiniMax voices."
+          else -> "MiniMax operation completed."
+        }
+    }
     "edge_tts_synthesize" -> {
       flattened["voice"] = payload.optString("voice")
       flattened["input_path"] = payload.optString("input_path")
@@ -1484,6 +1792,8 @@ private fun putIfNotBlank(target: MutableMap<String, Any>, key: String, value: S
 
 private fun buildRecoveryHint(operation: String, error: String): String {
   return when {
+    operation.startsWith("minimax_") ->
+      "Check the MiniMax API key, China-region host, workspace folder, enabled skill state, and file path. For TTS from an existing file, retry with input_path directly."
     operation == "agnes_generate_image" || operation == "agnes_generate_video" ->
       "Check the Agnes API key, workspace folder, prompt, and network. Retry with a concise prompt and optional output_path."
     operation == "edge_tts_synthesize" && error.contains("HTTP 403", ignoreCase = true) ->

@@ -591,6 +591,15 @@ private fun buildAvailableCompatToolsList(selectedSkillNames: Set<String>): Stri
     tools += "- generate_agnes_image arguments: {\"prompt\":\"image prompt\",\"output_path\":\"media/image.png\"} . Generates an image using the configured Agnes model, size, and ratio, then saves it into the workspace media folder."
     tools += "- generate_agnes_video arguments: {\"prompt\":\"video prompt\",\"output_path\":\"media/video.mp4\"} . Generates a video using the configured Agnes model, duration, and resolution, then saves it into the workspace media folder."
   }
+  if (selectedSkillNames.contains(MINIMAX_OMNI_SKILL_NAME)) {
+    tools += "- minimax_generate_text arguments: {\"prompt\":\"question or writing task\"} . Generates text using the configured MiniMax text model."
+    tools += "- minimax_generate_image arguments: {\"prompt\":\"image prompt\",\"output_path\":\"media/image.jpg\"} . Generates one image using the configured MiniMax image ratio, then saves it into the workspace media folder."
+    tools += "- minimax_tts_synthesize arguments: {\"input_path\":\"file/story.txt\",\"output_path\":\"media/speech.mp3\"} . Synthesizes speech with the configured MiniMax voice. If the text is already in a workspace file, MUST pass input_path directly and MUST NOT read the file first or copy its full text into text."
+    tools += "- minimax_generate_music arguments: {\"prompt\":\"music style prompt\",\"output_path\":\"media/music.mp3\"} . Generates music using the configured MiniMax music mode and saves it into the workspace media folder. This may take several minutes; wait for the tool result."
+    tools += "- minimax_analyze_image arguments: {\"input_path\":\"media/photo.jpg\",\"prompt\":\"describe this image\"} . Analyzes a workspace image and returns a concise description."
+    tools += "- minimax_analyze_video arguments: {\"input_path\":\"media/video.mp4\",\"prompt\":\"describe this video\"} . Analyzes a workspace video with the configured MiniMax video model and returns a concise description."
+    tools += "- minimax_search_web arguments: {\"query\":\"search keywords\"} . Searches the web using MiniMax Token Plan search and returns compact results."
+  }
   if (selectedSkillNames.contains(FILE_WORKSPACE_SKILL_NAME)) {
     tools += "- list_workspace arguments: {\"path\":\".\"} . Lists files in the mounted workspace."
     tools +=

@@ -788,6 +788,14 @@ fun SkillManagerBottomSheet(
               skillToConfigure = null
             },
           )
+        isMiniMaxSkill(skill.name) ->
+          MiniMaxOmniConfigDialog(
+            dataStoreRepository = skillManagerViewModel.dataStoreRepository,
+            onDismiss = {
+              showSkillConfigDialog = false
+              skillToConfigure = null
+            },
+          )
       }
     }
   }
