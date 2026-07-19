@@ -266,6 +266,46 @@ class AgentToolingTest {
   }
 
   @Test
+  fun compatPromptOnlyAdvertisesEnabledMediaToolboxModes() {
+    val withoutMediaToolbox =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("minimax-omni: MiniMax multimodal tools"),
+      )
+    val imageOnly =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("media-toolbox: local media processing"),
+        mediaToolboxConfig =
+          MediaToolboxConfig(
+            imageModeEnabled = true,
+            audioModeEnabled = false,
+            videoModeEnabled = false,
+          ),
+      )
+    val audioAndVideo =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("media-toolbox: local media processing"),
+        mediaToolboxConfig =
+          MediaToolboxConfig(
+            imageModeEnabled = false,
+            audioModeEnabled = true,
+            videoModeEnabled = true,
+          ),
+      )
+
+    assertFalse(withoutMediaToolbox.contains("media_image_info"))
+    assertTrue(imageOnly.contains("media_image_info"))
+    assertTrue(imageOnly.contains("media_image_to_video"))
+    assertFalse(imageOnly.contains("media_audio_info"))
+    assertFalse(imageOnly.contains("media_video_info"))
+    assertFalse(audioAndVideo.contains("media_image_info"))
+    assertTrue(audioAndVideo.contains("media_audio_mix"))
+    assertTrue(audioAndVideo.contains("media_video_add_audio"))
+  }
+
+  @Test
   fun edgeTtsVoiceListIsCuratedAndMediaPathDefaults() {
     assertTrue(AgentEdgeTtsSupport.voices.size <= 15)
     assertTrue(AgentEdgeTtsSupport.voices.any { it.id == "zh-CN-XiaoxiaoNeural" })

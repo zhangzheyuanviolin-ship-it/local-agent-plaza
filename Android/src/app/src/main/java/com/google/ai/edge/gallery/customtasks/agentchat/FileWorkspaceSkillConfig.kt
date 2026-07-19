@@ -30,7 +30,11 @@ data class FileWorkspaceConfig(
 )
 
 fun hasSkillConfig(skillName: String): Boolean {
-  return isSearchSkill(skillName) || isWorkspaceSkill(skillName) || isAgnesSkill(skillName) || isMiniMaxSkill(skillName)
+  return isSearchSkill(skillName) ||
+    isWorkspaceSkill(skillName) ||
+    isAgnesSkill(skillName) ||
+    isMiniMaxSkill(skillName) ||
+    isMediaToolboxSkill(skillName)
 }
 
 fun isWorkspaceSkill(skillName: String): Boolean {

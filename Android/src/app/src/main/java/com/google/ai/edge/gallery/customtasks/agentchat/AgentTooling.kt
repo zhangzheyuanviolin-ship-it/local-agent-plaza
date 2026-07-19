@@ -129,6 +129,7 @@ fun createAgentSessionConfig(
           buildCompatAgentInstructionPayload(
             baseSystemPrompt = baseSystemPrompt,
             selectedSkills = skillManagerViewModel.getSelectedSkills(),
+            mediaToolboxConfig = readMediaToolboxConfig(skillManagerViewModel.dataStoreRepository),
           ),
       )
   }
@@ -519,6 +520,7 @@ private fun getOptionalJsonObjectFromJson(json: JSONObject, names: List<String>)
 internal fun buildCompatAgentInstructionPayload(
   baseSystemPrompt: String,
   selectedSkills: List<Skill>,
+  mediaToolboxConfig: MediaToolboxConfig = MediaToolboxConfig(),
 ): String {
   val selectedSkillsList =
     selectedSkills.joinToString(separator = "\n") { "- ${it.name}: ${it.description}" }
@@ -526,18 +528,19 @@ internal fun buildCompatAgentInstructionPayload(
   val selectedSkillNames = selectedSkills.map { it.name.trim().lowercase() }.toSet()
   return buildCompatAgentInstructionPayloadFromSummary(
     selectedSkillsList = selectedSkillsList,
-    availableToolsList = buildAvailableCompatToolsList(selectedSkillNames),
+    availableToolsList = buildAvailableCompatToolsList(selectedSkillNames, mediaToolboxConfig),
   )
 }
 
 internal fun buildCompatAgentInstructionPayloadForTest(
   baseSystemPrompt: String,
   selectedSkillSummaries: List<String>,
+  mediaToolboxConfig: MediaToolboxConfig = MediaToolboxConfig(),
 ): String {
   val selectedSkillNames = selectedSkillSummaries.map { it.substringBefore(":").trim().lowercase() }.toSet()
   return buildCompatAgentInstructionPayloadFromSummary(
     selectedSkillsList = selectedSkillSummaries.joinToString("\n") { "- $it" },
-    availableToolsList = buildAvailableCompatToolsList(selectedSkillNames),
+    availableToolsList = buildAvailableCompatToolsList(selectedSkillNames, mediaToolboxConfig),
   )
 }
 
@@ -571,7 +574,10 @@ $selectedSkillsList
     .trimIndent()
 }
 
-private fun buildAvailableCompatToolsList(selectedSkillNames: Set<String>): String {
+private fun buildAvailableCompatToolsList(
+  selectedSkillNames: Set<String>,
+  mediaToolboxConfig: MediaToolboxConfig,
+): String {
   val tools = mutableListOf<String>()
   if (
     selectedSkillNames.contains(EXA_SEARCH_SKILL_NAME) ||
@@ -599,6 +605,30 @@ private fun buildAvailableCompatToolsList(selectedSkillNames: Set<String>): Stri
     tools += "- minimax_analyze_image arguments: {\"input_path\":\"media/photo.jpg\",\"prompt\":\"describe this image\"} . Analyzes a workspace image and returns a concise description."
     tools += "- minimax_analyze_video arguments: {\"input_path\":\"media/video.mp4\",\"prompt\":\"describe this video\"} . Analyzes a workspace video with the configured MiniMax video model and returns a concise description."
     tools += "- minimax_search_web arguments: {\"query\":\"search keywords\"} . Searches the web using MiniMax Token Plan search and returns compact results."
+  }
+  if (selectedSkillNames.contains(MEDIA_TOOLBOX_SKILL_NAME)) {
+    if (mediaToolboxConfig.imageModeEnabled) {
+      tools += "- media_image_info arguments: {\"input_path\":\"media/photo.jpg\"} . Reads width, height, MIME type, resolution, and file size for a workspace image."
+      tools += "- media_image_resize arguments: {\"input_path\":\"media/photo.jpg\",\"target\":\"1080p\",\"output_path\":\"media/photo-1080.jpg\"} . Resizes an image. target can be 512, 720p, 1080p, or 4k; width and height are also accepted."
+      tools += "- media_image_convert arguments: {\"input_path\":\"media/photo.jpg\",\"target_format\":\"png\",\"output_path\":\"media/photo.png\"} . Converts image format to jpg, png, or webp."
+      tools += "- media_image_to_video arguments: {\"input_path\":\"media/photo.jpg\",\"duration_seconds\":5,\"output_path\":\"media/photo-loop.mp4\"} . Turns one image into a short MP4 video."
+    }
+    if (mediaToolboxConfig.audioModeEnabled) {
+      tools += "- media_audio_info arguments: {\"input_path\":\"media/audio.mp3\"} . Reads duration, MIME type, bitrate, audio-track state, and file size."
+      tools += "- media_audio_convert arguments: {\"input_path\":\"media/audio.mp3\",\"target_format\":\"wav\",\"output_path\":\"media/audio.wav\"} . Converts audio format to mp3, wav, m4a, aac, ogg, or flac."
+      tools += "- media_audio_concat arguments: {\"input_paths\":[\"media/a.mp3\",\"media/b.mp3\"],\"output_path\":\"media/combined.mp3\"} . Concatenates 2 to 5 audio files in order."
+      tools += "- media_audio_trim arguments: {\"input_path\":\"media/audio.mp3\",\"start\":\"00:10\",\"end\":\"00:30\",\"output_path\":\"media/clip.mp3\"} . Clips one audio segment. Time can be seconds, mm:ss, or hh:mm:ss."
+      tools += "- media_audio_mix arguments: {\"primary_path\":\"media/voice.mp3\",\"secondary_path\":\"media/music.mp3\",\"secondary_volume\":0.3,\"loop_secondary\":true,\"output_path\":\"media/mix.mp3\"} . Mixes two audio tracks; supports volume, delayed secondary_start, and looping background."
+    }
+    if (mediaToolboxConfig.videoModeEnabled) {
+      tools += "- media_video_info arguments: {\"input_path\":\"media/video.mp4\"} . Reads duration, width, height, rotation, MIME type, bitrate, track state, and file size."
+      tools += "- media_video_convert arguments: {\"input_path\":\"media/video.mov\",\"target_format\":\"mp4\",\"output_path\":\"media/video.mp4\"} . Converts video format to mp4, mov, mkv, or webm."
+      tools += "- media_video_concat arguments: {\"input_paths\":[\"media/a.mp4\",\"media/b.mp4\"],\"output_path\":\"media/combined.mp4\"} . Concatenates 2 to 5 similar video files in order."
+      tools += "- media_video_trim arguments: {\"input_path\":\"media/video.mp4\",\"start\":\"5\",\"end\":\"12.5\",\"output_path\":\"media/clip.mp4\"} . Clips one video segment. Time can be seconds, mm:ss, or hh:mm:ss."
+      tools += "- media_video_extract_audio arguments: {\"input_path\":\"media/video.mp4\",\"target_format\":\"mp3\",\"output_path\":\"media/audio.mp3\"} . Extracts a video's audio track."
+      tools += "- media_video_mute arguments: {\"input_path\":\"media/video.mp4\",\"output_path\":\"media/muted.mp4\"} . Removes the video's audio track."
+      tools += "- media_video_add_audio arguments: {\"video_path\":\"media/video.mp4\",\"audio_path\":\"media/music.mp3\",\"audio_volume\":0.6,\"output_path\":\"media/video-music.mp4\"} . Adds external audio while preserving original audio when present."
+    }
   }
   if (selectedSkillNames.contains(FILE_WORKSPACE_SKILL_NAME)) {
     tools += "- list_workspace arguments: {\"path\":\".\"} . Lists files in the mounted workspace."

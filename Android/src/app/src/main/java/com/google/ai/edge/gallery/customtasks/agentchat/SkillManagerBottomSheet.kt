@@ -796,6 +796,14 @@ fun SkillManagerBottomSheet(
               skillToConfigure = null
             },
           )
+        isMediaToolboxSkill(skill.name) ->
+          MediaToolboxConfigDialog(
+            dataStoreRepository = skillManagerViewModel.dataStoreRepository,
+            onDismiss = {
+              showSkillConfigDialog = false
+              skillToConfigure = null
+            },
+          )
       }
     }
   }

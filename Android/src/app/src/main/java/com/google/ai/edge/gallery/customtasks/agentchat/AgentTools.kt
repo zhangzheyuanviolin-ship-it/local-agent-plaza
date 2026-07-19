@@ -474,6 +474,12 @@ open class AgentTools() : ToolSet {
           outputPath = request.optString("output_path"),
         )
       }
+      if (skill.name == MEDIA_TOOLBOX_SKILL_NAME) {
+        return@runBlocking runMediaToolboxOperation(
+          operation = intent,
+          parameters = JSONObject(parameters.ifBlank { "{}" }),
+        )
+      }
 
       _actionChannel.send(
         SkillProgressAgentAction(
@@ -977,6 +983,75 @@ open class AgentTools() : ToolSet {
     }
   }
 
+  private suspend fun runMediaToolboxOperation(
+    operation: String,
+    parameters: JSONObject,
+  ): Map<String, Any> {
+    val normalizedOperation = operation.trim().lowercase()
+    if (!skillManagerViewModel.isSkillSelected(MEDIA_TOOLBOX_SKILL_NAME)) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "Skill \"$MEDIA_TOOLBOX_SKILL_NAME\" is disabled. Enable it before using media tools.",
+      )
+    }
+    val workspaceConfig = readFileWorkspaceConfig(skillManagerViewModel.dataStoreRepository)
+    if (workspaceConfig.treeUri.isBlank()) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "No workspace folder is configured.",
+        "recovery_hint" to "Configure the file workspace folder before using Media Toolbox.",
+      )
+    }
+    val config = readMediaToolboxConfig(skillManagerViewModel.dataStoreRepository)
+    _actionChannel.send(
+      SkillProgressAgentAction(
+        label = "Running Media Toolbox",
+        inProgress = true,
+        addItemTitle = "Media Toolbox",
+        addItemDescription = "Operation: $normalizedOperation",
+      )
+    )
+    val raw =
+      try {
+        AgentMediaToolboxSupport.run(
+          context = context,
+          workspaceConfig = workspaceConfig,
+          config = config,
+          operation = normalizedOperation,
+          parameters = parameters,
+        )
+      } catch (e: Exception) {
+        JSONObject()
+          .put("status", "failed")
+          .put("operation", normalizedOperation)
+          .put("error", e.message ?: "Media Toolbox operation failed.")
+      }
+    _actionChannel.send(
+      SkillProgressAgentAction(
+        label = "Media Toolbox finished",
+        inProgress = false,
+        addItemTitle = "Media Toolbox result",
+        addItemDescription = raw.toString().take(500),
+      )
+    )
+    return buildConfiguredIntentResult(
+      intent = normalizedOperation,
+      parameters = parameters.put("operation", normalizedOperation).toString(),
+      result = raw.toString(),
+    )
+  }
+
+  private fun runMediaToolboxOperationSync(
+    operation: String,
+    arguments: JSONObject,
+  ): Map<String, Any> {
+    return runBlocking(Dispatchers.IO) {
+      runMediaToolboxOperation(operation = operation, parameters = arguments)
+    }
+  }
+
   fun executeCompatToolCall(
     toolName: String,
     arguments: JSONObject,
@@ -1261,6 +1336,23 @@ open class AgentTools() : ToolSet {
                 names = listOf("query", "q", "search_query", "searchQuery", "topic"),
               ),
           )
+        "media_image_info",
+        "media_image_resize",
+        "media_image_convert",
+        "media_image_to_video",
+        "media_audio_info",
+        "media_audio_convert",
+        "media_audio_concat",
+        "media_audio_trim",
+        "media_audio_mix",
+        "media_video_info",
+        "media_video_convert",
+        "media_video_concat",
+        "media_video_trim",
+        "media_video_extract_audio",
+        "media_video_mute",
+        "media_video_add_audio" ->
+          runMediaToolboxOperationSync(operation = normalizedToolName, arguments = arguments)
         TAVILY_SEARCH_SKILL_NAME,
         EXA_SEARCH_SKILL_NAME,
         LANGSEARCH_SEARCH_SKILL_NAME ->
@@ -1743,6 +1835,51 @@ private fun buildConfiguredIntentResult(
           else -> "MiniMax operation completed."
         }
     }
+    "media_image_info",
+    "media_image_resize",
+    "media_image_convert",
+    "media_image_to_video",
+    "media_audio_info",
+    "media_audio_convert",
+    "media_audio_concat",
+    "media_audio_trim",
+    "media_audio_mix",
+    "media_video_info",
+    "media_video_convert",
+    "media_video_concat",
+    "media_video_trim",
+    "media_video_extract_audio",
+    "media_video_mute",
+    "media_video_add_audio" -> {
+      putIfNotBlank(flattened, "input_path", payload.optString("input_path"))
+      putIfNotBlank(flattened, "primary_path", payload.optString("primary_path"))
+      putIfNotBlank(flattened, "secondary_path", payload.optString("secondary_path"))
+      putIfNotBlank(flattened, "video_path", payload.optString("video_path"))
+      putIfNotBlank(flattened, "audio_path", payload.optString("audio_path"))
+      putIfNotBlank(flattened, "format", payload.optString("format"))
+      putIfNotBlank(flattened, "mime_type", payload.optString("mime_type"))
+      putIfNotBlank(flattened, "resolution", payload.optString("resolution"))
+      putIfNotBlank(flattened, "start", payload.optString("start"))
+      putIfNotBlank(flattened, "end", payload.optString("end"))
+      flattened["width"] = payload.optInt("width", 0)
+      flattened["height"] = payload.optInt("height", 0)
+      flattened["rotation"] = payload.optInt("rotation", 0)
+      flattened["duration_ms"] = payload.optLong("duration_ms", 0L)
+      flattened["duration_seconds"] = payload.optDouble("duration_seconds", 0.0)
+      flattened["bitrate"] = payload.optLong("bitrate", 0L)
+      flattened["file_bytes"] = payload.optLong("file_bytes", 0L)
+      flattened["bytes_written"] = payload.optLong("bytes_written", 0L)
+      flattened["has_audio"] = payload.optBoolean("has_audio", false)
+      flattened["has_video"] = payload.optBoolean("has_video", false)
+      flattened["input_count"] = payload.optInt("input_count", 0)
+      flattened["summary"] =
+        when (operation) {
+          "media_image_info" -> "Image ${flattened["path"] ?: ""}: ${flattened["width"]}x${flattened["height"]}, ${flattened["mime_type"]}, ${flattened["file_bytes"]} bytes."
+          "media_audio_info" -> "Audio ${flattened["path"] ?: ""}: ${flattened["duration_seconds"]} seconds, ${flattened["mime_type"]}, ${flattened["file_bytes"]} bytes."
+          "media_video_info" -> "Video ${flattened["path"] ?: ""}: ${flattened["width"]}x${flattened["height"]}, ${flattened["duration_seconds"]} seconds, audio=${flattened["has_audio"]}, video=${flattened["has_video"]}."
+          else -> "Media operation $operation completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
+        }
+    }
     "edge_tts_synthesize" -> {
       flattened["voice"] = payload.optString("voice")
       flattened["input_path"] = payload.optString("input_path")
@@ -1792,6 +1929,8 @@ private fun putIfNotBlank(target: MutableMap<String, Any>, key: String, value: S
 
 private fun buildRecoveryHint(operation: String, error: String): String {
   return when {
+    operation.startsWith("media_") ->
+      "Check that Media Toolbox is enabled, the required image/audio/video mode is enabled, the workspace path exists, and the time or format arguments are simple values. Do not write FFmpeg commands; retry with the documented media_* tool arguments."
     operation.startsWith("minimax_") ->
       "Check the MiniMax API key, China-region host, workspace folder, enabled skill state, and file path. For TTS from an existing file, retry with input_path directly."
     operation == "agnes_generate_image" || operation == "agnes_generate_video" ->
