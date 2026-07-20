@@ -582,9 +582,17 @@ private fun buildAvailableCompatToolsList(
   if (
     selectedSkillNames.contains(EXA_SEARCH_SKILL_NAME) ||
       selectedSkillNames.contains(TAVILY_SEARCH_SKILL_NAME) ||
-      selectedSkillNames.contains(LANGSEARCH_SEARCH_SKILL_NAME)
+      selectedSkillNames.contains(LANGSEARCH_SEARCH_SKILL_NAME) ||
+      selectedSkillNames.contains(ANYSEARCH_SEARCH_SKILL_NAME)
   ) {
     tools += "- search_web arguments: {\"query\":\"...\"} . Searches the web using an enabled search skill selected by the app."
+  }
+  if (selectedSkillNames.contains(ANYSEARCH_SEARCH_SKILL_NAME)) {
+    tools += "- anysearch_extract arguments: {\"url\":\"https://example.com/page\"} . Extracts a full web page through AnySearch and returns compact Markdown-like content."
+    tools += "- anysearch_get_sub_domains arguments: {\"domain\":\"finance\"} . Lists AnySearch vertical sub-domains when vertical search is enabled in settings."
+  }
+  if (selectedSkillNames.contains(WEB_PAGE_EXTRACT_SKILL_NAME)) {
+    tools += "- extract_web_page arguments: {\"url\":\"https://example.com/page\",\"max_chars\":12000} . Fetches an HTML page directly and extracts title, description, and readable Markdown-like content."
   }
   if (selectedSkillNames.contains(WEATHER_QUERY_SKILL_NAME)) {
     tools += "- query_weather arguments: {\"location\":\"昆明\",\"mode\":\"current|24h|week\"} . Gets current weather, next 24 hours, or next 7 days. Use a city name for stable results; use location=current only when the user asks for current device location. If current location is unavailable, ask for a city name instead of guessing."

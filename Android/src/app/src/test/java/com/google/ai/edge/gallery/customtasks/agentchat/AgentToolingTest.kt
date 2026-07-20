@@ -306,6 +306,33 @@ class AgentToolingTest {
   }
 
   @Test
+  fun compatPromptAdvertisesAnySearchAndWebPageExtractionOnlyWhenEnabled() {
+    val withoutNewWebSkills =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("media-toolbox: local media processing"),
+      )
+    val withAnySearch =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("anysearch-search: AnySearch web search"),
+      )
+    val withWebExtract =
+      buildCompatAgentInstructionPayloadForTest(
+        baseSystemPrompt = "You are helpful.",
+        selectedSkillSummaries = listOf("web-page-extract: extract web page content"),
+      )
+
+    assertFalse(withoutNewWebSkills.contains("anysearch_extract"))
+    assertFalse(withoutNewWebSkills.contains("extract_web_page"))
+    assertTrue(withAnySearch.contains("search_web"))
+    assertTrue(withAnySearch.contains("anysearch_extract"))
+    assertTrue(withAnySearch.contains("anysearch_get_sub_domains"))
+    assertTrue(withWebExtract.contains("extract_web_page"))
+    assertFalse(withWebExtract.contains("anysearch_extract"))
+  }
+
+  @Test
   fun edgeTtsVoiceListIsCuratedAndMediaPathDefaults() {
     assertTrue(AgentEdgeTtsSupport.voices.size <= 15)
     assertTrue(AgentEdgeTtsSupport.voices.any { it.id == "zh-CN-XiaoxiaoNeural" })

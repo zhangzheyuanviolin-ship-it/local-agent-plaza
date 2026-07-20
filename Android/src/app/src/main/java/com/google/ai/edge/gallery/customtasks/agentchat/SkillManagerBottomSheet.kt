@@ -804,6 +804,15 @@ fun SkillManagerBottomSheet(
               skillToConfigure = null
             },
           )
+        isAnySearchSkill(skill.name) ->
+          SearchSkillConfigDialog(
+            skill = skill,
+            dataStoreRepository = skillManagerViewModel.dataStoreRepository,
+            onDismiss = {
+              showSkillConfigDialog = false
+              skillToConfigure = null
+            },
+          )
       }
     }
   }

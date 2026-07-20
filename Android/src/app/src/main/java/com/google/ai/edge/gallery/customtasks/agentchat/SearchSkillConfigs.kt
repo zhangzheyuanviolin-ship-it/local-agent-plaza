@@ -28,7 +28,7 @@ const val EXA_SEARCH_SKILL_NAME = "exa-search"
 const val LANGSEARCH_SEARCH_SKILL_NAME = "langsearch-search"
 
 val SEARCH_SKILL_NAMES =
-  setOf(TAVILY_SEARCH_SKILL_NAME, EXA_SEARCH_SKILL_NAME, LANGSEARCH_SEARCH_SKILL_NAME)
+  setOf(TAVILY_SEARCH_SKILL_NAME, EXA_SEARCH_SKILL_NAME, LANGSEARCH_SEARCH_SKILL_NAME, ANYSEARCH_SEARCH_SKILL_NAME)
 
 fun isSearchSkill(skillName: String): Boolean {
   return SEARCH_SKILL_NAMES.contains(skillName)
@@ -200,7 +200,7 @@ private fun parseLangSearchConfig(json: String): LangSearchConfig {
   )
 }
 
-private fun clampSearchResultCount(value: Int): Int {
+fun clampSearchResultCount(value: Int): Int {
   return SEARCH_RESULT_COUNT_OPTIONS.minByOrNull { kotlin.math.abs(it - value) } ?: 3
 }
 

@@ -236,6 +236,43 @@ fun SearchSkillConfigDialog(
         )
       }
     }
+    ANYSEARCH_SEARCH_SKILL_NAME -> {
+      var resultCount by remember {
+        mutableIntStateOf(readAnySearchConfig(dataStoreRepository).resultCount)
+      }
+      var domainMode by remember {
+        mutableStateOf(readAnySearchConfig(dataStoreRepository).domainMode)
+      }
+      SearchConfigDialogFrame(
+        title = "AnySearch 设置",
+        subtitle = "AnySearch 使用官方 JSON-RPC API。模型通常只需要传入 query；如启用垂直领域，模型可在必要时传入 domain、sub_domain 和 sub_domain_params。",
+        onDismiss = onDismiss,
+        onSave = {
+          saveAnySearchConfig(
+            dataStoreRepository,
+            AnySearchConfig(resultCount = resultCount, domainMode = domainMode),
+          )
+          onDismiss()
+        },
+      ) {
+        IntChoiceSection(
+          title = stringResource(R.string.search_config_result_count_title),
+          description = stringResource(R.string.search_config_result_count_description),
+          selectedValue = resultCount,
+          options = SEARCH_RESULT_COUNT_OPTIONS,
+          onSelected = { resultCount = it },
+        )
+        ChoiceSection(
+          title = "领域模式",
+          description = "通用搜索最省心；垂直领域模式用于金融、学术、法律、代码、安全等结构化搜索。",
+          selectedValue = domainMode.value,
+          options = AnySearchDomainMode.entries.map { it.value to it.label },
+          onSelected = { selected ->
+            domainMode = AnySearchDomainMode.entries.first { it.value == selected }
+          },
+        )
+      }
+    }
   }
 }
 

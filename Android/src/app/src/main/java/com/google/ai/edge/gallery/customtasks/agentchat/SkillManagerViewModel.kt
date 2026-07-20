@@ -232,7 +232,9 @@ constructor(
                       builtInSelectionMap[it.name] ?: if (
                         it.name == AGNES_OMNI_SKILL_NAME ||
                           it.name == MINIMAX_OMNI_SKILL_NAME ||
-                          it.name == MEDIA_TOOLBOX_SKILL_NAME
+                          it.name == MEDIA_TOOLBOX_SKILL_NAME ||
+                          it.name == ANYSEARCH_SEARCH_SKILL_NAME ||
+                          it.name == WEB_PAGE_EXTRACT_SKILL_NAME
                       ) false else true
                     builtInSkills.add(it.toBuilder().setSelected(selectedState).build())
                     Log.d(TAG, "Added built-in skill: ${it.name}")

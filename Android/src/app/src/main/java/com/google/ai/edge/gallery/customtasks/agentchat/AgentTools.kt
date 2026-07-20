@@ -474,6 +474,17 @@ open class AgentTools() : ToolSet {
           outputPath = request.optString("output_path"),
         )
       }
+      if (skill.name == ANYSEARCH_SEARCH_SKILL_NAME) {
+        return@runBlocking runAnySearchOperation(
+          operation = intent,
+          parameters = JSONObject(parameters.ifBlank { "{}" }),
+        )
+      }
+      if (skill.name == WEB_PAGE_EXTRACT_SKILL_NAME) {
+        return@runBlocking runWebPageExtractOperation(
+          parameters = JSONObject(parameters.ifBlank { "{}" }),
+        )
+      }
       if (skill.name == MEDIA_TOOLBOX_SKILL_NAME) {
         return@runBlocking runMediaToolboxOperation(
           operation = intent,
@@ -1052,6 +1063,174 @@ open class AgentTools() : ToolSet {
     }
   }
 
+  private suspend fun runAnySearchOperation(
+    operation: String,
+    parameters: JSONObject,
+  ): Map<String, Any> {
+    val normalizedOperation = operation.trim().lowercase()
+    if (!skillManagerViewModel.isSkillSelected(ANYSEARCH_SEARCH_SKILL_NAME)) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "Skill \"$ANYSEARCH_SEARCH_SKILL_NAME\" is disabled. Enable it before using AnySearch.",
+      )
+    }
+    val secret =
+      skillManagerViewModel.dataStoreRepository.readSecret(
+        getSkillSecretKey(ANYSEARCH_SEARCH_SKILL_NAME)
+      ) ?: ""
+    if (secret.trim().isBlank()) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "AnySearch API key is not configured.",
+        "recovery_hint" to "Open the skill manager, enable AnySearch, and fill its API key.",
+      )
+    }
+    val config = readAnySearchConfig(skillManagerViewModel.dataStoreRepository)
+    _actionChannel.send(
+      SkillProgressAgentAction(
+        label = "Running AnySearch",
+        inProgress = true,
+        addItemTitle = "AnySearch",
+        addItemDescription = "Operation: $normalizedOperation",
+      )
+    )
+    val raw =
+      try {
+        when (normalizedOperation) {
+          "anysearch_search", "search_web", "web_search" ->
+            AgentAnySearchSupport.search(
+              apiKey = secret,
+              config = config,
+              query = parameters.optString("query").ifBlank { parameters.optString("q") },
+              domain = parameters.optString("domain"),
+              subDomain = parameters.optString("sub_domain").ifBlank { parameters.optString("subDomain") },
+              subDomainParams = parameters.optJSONObject("sub_domain_params") ?: parameters.parseObjectOrNull("sub_domain_params"),
+              maxResults = parameters.optIntOrNull("max_results") ?: parameters.optIntOrNull("maxResults"),
+            )
+          "anysearch_extract" ->
+            AgentAnySearchSupport.extract(
+              apiKey = secret,
+              url = parameters.optString("url"),
+            )
+          "anysearch_get_sub_domains" ->
+            AgentAnySearchSupport.getSubDomains(
+              apiKey = secret,
+              domains = parameters.optStringArray("domains"),
+              domain = parameters.optString("domain"),
+            )
+          else -> JSONObject().put("status", "failed").put("operation", normalizedOperation)
+            .put("error", "Unsupported AnySearch operation: $operation")
+        }
+      } catch (e: Exception) {
+        JSONObject()
+          .put("status", "failed")
+          .put("operation", normalizedOperation)
+          .put("error", e.message ?: "AnySearch operation failed.")
+      }
+    _actionChannel.send(
+      SkillProgressAgentAction(
+        label = "AnySearch finished",
+        inProgress = false,
+        addItemTitle = "AnySearch result",
+        addItemDescription = raw.toString().take(500),
+      )
+    )
+    return buildConfiguredIntentResult(
+      intent = raw.optString("operation").ifBlank { normalizedOperation },
+      parameters = parameters.put("operation", normalizedOperation).toString(),
+      result = raw.toString(),
+    )
+  }
+
+  private fun runAnySearchOperationSync(
+    operation: String,
+    arguments: JSONObject,
+  ): Map<String, Any> {
+    return runBlocking(Dispatchers.IO) {
+      runAnySearchOperation(operation = operation, parameters = arguments)
+    }
+  }
+
+  private suspend fun runWebPageExtractOperation(parameters: JSONObject): Map<String, Any> {
+    val normalizedOperation = "extract_web_page"
+    if (!skillManagerViewModel.isSkillSelected(WEB_PAGE_EXTRACT_SKILL_NAME)) {
+      return mapOf(
+        "status" to "failed",
+        "operation" to normalizedOperation,
+        "error" to "Skill \"$WEB_PAGE_EXTRACT_SKILL_NAME\" is disabled. Enable it before extracting web pages.",
+      )
+    }
+    _actionChannel.send(
+      SkillProgressAgentAction(
+        label = "Extracting web page",
+        inProgress = true,
+        addItemTitle = "Web page extraction",
+        addItemDescription = parameters.optString("url"),
+      )
+    )
+    val raw =
+      try {
+        AgentWebPageExtractSupport.extract(
+          url = parameters.optString("url").ifBlank { parameters.optString("link") },
+          maxChars = parameters.optInt("max_chars", parameters.optInt("maxChars", 12000)),
+        )
+      } catch (e: Exception) {
+        JSONObject()
+          .put("status", "failed")
+          .put("operation", normalizedOperation)
+          .put("error", e.message ?: "Web page extraction failed.")
+      }
+    _actionChannel.send(
+      SkillProgressAgentAction(
+        label = "Web page extraction finished",
+        inProgress = false,
+        addItemTitle = "Web page extraction result",
+        addItemDescription = raw.toString().take(500),
+      )
+    )
+    return buildConfiguredIntentResult(
+      intent = normalizedOperation,
+      parameters = parameters.put("operation", normalizedOperation).toString(),
+      result = raw.toString(),
+    )
+  }
+
+  private fun runWebPageExtractOperationSync(arguments: JSONObject): Map<String, Any> {
+    return runBlocking(Dispatchers.IO) {
+      runWebPageExtractOperation(parameters = arguments)
+    }
+  }
+
+  private fun JSONObject.optIntOrNull(name: String): Int? {
+    if (!has(name) || isNull(name)) return null
+    return when (val value = opt(name)) {
+      is Number -> value.toInt()
+      is String -> value.trim().toIntOrNull()
+      else -> null
+    }
+  }
+
+  private fun JSONObject.optStringArray(name: String): List<String> {
+    val array = optJSONArray(name)
+    if (array != null) {
+      return (0 until array.length()).mapNotNull { index ->
+        array.optString(index).trim().takeIf { it.isNotBlank() }
+      }
+    }
+    return optString(name)
+      .split(',')
+      .map { it.trim() }
+      .filter { it.isNotBlank() }
+  }
+
+  private fun JSONObject.parseObjectOrNull(name: String): JSONObject? {
+    val raw = optString(name).trim()
+    if (raw.isBlank()) return null
+    return runCatching { JSONObject(raw) }.getOrNull()
+  }
+
   fun executeCompatToolCall(
     toolName: String,
     arguments: JSONObject,
@@ -1353,9 +1532,17 @@ open class AgentTools() : ToolSet {
         "media_video_mute",
         "media_video_add_audio" ->
           runMediaToolboxOperationSync(operation = normalizedToolName, arguments = arguments)
+        "anysearch_search",
+        "anysearch_extract",
+        "anysearch_get_sub_domains" ->
+          runAnySearchOperationSync(operation = normalizedToolName, arguments = arguments)
+        "extract_web_page",
+        "web_page_extract" ->
+          runWebPageExtractOperationSync(arguments = arguments)
         TAVILY_SEARCH_SKILL_NAME,
         EXA_SEARCH_SKILL_NAME,
-        LANGSEARCH_SEARCH_SKILL_NAME ->
+        LANGSEARCH_SEARCH_SKILL_NAME,
+        ANYSEARCH_SEARCH_SKILL_NAME ->
           runSearchCompatTool(skillName = normalizedToolName, arguments = arguments)
         "search_web",
         "web_search" ->
@@ -1505,7 +1692,7 @@ open class AgentTools() : ToolSet {
       return mapOf(
         "status" to "failed",
         "error" to "Unsupported search skill \"$skillName\".",
-        "recovery_hint" to "Use exa-search, tavily-search, langsearch-search, or search_web.",
+        "recovery_hint" to "Use anysearch-search, exa-search, tavily-search, langsearch-search, or search_web.",
       )
     }
     val selectedSkill = skillManagerViewModel.getSelectedSkills().find { it.name == normalizedSkillName }
@@ -1529,6 +1716,10 @@ open class AgentTools() : ToolSet {
         "recovery_hint" to "Retry with arguments {\"query\":\"...\"}.",
       )
     }
+    if (normalizedSkillName == ANYSEARCH_SEARCH_SKILL_NAME) {
+      val request = JSONObject(arguments.toString()).put("query", query)
+      return runAnySearchOperationSync(operation = "anysearch_search", arguments = request)
+    }
     val data =
       JSONObject(arguments.toString())
         .apply {
@@ -1551,9 +1742,9 @@ open class AgentTools() : ToolSet {
     val selected = skillManagerViewModel.getSelectedSkills().map { it.name }.toSet()
     val preferredOrder =
       if (query.any { it in '\u4e00'..'\u9fff' }) {
-        listOf(LANGSEARCH_SEARCH_SKILL_NAME, EXA_SEARCH_SKILL_NAME, TAVILY_SEARCH_SKILL_NAME)
+        listOf(ANYSEARCH_SEARCH_SKILL_NAME, LANGSEARCH_SEARCH_SKILL_NAME, EXA_SEARCH_SKILL_NAME, TAVILY_SEARCH_SKILL_NAME)
       } else {
-        listOf(EXA_SEARCH_SKILL_NAME, TAVILY_SEARCH_SKILL_NAME, LANGSEARCH_SEARCH_SKILL_NAME)
+        listOf(ANYSEARCH_SEARCH_SKILL_NAME, EXA_SEARCH_SKILL_NAME, TAVILY_SEARCH_SKILL_NAME, LANGSEARCH_SEARCH_SKILL_NAME)
       }
     return preferredOrder
       .firstOrNull { selected.contains(it) }
@@ -1833,6 +2024,28 @@ private fun buildConfiguredIntentResult(
           "minimax_search_web" -> "Searched MiniMax web for ${flattened["query"] ?: "query"}."
           "minimax_list_voices" -> "Listed curated MiniMax voices."
           else -> "MiniMax operation completed."
+        }
+    }
+    "anysearch_search",
+    "anysearch_extract",
+    "anysearch_get_sub_domains",
+    "extract_web_page" -> {
+      putIfNotBlank(flattened, "query", payload.optString("query"))
+      putIfNotBlank(flattened, "url", payload.optString("url"))
+      putIfNotBlank(flattened, "final_url", payload.optString("final_url"))
+      putIfNotBlank(flattened, "title", payload.optString("title"))
+      putIfNotBlank(flattened, "description", payload.optString("description"))
+      putIfNotBlank(flattened, "domain", payload.optString("domain"))
+      putIfNotBlank(flattened, "sub_domain", payload.optString("sub_domain"))
+      putIfNotBlank(flattened, "content", payload.optString("content"))
+      flattened["text_chars"] = payload.optInt("text_chars", payload.optString("content").length)
+      flattened["truncated"] = payload.optBoolean("truncated", false)
+      flattened["summary"] =
+        when (operation) {
+          "anysearch_search" -> "Searched AnySearch for ${flattened["query"] ?: "query"}."
+          "anysearch_extract" -> "Extracted page with AnySearch: ${flattened["url"] ?: ""}."
+          "anysearch_get_sub_domains" -> "Listed AnySearch vertical sub-domains."
+          else -> "Extracted web page ${flattened["title"] ?: flattened["url"] ?: ""}."
         }
     }
     "media_image_info",
