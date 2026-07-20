@@ -235,8 +235,12 @@ object AgentMediaToolboxSupport {
     val root = workspaceRoot(context, workspaceConfig)
     val document = resolveWorkspaceFile(root, inputPath)
     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    context.contentResolver.openInputStream(document.uri)?.use { BitmapFactory.decodeStream(it, null, options) }
-      ?: throw IOException("Failed to open image: $inputPath")
+    val inputStream =
+      context.contentResolver.openInputStream(document.uri)
+        ?: throw IOException("Failed to open image file stream: $inputPath")
+    inputStream.use { input ->
+      BitmapFactory.decodeStream(input, null, options)
+    }
     if (options.outWidth <= 0 || options.outHeight <= 0) {
       throw IOException("Unsupported or unreadable image file: $inputPath")
     }
