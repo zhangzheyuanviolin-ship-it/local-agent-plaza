@@ -1521,11 +1521,14 @@ open class AgentTools() : ToolSet {
         "media_image_to_video",
         "media_audio_info",
         "media_audio_convert",
+        "media_audio_compress",
         "media_audio_concat",
         "media_audio_trim",
         "media_audio_mix",
         "media_video_info",
         "media_video_convert",
+        "media_video_resize",
+        "media_video_compress",
         "media_video_concat",
         "media_video_trim",
         "media_video_extract_audio",
@@ -2054,11 +2057,14 @@ private fun buildConfiguredIntentResult(
     "media_image_to_video",
     "media_audio_info",
     "media_audio_convert",
+    "media_audio_compress",
     "media_audio_concat",
     "media_audio_trim",
     "media_audio_mix",
     "media_video_info",
     "media_video_convert",
+    "media_video_resize",
+    "media_video_compress",
     "media_video_concat",
     "media_video_trim",
     "media_video_extract_audio",
@@ -2072,6 +2078,9 @@ private fun buildConfiguredIntentResult(
       putIfNotBlank(flattened, "format", payload.optString("format"))
       putIfNotBlank(flattened, "mime_type", payload.optString("mime_type"))
       putIfNotBlank(flattened, "resolution", payload.optString("resolution"))
+      putIfNotBlank(flattened, "compression_level", payload.optString("compression_level"))
+      putIfNotBlank(flattened, "target", payload.optString("target"))
+      putIfNotBlank(flattened, "routed_from", payload.optString("routed_from"))
       putIfNotBlank(flattened, "start", payload.optString("start"))
       putIfNotBlank(flattened, "end", payload.optString("end"))
       flattened["width"] = payload.optInt("width", 0)
@@ -2094,6 +2103,8 @@ private fun buildConfiguredIntentResult(
           "media_audio_info" -> "Audio ${flattened["path"] ?: ""}: ${flattened["duration_seconds"]} seconds, ${flattened["mime_type"]}, ${flattened["file_bytes"]} bytes."
           "media_video_info" -> "Video ${flattened["path"] ?: ""}: ${flattened["width"]}x${flattened["height"]}, ${flattened["duration_seconds"]} seconds, audio=${flattened["has_audio"]}, video=${flattened["has_video"]}."
           "media_video_concat" -> "Media operation media_video_concat completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes). Inputs were normalized=${flattened["normalized"]} to ${flattened["target_resolution"] ?: "standard video"} at ${flattened["target_fps"]} fps before joining."
+          "media_audio_compress", "media_video_compress" -> "Media operation $operation completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes). Compression level: ${flattened["compression_level"] ?: "1/2"}."
+          "media_video_resize" -> "Media operation media_video_resize completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes), size ${flattened["width"]}x${flattened["height"]}."
           else -> "Media operation $operation completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
         }
     }
@@ -2147,7 +2158,7 @@ private fun putIfNotBlank(target: MutableMap<String, Any>, key: String, value: S
 private fun buildRecoveryHint(operation: String, error: String): String {
   return when {
     operation.startsWith("media_") ->
-      "Check that Media Toolbox is enabled, the required image/audio/video mode is enabled, the workspace path exists, and the time or format arguments are simple values. Do not write FFmpeg commands; retry with the documented media_* tool arguments."
+      "Check that Media Toolbox is enabled, the required image/audio/video mode is enabled, the workspace path exists, and the time or format arguments are simple values. For video mute or removing video sound, retry with media_video_mute and input_path/output_path. Do not write FFmpeg commands; retry with the documented media_* tool arguments."
     operation.startsWith("minimax_") ->
       "Check the MiniMax API key, China-region host, workspace folder, enabled skill state, and file path. For TTS from an existing file, retry with input_path directly."
     operation == "agnes_generate_image" || operation == "agnes_generate_video" ->

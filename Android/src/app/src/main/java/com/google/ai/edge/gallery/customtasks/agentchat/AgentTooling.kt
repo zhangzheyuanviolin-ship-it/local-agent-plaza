@@ -624,6 +624,7 @@ private fun buildAvailableCompatToolsList(
     if (mediaToolboxConfig.audioModeEnabled) {
       tools += "- media_audio_info arguments: {\"input_path\":\"media/audio.mp3\"} . Reads duration, MIME type, bitrate, audio-track state, and file size."
       tools += "- media_audio_convert arguments: {\"input_path\":\"media/audio.mp3\",\"target_format\":\"wav\",\"output_path\":\"media/audio.wav\"} . Converts audio format to mp3, wav, m4a, aac, ogg, or flac."
+      tools += "- media_audio_compress arguments: {\"input_path\":\"media/audio.mp3\",\"compression_level\":\"1/2\",\"output_path\":\"media/audio-small.mp3\"} . Compresses audio using simple levels: 1/2, 1/3, or 1/4."
       tools += "- media_audio_concat arguments: {\"input_paths\":[\"media/a.mp3\",\"media/b.mp3\"],\"output_path\":\"media/combined.mp3\"} . Concatenates 2 to 5 audio files in order."
       tools += "- media_audio_trim arguments: {\"input_path\":\"media/audio.mp3\",\"start\":\"00:10\",\"end\":\"00:30\",\"output_path\":\"media/clip.mp3\"} . Clips one audio segment. Time can be seconds, mm:ss, or hh:mm:ss."
       tools += "- media_audio_mix arguments: {\"primary_path\":\"media/voice.mp3\",\"secondary_path\":\"media/music.mp3\",\"secondary_volume\":0.3,\"loop_secondary\":true,\"output_path\":\"media/mix.mp3\"} . Mixes two audio tracks; supports volume, delayed secondary_start, and looping background."
@@ -631,10 +632,12 @@ private fun buildAvailableCompatToolsList(
     if (mediaToolboxConfig.videoModeEnabled) {
       tools += "- media_video_info arguments: {\"input_path\":\"media/video.mp4\"} . Reads duration, width, height, rotation, MIME type, bitrate, track state, and file size."
       tools += "- media_video_convert arguments: {\"input_path\":\"media/video.mov\",\"target_format\":\"mp4\",\"output_path\":\"media/video.mp4\"} . Converts video format to mp4, mov, mkv, or webm."
+      tools += "- media_video_resize arguments: {\"input_path\":\"media/video.mp4\",\"target\":\"1080p\",\"output_path\":\"media/video-1080p.mp4\"} . Resizes video. target can be 512, 720p, 1080p, 2k, or 4k; width and height are also accepted."
+      tools += "- media_video_compress arguments: {\"input_path\":\"media/video.mp4\",\"compression_level\":\"1/2\",\"output_path\":\"media/video-small.mp4\"} . Compresses video using simple levels: 1/2, 1/3, or 1/4."
       tools += "- media_video_concat arguments: {\"input_paths\":[\"media/a.mp4\",\"media/b.mp4\"],\"output_path\":\"media/combined.mp4\"} . Concatenates 2 to 5 video files in order; the tool automatically normalizes size, codec, fps, and missing audio before joining."
       tools += "- media_video_trim arguments: {\"input_path\":\"media/video.mp4\",\"start\":\"5\",\"end\":\"12.5\",\"output_path\":\"media/clip.mp4\"} . Clips one video segment. Time can be seconds, mm:ss, or hh:mm:ss."
       tools += "- media_video_extract_audio arguments: {\"input_path\":\"media/video.mp4\",\"target_format\":\"mp3\",\"output_path\":\"media/audio.mp3\"} . Extracts a video's audio track."
-      tools += "- media_video_mute arguments: {\"input_path\":\"media/video.mp4\",\"output_path\":\"media/muted.mp4\"} . Removes the video's audio track."
+      tools += "- media_video_mute arguments: {\"input_path\":\"media/video.mp4\",\"output_path\":\"media/muted.mp4\"} . Removes the video's audio track. For any user request to mute a video, silence a video, remove sound, or make a video silent, MUST use media_video_mute, not media_audio_mix."
       tools += "- media_video_add_audio arguments: {\"video_path\":\"media/video.mp4\",\"audio_path\":\"media/music.mp3\",\"audio_volume\":0.6,\"output_path\":\"media/video-music.mp4\"} . Adds external audio while preserving original audio when present."
     }
   }

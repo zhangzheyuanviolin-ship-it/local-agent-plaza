@@ -116,6 +116,18 @@ object AgentMediaToolboxSupport {
           targetFormat = parameters.optString("target_format").ifBlank { parameters.optString("format") },
         )
       }
+      "media_audio_compress" -> {
+        requireMode(config, Mode.AUDIO)
+        audioCompress(
+          context = context,
+          workspaceConfig = workspaceConfig,
+          config = config,
+          inputPath = parameters.requirePath("input_path", "path", "audio_path"),
+          outputPath = parameters.optString("output_path"),
+          level = parameters.optString("compression_level").ifBlank { parameters.optString("level") },
+          targetFormat = parameters.optString("target_format").ifBlank { parameters.optString("format") },
+        )
+      }
       "media_audio_concat" -> {
         requireMode(config, Mode.AUDIO)
         audioConcat(
@@ -140,6 +152,24 @@ object AgentMediaToolboxSupport {
         )
       }
       "media_audio_mix" -> {
+        val primaryCandidate = parameters.optString("primary_path").ifBlank {
+          parameters.optString("input_path").ifBlank {
+            parameters.optString("video_path").ifBlank { parameters.optString("path") }
+          }
+        }
+        val secondaryCandidate = parameters.optString("secondary_path").ifBlank {
+          parameters.optString("overlay_path").ifBlank { parameters.optString("background_path") }
+        }
+        if (secondaryCandidate.isBlank() && looksLikeVideoPath(primaryCandidate)) {
+          requireMode(config, Mode.VIDEO)
+          return videoMute(
+            context = context,
+            workspaceConfig = workspaceConfig,
+            config = config,
+            inputPath = primaryCandidate,
+            outputPath = parameters.optString("output_path"),
+          ).put("routed_from", "media_audio_mix")
+        }
         requireMode(config, Mode.AUDIO)
         audioMix(
           context = context,
@@ -168,6 +198,30 @@ object AgentMediaToolboxSupport {
           inputPath = parameters.requirePath("input_path", "path", "video_path"),
           outputPath = parameters.optString("output_path"),
           targetFormat = parameters.optString("target_format").ifBlank { parameters.optString("format") },
+        )
+      }
+      "media_video_resize" -> {
+        requireMode(config, Mode.VIDEO)
+        videoResize(
+          context = context,
+          workspaceConfig = workspaceConfig,
+          config = config,
+          inputPath = parameters.requirePath("input_path", "path", "video_path"),
+          outputPath = parameters.optString("output_path"),
+          target = parameters.optString("target").ifBlank { parameters.optString("size") },
+          width = parameters.optIntOrNull("width"),
+          height = parameters.optIntOrNull("height"),
+        )
+      }
+      "media_video_compress" -> {
+        requireMode(config, Mode.VIDEO)
+        videoCompress(
+          context = context,
+          workspaceConfig = workspaceConfig,
+          config = config,
+          inputPath = parameters.requirePath("input_path", "path", "video_path"),
+          outputPath = parameters.optString("output_path"),
+          level = parameters.optString("compression_level").ifBlank { parameters.optString("level") },
         )
       }
       "media_video_concat" -> {
@@ -374,6 +428,35 @@ object AgentMediaToolboxSupport {
       .put("bytes_written", bytesWritten)
   }
 
+  private fun audioCompress(
+    context: Context,
+    workspaceConfig: FileWorkspaceConfig,
+    config: MediaToolboxConfig,
+    inputPath: String,
+    outputPath: String,
+    level: String,
+    targetFormat: String,
+  ): JSONObject {
+    val compression = compressionProfile(level)
+    val format = normalizeAudioFormat(targetFormat.ifBlank { outputPath.extensionOr("mp3") })
+    val workDir = newWorkDir(context)
+    val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
+    val output = File(workDir, "compressed-audio.$format")
+    runFfmpeg(
+      arrayOf("-y", "-i", input.absolutePath, "-vn") +
+        audioCodecArgs(format, bitrate = compression.audioBitrate) +
+        arrayOf(output.absolutePath)
+    )
+    val targetPath = ensureMediaOutputPath(outputPath, "compressed-audio", format)
+    val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
+    return baseResult("media_audio_compress")
+      .put("path", targetPath)
+      .put("input_path", inputPath)
+      .put("compression_level", compression.level)
+      .put("format", format)
+      .put("bytes_written", bytesWritten)
+  }
+
   private fun audioConcat(
     context: Context,
     workspaceConfig: FileWorkspaceConfig,
@@ -507,6 +590,82 @@ object AgentMediaToolboxSupport {
       .put("path", targetPath)
       .put("input_path", inputPath)
       .put("format", format)
+      .put("bytes_written", bytesWritten)
+  }
+
+  private fun videoResize(
+    context: Context,
+    workspaceConfig: FileWorkspaceConfig,
+    config: MediaToolboxConfig,
+    inputPath: String,
+    outputPath: String,
+    target: String,
+    width: Int?,
+    height: Int?,
+  ): JSONObject {
+    val workDir = newWorkDir(context)
+    val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
+    val output = File(workDir, "resized-video.mp4")
+    val filter = resizeVideoFilter(target = target, width = width, height = height)
+    runFfmpeg(
+      arrayOf("-y", "-i", input.absolutePath, "-vf", filter) +
+        videoCodecArgs("mp4") +
+        arrayOf(output.absolutePath)
+    )
+    val targetPath = ensureMediaOutputPath(outputPath, "resized-video", "mp4")
+    val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
+    val metadata = readMediaMetadata(output.absolutePath)
+    return baseResult("media_video_resize")
+      .put("path", targetPath)
+      .put("input_path", inputPath)
+      .put("target", target.ifBlank { "${width ?: 0}x${height ?: 0}" })
+      .put("width", metadata.width)
+      .put("height", metadata.height)
+      .put("bytes_written", bytesWritten)
+  }
+
+  private fun videoCompress(
+    context: Context,
+    workspaceConfig: FileWorkspaceConfig,
+    config: MediaToolboxConfig,
+    inputPath: String,
+    outputPath: String,
+    level: String,
+  ): JSONObject {
+    val compression = compressionProfile(level)
+    val workDir = newWorkDir(context)
+    val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
+    val output = File(workDir, "compressed-video.mp4")
+    runFfmpeg(
+      arrayOf(
+        "-y",
+        "-i",
+        input.absolutePath,
+        "-vf",
+        evenVideoFilter(),
+        "-c:v",
+        "mpeg4",
+        "-b:v",
+        compression.videoBitrate,
+        "-maxrate",
+        compression.videoBitrate,
+        "-bufsize",
+        compression.videoBufferSize,
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        compression.audioBitrate,
+        output.absolutePath,
+      )
+    )
+    val targetPath = ensureMediaOutputPath(outputPath, "compressed-video", "mp4")
+    val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
+    return baseResult("media_video_compress")
+      .put("path", targetPath)
+      .put("input_path", inputPath)
+      .put("compression_level", compression.level)
       .put("bytes_written", bytesWritten)
   }
 
@@ -948,13 +1107,13 @@ object AgentMediaToolboxSupport {
       (sourceHeight * ratio).roundToInt().coerceAtLeast(1)
   }
 
-  private fun audioCodecArgs(format: String): Array<String> {
+  private fun audioCodecArgs(format: String, bitrate: String = "192k"): Array<String> {
     return when (format.lowercase(Locale.US)) {
       "wav" -> arrayOf("-c:a", "pcm_s16le")
-      "m4a", "aac" -> arrayOf("-c:a", "aac", "-b:a", "192k")
+      "m4a", "aac" -> arrayOf("-c:a", "aac", "-b:a", bitrate)
       "ogg" -> arrayOf("-c:a", "libvorbis", "-q:a", "4")
       "flac" -> arrayOf("-c:a", "flac")
-      else -> arrayOf("-c:a", "libmp3lame", "-b:a", "192k")
+      else -> arrayOf("-c:a", "libmp3lame", "-b:a", bitrate)
     }
   }
 
@@ -982,6 +1141,23 @@ object AgentMediaToolboxSupport {
   }
 
   private fun evenVideoFilter(): String = "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,format=yuv420p"
+
+  private fun resizeVideoFilter(target: String, width: Int?, height: Int?): String {
+    if (width != null && width > 0 && height != null && height > 0) {
+      return "scale=${width.coerceIn(2, 4096)}:${height.coerceIn(2, 4096)}:force_original_aspect_ratio=decrease," +
+        "pad=${width.coerceIn(2, 4096)}:${height.coerceIn(2, 4096)}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p"
+    }
+    val longSide =
+      when (target.trim().lowercase(Locale.US)) {
+        "512", "512p" -> 512
+        "720", "720p" -> 1280
+        "1080", "1080p" -> 1920
+        "2k", "1440", "1440p" -> 2560
+        "4k", "2160", "2160p" -> 3840
+        else -> 1280
+      }
+    return "scale='if(gte(iw,ih),$longSide,-2)':'if(gte(iw,ih),-2,$longSide)',setsar=1,format=yuv420p"
+  }
 
   private fun concatVideoFilter(): String =
     "scale=$STANDARD_VIDEO_WIDTH:$STANDARD_VIDEO_HEIGHT:force_original_aspect_ratio=decrease," +
@@ -1014,6 +1190,21 @@ object AgentMediaToolboxSupport {
       "webm" -> "webm"
       else -> "mp4"
     }
+  }
+
+  private fun compressionProfile(value: String): CompressionProfile {
+    return when (value.trim().lowercase(Locale.US).replace(" ", "")) {
+      "1/3", "third", "medium", "中", "中等" ->
+        CompressionProfile(level = "1/3", videoBitrate = "700k", videoBufferSize = "1400k", audioBitrate = "64k")
+      "1/4", "quarter", "small", "high", "强", "高压缩" ->
+        CompressionProfile(level = "1/4", videoBitrate = "450k", videoBufferSize = "900k", audioBitrate = "48k")
+      else ->
+        CompressionProfile(level = "1/2", videoBitrate = "1000k", videoBufferSize = "2000k", audioBitrate = "96k")
+    }
+  }
+
+  private fun looksLikeVideoPath(path: String): Boolean {
+    return path.extensionOr("").lowercase(Locale.US) in setOf("mp4", "mov", "mkv", "webm", "avi", "m4v", "3gp")
   }
 
   private fun requireTime(value: String, label: String): String {
@@ -1070,6 +1261,13 @@ object AgentMediaToolboxSupport {
     val ext = substringAfterLast('.', "").lowercase(Locale.US)
     return if (ext.length in 2..5) ext else default
   }
+
+  private data class CompressionProfile(
+    val level: String,
+    val videoBitrate: String,
+    val videoBufferSize: String,
+    val audioBitrate: String,
+  )
 
   private fun mimeTypeForPath(path: String): String {
     return when (path.extensionOr("bin")) {
