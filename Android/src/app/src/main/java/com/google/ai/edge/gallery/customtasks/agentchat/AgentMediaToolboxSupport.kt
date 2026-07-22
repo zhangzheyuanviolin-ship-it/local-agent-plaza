@@ -39,6 +39,9 @@ import org.json.JSONObject
 
 object AgentMediaToolboxSupport {
   private const val MAX_CONCAT_INPUTS = 5
+  private const val STANDARD_VIDEO_WIDTH = 1280
+  private const val STANDARD_VIDEO_HEIGHT = 720
+  private const val STANDARD_VIDEO_FPS = 30
   private const val DEFAULT_IMAGE_VIDEO_DURATION_SECONDS = 5.0
   private val timestampFormatter = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
 
@@ -517,7 +520,11 @@ object AgentMediaToolboxSupport {
     val paths = inputPaths.filter { it.isNotBlank() }.take(MAX_CONCAT_INPUTS)
     if (paths.size < 2) throw IOException("At least two video input paths are required.")
     val workDir = newWorkDir(context)
-    val inputs = paths.map { copyWorkspaceToTemp(context, workspaceConfig, it, workDir) }
+    val inputs =
+      paths.mapIndexed { index, path ->
+        val input = copyWorkspaceToTemp(context, workspaceConfig, path, workDir)
+        normalizeVideoForConcat(input = input, workDir = workDir, index = index)
+      }
     val listFile = File(workDir, "concat-list.txt")
     listFile.writeText(inputs.joinToString("\n") { "file '${it.absolutePath.replace("'", "'\\\\''")}'" })
     val output = File(workDir, "concat-video.mp4")
@@ -527,6 +534,9 @@ object AgentMediaToolboxSupport {
     return baseResult("media_video_concat")
       .put("path", targetPath)
       .put("input_count", paths.size)
+      .put("normalized", true)
+      .put("target_resolution", "${STANDARD_VIDEO_WIDTH}x$STANDARD_VIDEO_HEIGHT")
+      .put("target_fps", STANDARD_VIDEO_FPS)
       .put("bytes_written", bytesWritten)
   }
 
@@ -545,7 +555,14 @@ object AgentMediaToolboxSupport {
     val workDir = newWorkDir(context)
     val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
     val output = File(workDir, "trim-video.$format")
-    runFfmpeg(arrayOf("-y", "-ss", safeStart, "-to", safeEnd, "-i", input.absolutePath, "-c", "copy", output.absolutePath))
+    if (parseTimeSeconds(safeEnd) <= parseTimeSeconds(safeStart)) {
+      throw IOException("end time must be greater than start time.")
+    }
+    runFfmpeg(
+      arrayOf("-y", "-ss", safeStart, "-to", safeEnd, "-i", input.absolutePath, "-vf", evenVideoFilter()) +
+        videoCodecArgs(format) +
+        arrayOf(output.absolutePath)
+    )
     val targetPath = ensureMediaOutputPath(outputPath, "trim-video", format)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_video_trim")
@@ -591,7 +608,11 @@ object AgentMediaToolboxSupport {
     val workDir = newWorkDir(context)
     val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
     val output = File(workDir, "muted-video.mp4")
-    runFfmpeg(arrayOf("-y", "-i", input.absolutePath, "-c:v", "copy", "-an", output.absolutePath))
+    runFfmpeg(
+      arrayOf("-y", "-i", input.absolutePath, "-vf", evenVideoFilter()) +
+        videoCodecArgs("mp4", includeAudio = false) +
+        arrayOf("-an", output.absolutePath)
+    )
     val targetPath = ensureMediaOutputPath(outputPath, "muted-video", "mp4")
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_video_mute")
@@ -628,10 +649,18 @@ object AgentMediaToolboxSupport {
           "0:v:0",
           "-map",
           "[a]",
+          "-vf",
+          evenVideoFilter(),
           "-c:v",
-          "copy",
+          "mpeg4",
+          "-q:v",
+          "4",
+          "-pix_fmt",
+          "yuv420p",
           "-c:a",
           "aac",
+          "-b:a",
+          "192k",
           "-shortest",
           output.absolutePath,
         )
@@ -646,10 +675,18 @@ object AgentMediaToolboxSupport {
           "0:v:0",
           "-map",
           "1:a:0",
+          "-vf",
+          evenVideoFilter(),
           "-c:v",
-          "copy",
+          "mpeg4",
+          "-q:v",
+          "4",
+          "-pix_fmt",
+          "yuv420p",
           "-c:a",
           "aac",
+          "-b:a",
+          "192k",
           "-shortest",
           output.absolutePath,
         )
@@ -807,6 +844,48 @@ object AgentMediaToolboxSupport {
     }
   }
 
+  private fun normalizeVideoForConcat(input: File, workDir: File, index: Int): File {
+    val output = File(workDir, "concat-normalized-$index.mp4")
+    val metadata = readMediaMetadata(input.absolutePath)
+    val args = mutableListOf("-y", "-i", input.absolutePath)
+    val inputHasAudio = hasTrack(input.absolutePath, audio = true)
+    if (!inputHasAudio) {
+      args += listOf("-f", "lavfi")
+      if (metadata.durationMs > 0L) {
+        args += listOf("-t", formatSeconds(metadata.durationMs / 1000.0))
+      }
+      args += listOf("-i", "anullsrc=channel_layout=stereo:sample_rate=44100")
+    }
+    args += listOf(
+      "-map",
+      "0:v:0",
+      "-map",
+      if (inputHasAudio) "0:a:0" else "1:a:0",
+      "-vf",
+      concatVideoFilter(),
+      "-r",
+      STANDARD_VIDEO_FPS.toString(),
+      "-c:v",
+      "mpeg4",
+      "-q:v",
+      "4",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "160k",
+      "-ar",
+      "44100",
+      "-ac",
+      "2",
+      "-shortest",
+      output.absolutePath,
+    )
+    runFfmpeg(args.toTypedArray())
+    return output
+  }
+
   private fun readMediaMetadata(path: String): MediaMetadata {
     val retriever = MediaMetadataRetriever()
     try {
@@ -879,13 +958,35 @@ object AgentMediaToolboxSupport {
     }
   }
 
-  private fun videoCodecArgs(format: String): Array<String> {
+  private fun videoCodecArgs(format: String, includeAudio: Boolean = true): Array<String> {
     return when (format.lowercase(Locale.US)) {
-      "webm" -> arrayOf("-c:v", "libvpx-vp9", "-b:v", "1800k", "-c:a", "libopus", "-b:a", "128k")
-      "mkv" -> arrayOf("-c:v", "mpeg4", "-q:v", "4", "-c:a", "aac", "-b:a", "192k")
-      else -> arrayOf("-c:v", "mpeg4", "-q:v", "4", "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p")
+      "webm" ->
+        if (includeAudio) {
+          arrayOf("-c:v", "libvpx-vp9", "-b:v", "1800k", "-c:a", "libopus", "-b:a", "128k")
+        } else {
+          arrayOf("-c:v", "libvpx-vp9", "-b:v", "1800k")
+        }
+      "mkv" ->
+        if (includeAudio) {
+          arrayOf("-c:v", "mpeg4", "-q:v", "4", "-c:a", "aac", "-b:a", "192k")
+        } else {
+          arrayOf("-c:v", "mpeg4", "-q:v", "4")
+        }
+      else ->
+        if (includeAudio) {
+          arrayOf("-c:v", "mpeg4", "-q:v", "4", "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p")
+        } else {
+          arrayOf("-c:v", "mpeg4", "-q:v", "4", "-pix_fmt", "yuv420p")
+        }
     }
   }
+
+  private fun evenVideoFilter(): String = "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,format=yuv420p"
+
+  private fun concatVideoFilter(): String =
+    "scale=$STANDARD_VIDEO_WIDTH:$STANDARD_VIDEO_HEIGHT:force_original_aspect_ratio=decrease," +
+      "pad=$STANDARD_VIDEO_WIDTH:$STANDARD_VIDEO_HEIGHT:(ow-iw)/2:(oh-ih)/2," +
+      "setsar=1,fps=$STANDARD_VIDEO_FPS,format=yuv420p"
 
   private fun normalizeImageFormat(value: String): String {
     return when (value.trim().trimStart('.').lowercase(Locale.US)) {

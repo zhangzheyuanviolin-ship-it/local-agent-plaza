@@ -631,7 +631,7 @@ private fun buildAvailableCompatToolsList(
     if (mediaToolboxConfig.videoModeEnabled) {
       tools += "- media_video_info arguments: {\"input_path\":\"media/video.mp4\"} . Reads duration, width, height, rotation, MIME type, bitrate, track state, and file size."
       tools += "- media_video_convert arguments: {\"input_path\":\"media/video.mov\",\"target_format\":\"mp4\",\"output_path\":\"media/video.mp4\"} . Converts video format to mp4, mov, mkv, or webm."
-      tools += "- media_video_concat arguments: {\"input_paths\":[\"media/a.mp4\",\"media/b.mp4\"],\"output_path\":\"media/combined.mp4\"} . Concatenates 2 to 5 similar video files in order."
+      tools += "- media_video_concat arguments: {\"input_paths\":[\"media/a.mp4\",\"media/b.mp4\"],\"output_path\":\"media/combined.mp4\"} . Concatenates 2 to 5 video files in order; the tool automatically normalizes size, codec, fps, and missing audio before joining."
       tools += "- media_video_trim arguments: {\"input_path\":\"media/video.mp4\",\"start\":\"5\",\"end\":\"12.5\",\"output_path\":\"media/clip.mp4\"} . Clips one video segment. Time can be seconds, mm:ss, or hh:mm:ss."
       tools += "- media_video_extract_audio arguments: {\"input_path\":\"media/video.mp4\",\"target_format\":\"mp3\",\"output_path\":\"media/audio.mp3\"} . Extracts a video's audio track."
       tools += "- media_video_mute arguments: {\"input_path\":\"media/video.mp4\",\"output_path\":\"media/muted.mp4\"} . Removes the video's audio track."

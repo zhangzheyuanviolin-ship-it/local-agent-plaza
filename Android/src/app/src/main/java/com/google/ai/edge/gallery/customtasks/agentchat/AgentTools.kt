@@ -2085,11 +2085,15 @@ private fun buildConfiguredIntentResult(
       flattened["has_audio"] = payload.optBoolean("has_audio", false)
       flattened["has_video"] = payload.optBoolean("has_video", false)
       flattened["input_count"] = payload.optInt("input_count", 0)
+      flattened["normalized"] = payload.optBoolean("normalized", false)
+      putIfNotBlank(flattened, "target_resolution", payload.optString("target_resolution"))
+      flattened["target_fps"] = payload.optInt("target_fps", 0)
       flattened["summary"] =
         when (operation) {
           "media_image_info" -> "Image ${flattened["path"] ?: ""}: ${flattened["width"]}x${flattened["height"]}, ${flattened["mime_type"]}, ${flattened["file_bytes"]} bytes."
           "media_audio_info" -> "Audio ${flattened["path"] ?: ""}: ${flattened["duration_seconds"]} seconds, ${flattened["mime_type"]}, ${flattened["file_bytes"]} bytes."
           "media_video_info" -> "Video ${flattened["path"] ?: ""}: ${flattened["width"]}x${flattened["height"]}, ${flattened["duration_seconds"]} seconds, audio=${flattened["has_audio"]}, video=${flattened["has_video"]}."
+          "media_video_concat" -> "Media operation media_video_concat completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes). Inputs were normalized=${flattened["normalized"]} to ${flattened["target_resolution"] ?: "standard video"} at ${flattened["target_fps"]} fps before joining."
           else -> "Media operation $operation completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
         }
     }

@@ -42,6 +42,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
+private const val VISUAL_CREATION_CLEANUP_TIMEOUT_MS = 60_000L
+private const val VISUAL_CREATION_MODEL_SETTLE_DELAY_MS = 900L
+private const val VISUAL_CREATION_IMAGE_SETTLE_DELAY_MS = 1_200L
+
 data class VisualCreationUiState(
   val prompt: String = "",
   val negativePrompt: String = "",
@@ -221,14 +225,8 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
           statusText = "正在调用本地文本模型优化图片提示词",
         )
       }
-      var cleanedUp = false
-      val cleanUpModel = {
-        if (!cleanedUp) {
-          cleanedUp = true
-          model.runtimeHelper.cleanUp(model = model, onDone = {})
-        }
-      }
       try {
+        cleanUpOneShotModel(model = model, settleDelayMs = 500L)
         val initError =
           initializePromptOptimizer(context = context, model = model, systemPrompt = systemPrompt)
         if (!initError.isNullOrBlank()) {
@@ -240,7 +238,6 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
               promptOptimizationStatusText = "提示词优化失败：$initError",
             )
           }
-          cleanUpModel()
           return@launch
         }
 
@@ -283,7 +280,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
           )
         }
       } finally {
-        cleanUpModel()
+        cleanUpOneShotModel(model = model)
       }
     }
   }
@@ -402,6 +399,11 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
           }
         }
       try {
+        releaseImageGenerationMemory(
+          context = context,
+          stopLocalDream = modelInfo.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN,
+          settleDelayMs = 350L,
+        )
         val nativeResult =
           if (modelInfo.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN) {
             LocalDreamImageGenerationClient(context)
@@ -499,6 +501,10 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
         }
       } finally {
         heartbeatJob.cancel()
+        releaseImageGenerationMemory(
+          context = context,
+          stopLocalDream = modelInfo.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN,
+        )
       }
     }
   }
@@ -613,6 +619,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     viewModelScope.launch(Dispatchers.Default) {
       var bitmap: Bitmap? = null
       try {
+        cleanUpOneShotModel(model = model, settleDelayMs = 500L)
         bitmap = BitmapFactory.decodeFile(imagePath) ?: error("无法读取生成图片：$imagePath")
         val initError =
           initializeVisualProcessor(context = context, model = model, systemPrompt = processPrompt)
@@ -658,6 +665,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
         }
       } finally {
         bitmap?.recycle()
+        cleanUpOneShotModel(model = model)
       }
     }
   }
@@ -741,9 +749,6 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     model: Model,
     systemPrompt: String,
   ): String? {
-    if (model.instance != null) {
-      return null
-    }
     val initResult = CompletableDeferred<String>()
     model.runtimeHelper.initialize(
       context = context,
@@ -768,9 +773,6 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     model: Model,
     systemPrompt: String,
   ): String? {
-    if (model.instance != null) {
-      return null
-    }
     val initResult = CompletableDeferred<String>()
     model.runtimeHelper.initialize(
       context = context,
@@ -788,6 +790,59 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     )
     return withTimeoutOrNull(180_000L) { initResult.await() }
       ?: "初始化本地视觉语言模型超时"
+  }
+
+  private suspend fun cleanUpOneShotModel(
+    model: Model,
+    settleDelayMs: Long = VISUAL_CREATION_MODEL_SETTLE_DELAY_MS,
+  ) {
+    if (model.initializing && model.instance == null) {
+      model.cleanUpAfterInit = true
+      withTimeoutOrNull(VISUAL_CREATION_CLEANUP_TIMEOUT_MS) {
+        while (model.initializing) {
+          delay(100L)
+        }
+      }
+    }
+    if (model.instance == null) {
+      model.cleanUpAfterInit = false
+      settleVisualCreationMemory(settleDelayMs)
+      return
+    }
+    runCatching {
+      val cleaned = CompletableDeferred<Unit>()
+      model.runtimeHelper.cleanUp(model = model) {
+        if (!cleaned.isCompleted) {
+          cleaned.complete(Unit)
+        }
+      }
+      withTimeoutOrNull(VISUAL_CREATION_CLEANUP_TIMEOUT_MS) {
+        cleaned.await()
+      }
+    }
+    model.instance = null
+    model.initializing = false
+    model.cleanUpAfterInit = false
+    settleVisualCreationMemory(settleDelayMs)
+  }
+
+  private suspend fun releaseImageGenerationMemory(
+    context: Context,
+    stopLocalDream: Boolean,
+    settleDelayMs: Long = VISUAL_CREATION_IMAGE_SETTLE_DELAY_MS,
+  ) {
+    if (stopLocalDream) {
+      runCatching { LocalDreamBackendService.stop(context.applicationContext) }
+    }
+    settleVisualCreationMemory(settleDelayMs)
+  }
+
+  private suspend fun settleVisualCreationMemory(settleDelayMs: Long) {
+    System.gc()
+    System.runFinalization()
+    if (settleDelayMs > 0L) {
+      delay(settleDelayMs)
+    }
   }
 
   private suspend fun runPromptOptimizer(
