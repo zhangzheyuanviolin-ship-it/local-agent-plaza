@@ -102,16 +102,27 @@ object AgentMediaToolboxSupport {
         )
       }
       "media_audio_info" -> {
+        val inputPath = parameters.requirePath("input_path", "path", "audio_path")
+        if (looksLikeVideoPath(inputPath)) {
+          requireMode(config, Mode.VIDEO)
+          return videoInfo(context, workspaceConfig, inputPath).put("routed_from", "media_audio_info")
+        }
         requireMode(config, Mode.AUDIO)
-        audioInfo(context, workspaceConfig, parameters.requirePath("input_path", "path", "audio_path"))
+        audioInfo(context, workspaceConfig, inputPath)
       }
       "media_audio_convert" -> {
+        val inputPath = parameters.requirePath("input_path", "path", "audio_path")
+        if (looksLikeVideoPath(inputPath)) {
+          throw IOException(
+            "Video-looking input paths cannot be handled by media_audio_convert. Use media_video_convert for video format conversion, media_video_extract_audio for extracting audio, or media_video_mute for silent video."
+          )
+        }
         requireMode(config, Mode.AUDIO)
         audioConvert(
           context = context,
           workspaceConfig = workspaceConfig,
           config = config,
-          inputPath = parameters.requirePath("input_path", "path", "audio_path"),
+          inputPath = inputPath,
           outputPath = parameters.optString("output_path"),
           targetFormat = parameters.optString("target_format").ifBlank { parameters.optString("format") },
         )
@@ -129,24 +140,50 @@ object AgentMediaToolboxSupport {
         )
       }
       "media_audio_concat" -> {
+        val inputPaths = parameters.optStringArray("input_paths", "paths", "audio_paths")
+        val outputPath = parameters.optString("output_path")
+        if (inputPaths.any(::looksLikeVideoPath) || looksLikeVideoPath(outputPath)) {
+          requireMode(config, Mode.VIDEO)
+          return videoConcat(
+            context = context,
+            workspaceConfig = workspaceConfig,
+            config = config,
+            inputPaths = inputPaths,
+            outputPath = outputPath,
+          ).put("routed_from", "media_audio_concat")
+        }
         requireMode(config, Mode.AUDIO)
         audioConcat(
           context = context,
           workspaceConfig = workspaceConfig,
           config = config,
-          inputPaths = parameters.optStringArray("input_paths", "paths", "audio_paths"),
-          outputPath = parameters.optString("output_path"),
+          inputPaths = inputPaths,
+          outputPath = outputPath,
           targetFormat = parameters.optString("target_format").ifBlank { parameters.optString("format") },
         )
       }
       "media_audio_trim" -> {
+        val inputPath = parameters.requirePath("input_path", "path", "audio_path")
+        val outputPath = parameters.optString("output_path")
+        if (looksLikeVideoPath(inputPath) || looksLikeVideoPath(outputPath)) {
+          requireMode(config, Mode.VIDEO)
+          return videoTrim(
+            context = context,
+            workspaceConfig = workspaceConfig,
+            config = config,
+            inputPath = inputPath,
+            outputPath = outputPath,
+            start = parameters.optString("start").ifBlank { parameters.optString("start_time") },
+            end = parameters.optString("end").ifBlank { parameters.optString("end_time") },
+          ).put("routed_from", "media_audio_trim")
+        }
         requireMode(config, Mode.AUDIO)
         audioTrim(
           context = context,
           workspaceConfig = workspaceConfig,
           config = config,
-          inputPath = parameters.requirePath("input_path", "path", "audio_path"),
-          outputPath = parameters.optString("output_path"),
+          inputPath = inputPath,
+          outputPath = outputPath,
           start = parameters.optString("start").ifBlank { parameters.optString("start_time") },
           end = parameters.optString("end").ifBlank { parameters.optString("end_time") },
         )
@@ -324,7 +361,7 @@ object AgentMediaToolboxSupport {
     val targetSize = resolveImageTarget(bitmap.width, bitmap.height, target, width, height)
     val resized = Bitmap.createScaledBitmap(bitmap, targetSize.first, targetSize.second, true)
     val ext = inputPath.extensionOr("jpg")
-    val targetPath = ensureMediaOutputPath(outputPath, "resized-image", ext)
+    val targetPath = ensureMediaOutputPath(outputPath, "resized-image", ext, forceExtension = true)
     val bytesWritten = writeBitmap(context, workspaceConfig, config, targetPath, resized, ext)
     return baseResult("media_image_resize")
       .put("path", targetPath)
@@ -344,7 +381,7 @@ object AgentMediaToolboxSupport {
   ): JSONObject {
     val format = normalizeImageFormat(targetFormat)
     val bitmap = decodeWorkspaceBitmap(context, workspaceConfig, inputPath)
-    val targetPath = ensureMediaOutputPath(outputPath, "converted-image", format)
+    val targetPath = ensureMediaOutputPath(outputPath, "converted-image", format, forceExtension = true)
     val bytesWritten = writeBitmap(context, workspaceConfig, config, targetPath, bitmap, format)
     return baseResult("media_image_convert")
       .put("path", targetPath)
@@ -384,7 +421,7 @@ object AgentMediaToolboxSupport {
         output.absolutePath,
       )
     )
-    val targetPath = ensureMediaOutputPath(outputPath, "image-video", "mp4")
+    val targetPath = ensureMediaOutputPath(outputPath, "image-video", "mp4", forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_image_to_video")
       .put("path", targetPath)
@@ -419,7 +456,7 @@ object AgentMediaToolboxSupport {
     val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
     val output = File(workDir, "converted-audio.$format")
     runFfmpeg(arrayOf("-y", "-i", input.absolutePath, "-vn") + audioCodecArgs(format) + arrayOf(output.absolutePath))
-    val targetPath = ensureMediaOutputPath(outputPath, "converted-audio", format)
+    val targetPath = ensureMediaOutputPath(outputPath, "converted-audio", format, forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_audio_convert")
       .put("path", targetPath)
@@ -447,7 +484,7 @@ object AgentMediaToolboxSupport {
         audioCodecArgs(format, bitrate = compression.audioBitrate) +
         arrayOf(output.absolutePath)
     )
-    val targetPath = ensureMediaOutputPath(outputPath, "compressed-audio", format)
+    val targetPath = ensureMediaOutputPath(outputPath, "compressed-audio", format, forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_audio_compress")
       .put("path", targetPath)
@@ -478,7 +515,7 @@ object AgentMediaToolboxSupport {
     args += audioCodecArgs(format)
     args += output.absolutePath
     runFfmpeg(args.toTypedArray())
-    val targetPath = ensureMediaOutputPath(outputPath, "concat-audio", format)
+    val targetPath = ensureMediaOutputPath(outputPath, "concat-audio", format, forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_audio_concat")
       .put("path", targetPath)
@@ -503,7 +540,7 @@ object AgentMediaToolboxSupport {
     val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
     val output = File(workDir, "trim-audio.$format")
     runFfmpeg(arrayOf("-y", "-ss", safeStart, "-to", safeEnd, "-i", input.absolutePath, "-vn") + audioCodecArgs(format) + arrayOf(output.absolutePath))
-    val targetPath = ensureMediaOutputPath(outputPath, "trim-audio", format)
+    val targetPath = ensureMediaOutputPath(outputPath, "trim-audio", format, forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_audio_trim")
       .put("path", targetPath)
@@ -544,7 +581,7 @@ object AgentMediaToolboxSupport {
     args += audioCodecArgs(format)
     args += output.absolutePath
     runFfmpeg(args.toTypedArray())
-    val targetPath = ensureMediaOutputPath(outputPath, "mix-audio", format)
+    val targetPath = ensureMediaOutputPath(outputPath, "mix-audio", format, forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_audio_mix")
       .put("path", targetPath)
@@ -582,9 +619,10 @@ object AgentMediaToolboxSupport {
     val format = normalizeVideoFormat(targetFormat)
     val workDir = newWorkDir(context)
     val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
+    requireVideoTrack(input, inputPath)
     val output = File(workDir, "converted-video.$format")
     runFfmpeg(arrayOf("-y", "-i", input.absolutePath) + videoCodecArgs(format) + arrayOf(output.absolutePath))
-    val targetPath = ensureMediaOutputPath(outputPath, "converted-video", format)
+    val targetPath = ensureMediaOutputPath(outputPath, "converted-video", format, forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_video_convert")
       .put("path", targetPath)
@@ -605,6 +643,7 @@ object AgentMediaToolboxSupport {
   ): JSONObject {
     val workDir = newWorkDir(context)
     val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
+    requireVideoTrack(input, inputPath)
     val output = File(workDir, "resized-video.mp4")
     val filter = resizeVideoFilter(target = target, width = width, height = height)
     runFfmpeg(
@@ -612,7 +651,7 @@ object AgentMediaToolboxSupport {
         videoCodecArgs("mp4") +
         arrayOf(output.absolutePath)
     )
-    val targetPath = ensureMediaOutputPath(outputPath, "resized-video", "mp4")
+    val targetPath = ensureMediaOutputPath(outputPath, "resized-video", "mp4", forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     val metadata = readMediaMetadata(output.absolutePath)
     return baseResult("media_video_resize")
@@ -635,6 +674,7 @@ object AgentMediaToolboxSupport {
     val compression = compressionProfile(level)
     val workDir = newWorkDir(context)
     val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
+    requireVideoTrack(input, inputPath)
     val output = File(workDir, "compressed-video.mp4")
     runFfmpeg(
       arrayOf(
@@ -660,7 +700,7 @@ object AgentMediaToolboxSupport {
         output.absolutePath,
       )
     )
-    val targetPath = ensureMediaOutputPath(outputPath, "compressed-video", "mp4")
+    val targetPath = ensureMediaOutputPath(outputPath, "compressed-video", "mp4", forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_video_compress")
       .put("path", targetPath)
@@ -682,13 +722,14 @@ object AgentMediaToolboxSupport {
     val inputs =
       paths.mapIndexed { index, path ->
         val input = copyWorkspaceToTemp(context, workspaceConfig, path, workDir)
+        requireVideoTrack(input, path)
         normalizeVideoForConcat(input = input, workDir = workDir, index = index)
       }
     val listFile = File(workDir, "concat-list.txt")
     listFile.writeText(inputs.joinToString("\n") { "file '${it.absolutePath.replace("'", "'\\\\''")}'" })
     val output = File(workDir, "concat-video.mp4")
     runFfmpeg(arrayOf("-y", "-f", "concat", "-safe", "0", "-i", listFile.absolutePath, "-c", "copy", output.absolutePath))
-    val targetPath = ensureMediaOutputPath(outputPath, "concat-video", "mp4")
+    val targetPath = ensureMediaOutputPath(outputPath, "concat-video", "mp4", forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_video_concat")
       .put("path", targetPath)
@@ -713,6 +754,7 @@ object AgentMediaToolboxSupport {
     val format = outputPath.extensionOr(inputPath.extensionOr("mp4")).let(::normalizeVideoFormat)
     val workDir = newWorkDir(context)
     val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
+    requireVideoTrack(input, inputPath)
     val output = File(workDir, "trim-video.$format")
     if (parseTimeSeconds(safeEnd) <= parseTimeSeconds(safeStart)) {
       throw IOException("end time must be greater than start time.")
@@ -722,7 +764,7 @@ object AgentMediaToolboxSupport {
         videoCodecArgs(format) +
         arrayOf(output.absolutePath)
     )
-    val targetPath = ensureMediaOutputPath(outputPath, "trim-video", format)
+    val targetPath = ensureMediaOutputPath(outputPath, "trim-video", format, forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_video_trim")
       .put("path", targetPath)
@@ -748,7 +790,7 @@ object AgentMediaToolboxSupport {
     }
     val output = File(workDir, "video-audio.$format")
     runFfmpeg(arrayOf("-y", "-i", input.absolutePath, "-vn") + audioCodecArgs(format) + arrayOf(output.absolutePath))
-    val targetPath = ensureMediaOutputPath(outputPath, "video-audio", format)
+    val targetPath = ensureMediaOutputPath(outputPath, "video-audio", format, forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_video_extract_audio")
       .put("path", targetPath)
@@ -766,17 +808,56 @@ object AgentMediaToolboxSupport {
   ): JSONObject {
     val workDir = newWorkDir(context)
     val input = copyWorkspaceToTemp(context, workspaceConfig, inputPath, workDir)
+    val metadata = readMediaMetadata(input.absolutePath)
+    val inputHasVideo = hasTrack(input.absolutePath, audio = false)
+    val inputHasAudio = hasTrack(input.absolutePath, audio = true)
     val output = File(workDir, "muted-video.mp4")
-    runFfmpeg(
-      arrayOf("-y", "-i", input.absolutePath, "-vf", evenVideoFilter()) +
-        videoCodecArgs("mp4", includeAudio = false) +
-        arrayOf("-an", output.absolutePath)
-    )
-    val targetPath = ensureMediaOutputPath(outputPath, "muted-video", "mp4")
+    if (inputHasVideo) {
+      runFfmpeg(
+        arrayOf("-y", "-i", input.absolutePath, "-map", "0:v:0", "-vf", evenVideoFilter()) +
+          videoCodecArgs("mp4", includeAudio = false) +
+          arrayOf("-an", output.absolutePath)
+      )
+    } else if (inputHasAudio && metadata.durationMs > 0L) {
+      runFfmpeg(
+        arrayOf(
+          "-y",
+          "-f",
+          "lavfi",
+          "-i",
+          "color=c=black:s=${STANDARD_VIDEO_WIDTH}x${STANDARD_VIDEO_HEIGHT}:r=$STANDARD_VIDEO_FPS",
+          "-t",
+          formatSeconds(metadata.durationMs / 1000.0),
+          "-c:v",
+          "mpeg4",
+          "-q:v",
+          "4",
+          "-pix_fmt",
+          "yuv420p",
+          "-an",
+          output.absolutePath,
+        )
+      )
+    } else {
+      throw IOException("Workspace file contains neither a video stream nor a usable audio duration: $inputPath")
+    }
+    val targetPath = ensureMediaOutputPath(outputPath, "muted-video", "mp4", forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_video_mute")
       .put("path", targetPath)
       .put("input_path", inputPath)
+      .put("input_had_video", inputHasVideo)
+      .put("input_had_audio", inputHasAudio)
+      .put("generated_placeholder_video", !inputHasVideo && inputHasAudio)
+      .put("duration_ms", metadata.durationMs)
+      .put(
+        "note",
+        if (inputHasVideo) {
+          "Removed the input video's audio track."
+        } else {
+          "Input had audio but no video stream, so a black silent MP4 with the same duration was generated."
+        },
+      )
       .put("bytes_written", bytesWritten)
   }
 
@@ -792,6 +873,7 @@ object AgentMediaToolboxSupport {
   ): JSONObject {
     val workDir = newWorkDir(context)
     val video = copyWorkspaceToTemp(context, workspaceConfig, videoPath, workDir)
+    requireVideoTrack(video, videoPath)
     val audio = copyWorkspaceToTemp(context, workspaceConfig, audioPath, workDir)
     val output = File(workDir, "video-with-audio.mp4")
     val args =
@@ -851,7 +933,7 @@ object AgentMediaToolboxSupport {
         )
       }
     runFfmpeg(args)
-    val targetPath = ensureMediaOutputPath(outputPath, "video-with-audio", "mp4")
+    val targetPath = ensureMediaOutputPath(outputPath, "video-with-audio", "mp4", forceExtension = true)
     val bytesWritten = copyTempToWorkspace(context, workspaceConfig, config, output, targetPath)
     return baseResult("media_video_add_audio")
       .put("path", targetPath)
@@ -983,14 +1065,28 @@ object AgentMediaToolboxSupport {
       ?: throw IOException("Failed to create workspace file: $clean")
   }
 
-  private fun ensureMediaOutputPath(path: String, defaultPrefix: String, extension: String): String {
+  private fun ensureMediaOutputPath(
+    path: String,
+    defaultPrefix: String,
+    extension: String,
+    forceExtension: Boolean = false,
+  ): String {
     val cleanExt = extension.trimStart('.').lowercase(Locale.US).ifBlank { "bin" }
     val normalized = path.replace('\\', '/').trim()
     val fallback = "media/$defaultPrefix-${timestamp()}.$cleanExt"
     if (normalized.isBlank()) return fallback
+    val parent = normalized.substringBeforeLast('/', "")
+    val name = normalized.substringAfterLast('/')
+    val baseName = name.substringBeforeLast('.', name).ifBlank { defaultPrefix }
     val withExt =
-      if (normalized.substringAfterLast('/', normalized).contains('.')) normalized
-      else "$normalized.$cleanExt"
+      if (forceExtension) {
+        val finalName = "$baseName.$cleanExt"
+        if (parent.isBlank()) finalName else "$parent/$finalName"
+      } else if (name.contains('.')) {
+        normalized
+      } else {
+        "$normalized.$cleanExt"
+      }
     return if ('/' in withExt) withExt else "media/$withExt"
   }
 
@@ -1074,6 +1170,14 @@ object AgentMediaToolboxSupport {
       return false
     } finally {
       extractor.release()
+    }
+  }
+
+  private fun requireVideoTrack(input: File, workspacePath: String) {
+    if (!hasTrack(input.absolutePath, audio = false)) {
+      throw IOException(
+        "Workspace file has no video stream: $workspacePath. It may be an audio-only file with a video extension."
+      )
     }
   }
 

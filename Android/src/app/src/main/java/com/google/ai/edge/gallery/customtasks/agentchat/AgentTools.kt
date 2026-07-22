@@ -2081,6 +2081,7 @@ private fun buildConfiguredIntentResult(
       putIfNotBlank(flattened, "compression_level", payload.optString("compression_level"))
       putIfNotBlank(flattened, "target", payload.optString("target"))
       putIfNotBlank(flattened, "routed_from", payload.optString("routed_from"))
+      putIfNotBlank(flattened, "note", payload.optString("note"))
       putIfNotBlank(flattened, "start", payload.optString("start"))
       putIfNotBlank(flattened, "end", payload.optString("end"))
       flattened["width"] = payload.optInt("width", 0)
@@ -2093,6 +2094,9 @@ private fun buildConfiguredIntentResult(
       flattened["bytes_written"] = payload.optLong("bytes_written", 0L)
       flattened["has_audio"] = payload.optBoolean("has_audio", false)
       flattened["has_video"] = payload.optBoolean("has_video", false)
+      flattened["input_had_audio"] = payload.optBoolean("input_had_audio", false)
+      flattened["input_had_video"] = payload.optBoolean("input_had_video", false)
+      flattened["generated_placeholder_video"] = payload.optBoolean("generated_placeholder_video", false)
       flattened["input_count"] = payload.optInt("input_count", 0)
       flattened["normalized"] = payload.optBoolean("normalized", false)
       putIfNotBlank(flattened, "target_resolution", payload.optString("target_resolution"))
@@ -2105,6 +2109,12 @@ private fun buildConfiguredIntentResult(
           "media_video_concat" -> "Media operation media_video_concat completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes). Inputs were normalized=${flattened["normalized"]} to ${flattened["target_resolution"] ?: "standard video"} at ${flattened["target_fps"]} fps before joining."
           "media_audio_compress", "media_video_compress" -> "Media operation $operation completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes). Compression level: ${flattened["compression_level"] ?: "1/2"}."
           "media_video_resize" -> "Media operation media_video_resize completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes), size ${flattened["width"]}x${flattened["height"]}."
+          "media_video_mute" ->
+            if (flattened["generated_placeholder_video"] == true) {
+              "Media operation media_video_mute completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes). The input had audio but no video stream, so the tool generated a black silent MP4 with the same duration."
+            } else {
+              "Media operation media_video_mute completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
+            }
           else -> "Media operation $operation completed. Output: ${flattened["path"] ?: "media file"} (${flattened["bytes_written"]} bytes)."
         }
     }
@@ -2158,7 +2168,7 @@ private fun putIfNotBlank(target: MutableMap<String, Any>, key: String, value: S
 private fun buildRecoveryHint(operation: String, error: String): String {
   return when {
     operation.startsWith("media_") ->
-      "Check that Media Toolbox is enabled, the required image/audio/video mode is enabled, the workspace path exists, and the time or format arguments are simple values. For video mute or removing video sound, retry with media_video_mute and input_path/output_path. Do not write FFmpeg commands; retry with the documented media_* tool arguments."
+      "Check that Media Toolbox is enabled, the required image/audio/video mode is enabled, the workspace path exists, and the time or format arguments are simple values. For video mute or removing video sound, retry with media_video_mute and input_path/output_path. If a video operation says the file has no video stream, inspect it with media_video_info or choose a real video file. Do not write FFmpeg commands; retry with the documented media_* tool arguments."
     operation.startsWith("minimax_") ->
       "Check the MiniMax API key, China-region host, workspace folder, enabled skill state, and file path. For TTS from an existing file, retry with input_path directly."
     operation == "agnes_generate_image" || operation == "agnes_generate_video" ->

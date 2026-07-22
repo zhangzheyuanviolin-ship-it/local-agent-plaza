@@ -615,6 +615,7 @@ private fun buildAvailableCompatToolsList(
     tools += "- minimax_search_web arguments: {\"query\":\"search keywords\"} . Searches the web using MiniMax Token Plan search and returns compact results."
   }
   if (selectedSkillNames.contains(MEDIA_TOOLBOX_SKILL_NAME)) {
+    tools += "- Media Toolbox routing rule: paths ending in mp4, mov, mkv, webm, m4v, or 3gp are video files. For video info, video conversion, video resize, video compression, video concat, video trim, video mute, and adding audio to video, use media_video_* tools. Do not use media_audio_* tools on video files unless the user explicitly asks to process an already extracted audio file."
     if (mediaToolboxConfig.imageModeEnabled) {
       tools += "- media_image_info arguments: {\"input_path\":\"media/photo.jpg\"} . Reads width, height, MIME type, resolution, and file size for a workspace image."
       tools += "- media_image_resize arguments: {\"input_path\":\"media/photo.jpg\",\"target\":\"1080p\",\"output_path\":\"media/photo-1080.jpg\"} . Resizes an image. target can be 512, 720p, 1080p, or 4k; width and height are also accepted."
@@ -637,7 +638,7 @@ private fun buildAvailableCompatToolsList(
       tools += "- media_video_concat arguments: {\"input_paths\":[\"media/a.mp4\",\"media/b.mp4\"],\"output_path\":\"media/combined.mp4\"} . Concatenates 2 to 5 video files in order; the tool automatically normalizes size, codec, fps, and missing audio before joining."
       tools += "- media_video_trim arguments: {\"input_path\":\"media/video.mp4\",\"start\":\"5\",\"end\":\"12.5\",\"output_path\":\"media/clip.mp4\"} . Clips one video segment. Time can be seconds, mm:ss, or hh:mm:ss."
       tools += "- media_video_extract_audio arguments: {\"input_path\":\"media/video.mp4\",\"target_format\":\"mp3\",\"output_path\":\"media/audio.mp3\"} . Extracts a video's audio track."
-      tools += "- media_video_mute arguments: {\"input_path\":\"media/video.mp4\",\"output_path\":\"media/muted.mp4\"} . Removes the video's audio track. For any user request to mute a video, silence a video, remove sound, or make a video silent, MUST use media_video_mute, not media_audio_mix."
+      tools += "- media_video_mute arguments: {\"input_path\":\"media/video.mp4\",\"output_path\":\"media/muted.mp4\"} . Removes the video's audio track. For any user request to mute a video, silence a video, remove sound, or make a video silent, MUST use media_video_mute, not media_audio_mix. If the input has audio but no video stream, the tool returns a black silent MP4 with the same duration and reports that in note."
       tools += "- media_video_add_audio arguments: {\"video_path\":\"media/video.mp4\",\"audio_path\":\"media/music.mp3\",\"audio_volume\":0.6,\"output_path\":\"media/video-music.mp4\"} . Adds external audio while preserving original audio when present."
     }
   }
