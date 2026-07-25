@@ -1,100 +1,94 @@
 # 项目传承与上游关系 · Handover & Lineage
 
-> 给未来接手这个项目的 AI 或工程师的一份"快速上手 + 完整家谱"。
+这份文档给未来接手 Local Agent Plaza 的工程师或 AI 使用，记录项目来源、当前稳定基线、分支策略和发布注意事项。
 
-## 1. 一句话介绍
+## 一句话介绍
 
-**Local Agent Plaza** 是一款完全本地化的 Android AI Agent 应用。它 Fork 自 Google AI Edge Gallery（一个 Apache 2.0 开源的端侧 GenAI Showcase），移除了开发测试痕迹，重塑了产品命名与包名，完整保留了上游的全部能力并补齐了无障碍侧的视觉旁白模块。
+Local Agent Plaza 是一款基于 Google AI Edge Gallery 扩展的 Android 端侧 AI 应用。它把本地对话、本地智能体、MCP、图片问答、音频问答、视频问答、实时视觉旁白、本地视觉创作、AI 键盘、工作区文件管理、联网搜索、TTS、多媒体处理和多模态 API 技能整合到同一个移动端应用中。
 
-## 2. 上游家谱
+## 上游关系
 
 ```
-google-ai-edge/gallery          ← Apache 2.0，上游原始仓库
+google-ai-edge/gallery
         |
-        |  Fork（2026-04-06）
+        | Fork
         v
-zhangzheyuanviolin-ship-it/gallery     ← 旧仓库名（开发期）
+zhangzheyuanviolin-ship-it/gallery
         |
-        |  1c6c8ef  rebrand to Local Agent Plaza
-        |  b58dc5e  fix versionName to 1.0.13-plaza.1
-        |  798c94f  docs: README
-        |  f6fdfbb  docs: VISION_NARRATION
-        |  5dfc3bf  docs: RELEASE_NOTES
-        |  README/VISION_NARRATION/RELEASE_NOTES/HANDOVER_AND_LINEAGE
+        | Rename
         v
-zhangzheyuanviolin-ship-it/local-agent-plaza  ← 仓库重命名（2026-06-06）
+zhangzheyuanviolin-ship-it/local-agent-plaza
 ```
 
-上游 `google-ai-edge/gallery` 当前状态（继承时）：
-- Star: 23,584
-- Fork: 2,453
-- License: Apache License 2.0
-- 最新发布: 1.0.15
+本项目遵循上游 Apache License 2.0。上游提供了 AI Edge Gallery 的基础 Android 架构、LiteRT-LM 示例、本地对话、多模态任务、Mobile Actions 和 Tiny Garden 等能力。本项目在此基础上形成独立产品命名、独立包名、稳定发布分支、实验分支和端侧智能体扩展。
 
-## 3. 关键里程碑
+## 当前稳定基线
 
-| 日期 | 事件 |
-|---|---|
-| 2025-03-31 | Google 发布 `google-ai-edge/gallery` |
-| 2026-04-06 | 创建 `zhangzheyuanviolin-ship-it/gallery` fork |
-| 2026-04-06 ~ 2026-06-05 | 内部中文无障碍开发期，发布过 v1.0.11-cn / v1.0.12-cn / v1.0.12-cn-final |
-| 2026-06-05 | 交接文档生成，移交 AI 接手 |
-| 2026-06-05 | 代码清理提交 `1c6c8ef`，确立 Local Agent Plaza 命名 |
-| 2026-06-05 | 版本号修复提交 `b58dc5e`，匹配上游 1_0_13.json 白名单 |
-| 2026-06-06 | 创建 tag `v1.0.13-plaza.1` 与正式 GitHub Release |
-| 2026-06-06 | 仓库更名为 `local-agent-plaza` |
-| 2026-06-06 | 文档体系（README / VISION_NARRATION / RELEASE_NOTES / HANDOVER_AND_LINEAGE）就位 |
+- 稳定分支：`main`
+- 稳定 tag：`v1.0.14-plaza.5`
+- 稳定包名：`com.localagent.plaza`
+- 长期实验分支：`experimental`
+- 实验包名：`com.localagent.plaza.mcp`
+- Android 最低版本：API 31
+- ABI：`arm64-v8a`
 
-## 4. 关键基线
+`main` 只接收已经在 `experimental` 真机测试通过的能力。`experimental` 保留为下一阶段新模块开发分支，发布稳定版本后不要删除。
 
-- **代码基线**：`b58dc5e7c89dfa953dbf925b099e4d465a9fca91`（含两处提交：`1c6c8ef` 重命名 + `b58dc5e` 版本号修复）
-- **稳定版 tag**：`v1.0.13-plaza.1`（annotated tag）
-- **APK 产物**：通过 GitHub Actions `build_android.yaml` 在 push 到 `feature/tavily-skill-20260511` 时自动构建
-- **工作流构件名**：`local-agent-plaza-release`
+## 关键里程碑
 
-## 5. 修改记录（与上游相比的全部改动）
+- 2026-06-06：发布 `v1.0.13-plaza.1`，确立 Local Agent Plaza 命名、仓库名和稳定包名。
+- 2026-06-22：视觉创作稳定化，加入本地图像生成和生成图 VLM 后处理。
+- 2026-07-15：发布 `v1.0.14-plaza.2` 到 `v1.0.14-plaza.4`，稳定化 MCP、AI 键盘、48 模型内置白名单和国内模型下载源。
+- 2026-07-16 至 2026-07-22：在 `experimental` 分支完成视频问答、工作区文档读取、工具审计、天气、Edge TTS、Agnes、MiniMax、多媒体工具箱、网页提取、AnySearch 和媒体工具加固。
+- 2026-07-25：发布 `v1.0.14-plaza.5`，把上述实验能力合并到稳定主分支。
 
-总计 **3 处文件、约 20 行变更**，零功能回退：
+## 当前能力范围
 
-1. `Android/src/app/build.gradle.kts` —— `applicationId` / `versionName` / `versionCode`
-2. `Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/home/HomeScreen.kt` —— 移除 `suppressHomeIntro` / `suppressBranding` 中的 `visiontest` 触发条件
-3. `.github/workflows/build_android.yaml` —— 构件名 `gallery-app-release` → `local-agent-plaza-release`
+当前稳定版本包含：
 
-外加 README 等文档体系更新（与代码无关）。
+- 48 个内置模型条目，其中 AI 对话 / Prompt Lab 46 个，智能体 41 个，图片问答 8 个，音频问答 5 个。
+- 32 个视觉创作模型。
+- 15 个 AI 键盘 Vosk 语音转文字模型。
+- 21 个内置智能体技能。
+- MCP 客户端和 4 个默认 MCP 预设。
+- 视频问答任务，支持完整视频抽帧和指定关键帧。
+- 文件工作区，支持 PDF、DOCX、XLSX 读取和完整工具审计。
+- 多媒体工具箱，支持图片、音频、视频常用处理。
 
-## 6. 接手指南
+## 发布流程
 
-如果你是下一位接手者：
+1. 在 `experimental` 完成真机测试。
+2. 更新 README、技术总览、版本历史和相关说明。
+3. 合并 `experimental` 到 `main`。
+4. 创建 `v1.0.14-plaza.x` tag 并推送。
+5. 等 GitHub Actions 构建完成。
+6. 校验 Release APK 的包名、版本、签名和 sha256。
 
-1. **先读** [README.md](./README.md) 了解产品定位
-2. **再读** [VISION_NARRATION.md](./VISION_NARRATION.md) 了解核心差异化能力
-3. **接着**看 [RELEASE_NOTES.md](./RELEASE_NOTES.md) 了解版本历史
-4. **看代码**：`Android/src/app/src/main/java/com/google/ai/edge/gallery/`，核心模块：
-   - `ui/home/HomeScreen.kt` —— 视觉旁白入口
-   - `visionnarration/` —— 视觉旁白实现
-   - `ui/modelmanager/ModelManagerViewModel.kt` —— 模型加载与白名单
-5. **想 sync 上游**：建议在 v1.0.13 基线上手动 cherry-pick 上游 fix，大版本升级时需要重新评估 `versionName` 与白名单文件的对应关系
-6. **想发版**：修改 `versionName` 与 `versionCode`，push 到 `feature/tavily-skill-20260511`，等 Actions 跑完，下载 `local-agent-plaza-release` 构件后发布
+稳定 tag 构建的 APK 必须是 `com.localagent.plaza`。实验分支构建的 APK 必须是 `com.localagent.plaza.mcp`。
 
-## 7. 环境与权限备忘
+## 本地环境注意事项
 
-- **GitHub 账号**：`zhangzheyuanviolin-ship-it`（fork 主用户）
-- **仓库**：从 `gallery` 改名为 `local-agent-plaza`
-- **默认分支**：`main`（已与 `feature/tavily-skill-20260511` 同步到 `b58dc5e`）
-- **GitHub Actions**：使用 `signingConfig debug` 自动签名（无 Play Store 上架能力）
-- **Android 最低 SDK**：31（Android 12）
-- **目标 SDK**：35（Android 15）
-- **本地构建依赖**：Android Studio Hedgehog+ / JDK 17 / Gradle Wrapper
+手机本地 Ubuntu 环境可能无法启动 AAPT2 daemon，因此本地 Gradle 不能作为正式发布依据。正式 APK 以 GitHub Actions 的签名构建和包名校验为准。
 
-## 8. 风险与边界
+下载 GitHub Actions artifact 或 Release APK 时必须从第一次下载开始使用 `curl -L -C -` 断点续传。
 
-- **debug 签名**：发版用的 keystore 是 Actions 内置 debug，**不具备商业分发能力**。如需正式发布，应配置自定义 keystore 到 GitHub Secrets
-- **模型白名单依赖**：`versionName` 解析出的 `1_0_XX.json` 必须在上游仓库存在。升级基线版本前需先确认上游已发布对应白名单
-- **fork 关系**：本仓库仍保留与 `google-ai-edge/gallery` 的 fork 关系，**不会**从 GitHub 同步上游更新到本仓库主线，需要人工 cherry-pick
-- **APK 大小**：约 116 MB 主要是 JNI 库和 AndroidX 依赖，建议后续按需拆分 ABI
+## 上游同步建议
 
-## 9. 许可与致谢
+不要机械地把上游大版本直接合入 `main`。建议先在单独分支同步上游，逐项检查：
 
-本项目遵循 Apache License 2.0。完整许可条款见 [LICENSE](./LICENSE)。
+- `versionName` 与模型白名单文件名的对应关系。
+- LiteRT-LM、Function Calling 和模型配置接口是否变更。
+- Gallery 上游任务 ID、模型任务过滤和资源路径是否变更。
+- 本项目新增的视觉创作、AI 键盘、视频问答、技能系统和工作区工具是否受到影响。
 
-感谢 **Google AI Edge 团队** 在端侧 GenAI 上的开源贡献。
+## 交接优先阅读
+
+- `README.md`
+- `docs/TECHNICAL_OVERVIEW.md`
+- `RELEASE_NOTES.md`
+- `Function_Calling_Guide.md`
+- `VISION_NARRATION.md`
+
+## 许可
+
+本项目遵循 Apache License 2.0。完整许可条款见 `LICENSE`。

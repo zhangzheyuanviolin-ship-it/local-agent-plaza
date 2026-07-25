@@ -1,139 +1,147 @@
 # Local Agent Plaza · 本地智能体广场
 
-Local Agent Plaza 是一款面向 Android 手机和平板的本地 AI 应用，把对话、智能体、视觉理解、音频理解、视觉创作、系统输入法和可扩展工具调用尽量放在设备端运行。它继承 Google AI Edge Gallery 的端侧推理基础，并在本地智能体、视觉创作、无障碍视觉旁白和 AI 键盘方向做了系统扩展。
+Local Agent Plaza 是一款面向 Android 手机和平板的本地 AI 应用。它 Fork 自 Google AI Edge Gallery，并在端侧对话、本地智能体、MCP、视觉理解、音频理解、视频问答、本地视觉创作、实时视觉旁白、系统 AI 键盘和可扩展技能工具箱方向做了系统扩展。
 
-当前稳定线：`v1.0.14-plaza.4`
+当前稳定线：`v1.0.14-plaza.5`
 当前稳定包名：`com.localagent.plaza`
-当前实验线：`experimental`，实验包名后缀为 `.experimental`，可与稳定版并行安装。历史 MCP 实验包使用过 `.mcp` 后缀。
+长期实验分支：`experimental`
+实验包名后缀：`.mcp`，完整包名为 `com.localagent.plaza.mcp`，用于和稳定版并行安装测试。
 
 ## 核心定位
 
 本项目不是单一聊天应用，而是一个端侧 AI 能力集合：
 
-- 本地文本对话：46 个可用于 AI 对话和提示词实验室的文本模型。
-- 本地智能体：41 个可用于智能体任务的模型，支持工具调用、技能系统和 MCP。
-- 多模态理解：8 个图片问答模型、5 个音频问答模型，支持图片、语音和文本混合任务；实验分支新增视频问答，可从 MP4 视频抽取时间轴画面帧交给本地视觉语言模型分析。
-- 本地视觉创作：32 个图像生成模型，覆盖 SD 1.5、SDXL、QNN NPU 模型和 MNN CPU 模型。
+- 本地 AI 对话和 Prompt Lab：46 个可用于聊天和提示词实验的文本模型。
+- 本地智能体：41 个可用于智能体任务的模型，支持 AUTO、NATIVE、COMPAT 三档工具调用。
+- 技能系统：21 个内置技能，覆盖文件工作区、联网搜索、网页提取、天气、TTS、图片视频生成、MiniMax 全模态能力和多媒体处理。
+- MCP：支持远程 MCP Server，默认预设 DeepWiki、Microsoft Learn、Context7 和 GitMCP: Google AI Edge Gallery。
+- 图片问答：8 个视觉语言模型，支持图片描述、图片问答和视觉信息抽取。
+- 音频问答与转写：5 个音频理解模型，音频转写支持长音频和常见音频格式转 WAV 后处理。
+- 视频问答：从相册或文件选择器选择 MP4 视频，按完整视频或指定关键帧抽图，交给本地视觉语言模型分析。
+- 本地视觉创作：32 个图像生成模型，覆盖 SD1.5、SDXL、QNN NPU、MNN CPU 和 stable-diffusion.cpp 相关链路。
 - 实时视觉旁白：相机抓帧、本地视觉语言模型理解、TTS 播报和历史导出，面向视障场景重点优化。
-- AI 键盘：系统输入法形态，支持离线语音输入、本地文本模型处理任意文本框内容、预设流水线、自定义流水线和审计日志。
-- 传统 Google AI Edge Gallery 模块：Tiny Garden、Mobile Actions、Prompt Lab、模型管理、性能测试和模型下载管理。
+- AI 键盘：Android 系统输入法，支持离线语音输入、本地模型流水线、预设和自定义流水线、日志审计、文本补全追加和任意文本框处理。
+- 上游 Gallery 模块：Tiny Garden、Mobile Actions、Benchmark、模型管理和性能测试。
 
-## 功能模块
+## 主要功能
 
-### 1. AI 对话与提示词实验室
+### AI 对话、Prompt Lab 与模型管理
 
-应用内的 AI 对话和 Prompt Lab 共享模型管理基础设施。当前模型白名单共 48 个模型，其中 46 个可用于常规文本对话和提示词实验室。模型列表随 APK 离线内置，飞行模式下也会显示；网络只影响模型文件下载，不影响模型条目存在。模型文件下载会按已验证候选源回退，优先尝试可用的 ModelScope 同名模型文件和 Hugging Face 中国镜像，再回退到 Hugging Face 官方源。模型覆盖 Gemma、Qwen、DeepSeek Distill、MiniCPM、SmolLM、JOSIE、VibeThinker 等系列，并包含 1B 到 14B 级别、长上下文、INT8 / Q4 / WI4 / WI8 等不同量化形态。
+APK 内置 1.0.14 模型白名单，共 48 个模型条目。飞行模式下也会显示完整模型列表，网络只影响模型文件下载，不影响模型条目存在。模型覆盖 Gemma、Gemma 3n、Gemma 4、Qwen、DeepSeek Distill、MiniCPM、SmolLM、JOSIE、VibeThinker 等系列，包含 1B 到 14B 级别、长上下文和多种量化形态。
 
-运行时支持 LiteRT-LM，本地模型文件下载、导入、删除、选择、参数配置、上下文窗口配置和 CPU / GPU / NPU 后端切换。部分模型支持 thinking 能力或 speculative decoding，并在模型列表中按任务能力进行过滤。
+模型下载支持多源候选和失败回退，优先尝试已验证 ModelScope 同名模型文件，其次尝试 Hugging Face 中国镜像，再回退到 Hugging Face 官方源。下载链路保留断点续传能力。
 
-实验分支新增视频问答任务。该任务复用图片问答的视觉语言模型能力，支持从系统相册或文件选择器选择视频；完整视频模式会按视频时长均匀抽取画面帧，关键帧模式允许用户输入最多 5 个时间点。时间点支持纯秒数、小数秒和 `mm:ss`，例如 `12`、`12.5`、`01:05`。当前阶段不内置转码，用户应优先选择设备系统可解码的 MP4 视频。
+模型列表页支持下载、删除、任务过滤、参数设置、上下文窗口配置和 CPU / GPU / NPU 后端选择。模型参数可以在进入聊天前调整，避免错误上下文设置导致大模型加载卡死。
 
-### 2. 本地智能体与工具调用
+### 本地智能体与技能
 
-智能体任务支持 41 个本地模型。工具调用提供三档模式：
+智能体支持三种工具调用模式：
 
-- AUTO：自动选择适合当前模型的工具调用方式。
-- NATIVE：使用 LiteRT-LM 原生 Function Calling。
-- COMPAT：面向不稳定或不支持原生 Function Calling 的模型，使用兼容 JSON 工具调用协议。
+- `AUTO`：按模型能力自动选择工具调用方式。
+- `NATIVE`：使用 LiteRT-LM 原生 Function Calling。
+- `COMPAT`：使用兼容 JSON 工具协议，适配原生工具调用不稳定或不支持的模型。
 
-智能体工具系统包含技能加载、JS 技能运行、本地文件工作区、联网搜索、地图、二维码、哈希、日历、邮件、长文本写作、维基百科查询等能力。应用内置 14 个可直接打包的技能：
+所有技能均遵循用户手动启用原则：只有用户在技能管理页面启用的技能才会被注入模型上下文。未启用的技能不会被模型看到。需要 API Key 或参数的技能也在技能页面统一配置。
 
-- calculate-hash
-- create-calendar-event
-- exa-search
-- file-workspace
-- interactive-map
-- kitchen-adventure
-- langsearch-search
-- long-text-writer
-- mood-tracker
-- qr-code
-- query-wikipedia
-- send-email
-- tavily-search
-- text-spinner
+当前内置 21 个技能：
 
-智能体也支持用户导入本地技能、从 URL 添加技能、配置技能密钥、测试技能，并通过诊断日志追踪工具调用过程。
+- `calculate-hash`：计算文本或文件哈希。
+- `create-calendar-event`：创建日历事件。
+- `exa-search`：Exa 联网搜索。
+- `file-workspace`：用户授权工作区文件管理，支持列目录、读写文本、读取 PDF / DOCX / XLSX、下载 URL 到工作区和工具审计日志。
+- `interactive-map`：地图交互。
+- `kitchen-adventure`：示例交互技能。
+- `langsearch-search`：LangSearch 联网搜索。
+- `long-text-writer`：长文本写作辅助。
+- `mood-tracker`：情绪记录示例。
+- `qr-code`：二维码生成。
+- `query-wikipedia`：维基百科查询。
+- `send-email`：邮件相关能力。
+- `tavily-search`：Tavily 联网搜索。
+- `text-spinner`：文本改写示例。
+- `weather-query`：按当前定位或城市查询当前天气、未来 24 小时和未来一周天气。
+- `edge-tts`：Microsoft Edge TTS 语音合成，支持直接文本或工作区文本文件转 MP3。
+- `agnes-omni`：Agnes 图片和视频生成，输出保存到工作区 `media/`。
+- `minimax-omni`：MiniMax 中国区 Token Plan，全模态能力包括文本生成、图片生成、语音合成、音乐生成、图片分析、视频分析和网络搜索。
+- `media-toolbox`：多媒体工具箱，封装图片、音频、视频基础处理。
+- `web-page-extract`：提取网页正文为模型易读内容。
+- `anysearch-search`：AnySearch 搜索、网页提取和垂直搜索子域查询。
 
-### 3. MCP 集成
+### 文件工作区
 
-应用集成 Model Context Protocol 客户端能力，支持添加远程 MCP Server、读取工具列表、启用或禁用工具，并把 MCP 工具提示注入智能体上下文。默认预设包含：
+用户授权一个本地文件夹作为智能体工作区。推荐目录结构：
 
-- DeepWiki：围绕公开 GitHub 仓库文档和代码结构提问。
-- Microsoft Learn：检索 Microsoft Learn 官方文档。
-- Context7：检索开源库文档和代码示例。
-- GitMCP: Google AI Edge Gallery：把上游 Gallery 仓库转换为 MCP 文档工具。
+- `file/`：文本、文档、表格和模型写作输出。
+- `media/`：图片、音频、视频、TTS、图像生成和多媒体处理结果。
+- `download/`：模型或智能体下载的外部文件。
+- `tool-audit/`：每次工具调用的完整审计 JSON。
 
-MCP 与传统技能系统可以并存，适合把本地模型扩展为能查询外部文档、工具和知识源的端侧智能体。
+文件读取支持纯文本、Markdown、CSV、JSON、HTML、PDF、DOCX 和 XLSX。工具返回会根据当前模型上下文预算做压缩和截断，完整工具输出保留在 `tool-audit/` 以便审计和复核。
 
-### 4. 图片问答、音频问答和语音输入
+### 多媒体工具箱
 
-图片问答当前可选择 8 个具备视觉能力的模型，用于图片描述、图片问答、视觉信息抽取和生成图复核。音频问答当前可选择 5 个支持音频能力的模型，用于语音或音频片段理解。
+`media-toolbox` 把常用多媒体处理封装成简单工具调用，不要求模型直接编写 FFmpeg 命令。
 
-普通聊天输入区保留文字和语音输入组件。AI 键盘模块另行集成 Vosk 语音转文字模型，支持在输入法内部离线识别语音并提交到当前文本框。
+图片模式支持图片信息、尺寸缩放、格式转换和图片转短视频。音频模式支持音频信息、格式转换、压缩、片段剪辑、最多 5 段拼接和双音轨混音。视频模式支持视频信息、格式转换、尺寸缩放、压缩、最多 5 段拼接、片段剪辑、音轨提取、视频静音和给视频添加外部音轨。
 
-### 5. 实时视觉旁白
+视频拼接会自动把输入统一到 720p、30fps、MP4、MPEG4 视频和 AAC 音频，并给缺失音频的视频补静音轨，降低不同尺寸和编码导致拼接失败的概率。工具层还会识别视频路径误入音频工具的情况并自动路由或明确拒绝，避免生成“后缀是视频、内容是音频”的伪文件。
 
-视觉旁白是本项目面向无障碍场景的重点模块。它可以使用相机实时抓帧，把画面送入本地视觉语言模型，并通过自定义提示词生成场景描述，再用系统 TTS 播报。用户可以控制抓帧间隔、提示词、播报策略，并导出历史记录为文本或 Markdown。
+### MCP 集成
 
-这个模块适合视障用户进行环境感知、物体识别、场景解释、文字辅助理解，也适合普通用户把手机相机变成本地视觉助手。
+应用集成 Model Context Protocol 客户端能力。用户可以添加远程 MCP Server、查看工具列表、启用或禁用工具，并把 MCP 工具提示注入智能体上下文。默认预设包括 DeepWiki、Microsoft Learn、Context7 和 GitMCP: Google AI Edge Gallery。
 
-### 6. 本地视觉创作
+### 图片、音频和视频问答
 
-视觉创作模块把本地文生图引入 Android 应用。目前注册 32 个图像生成模型，覆盖：
+图片问答支持一次多图输入。音频问答支持音频理解。视频问答复用图片问答的视觉语言模型，通过 Android 多媒体引擎抽取视频画面帧：
 
-- Local Dream SD1.5 QNN：适合 Snapdragon 8 Gen 2 等高通设备上的 512 x 512 文生图。
-- Local Dream SDXL QNN：适合 Snapdragon 8 Gen 3 / Elite 级设备上的 1024 x 1024 高质量图像生成。
-- MNN CPU：面向不具备 QNN NPU 环境时的 CPU 后备路径。
-- stable-diffusion.cpp：作为本地图像生成原生推理链路的一部分保留。
+- 完整视频模式：按视频总时长均匀抽帧，用户可调整帧数和分辨率。
+- 关键帧模式：用户指定最多 5 个时间点，支持秒数、小数秒和 `mm:ss`。
+- 上传入口同时支持系统相册和文件选择器。
 
-模型包含写实、人像、摄影、动漫、插画、通用 SDXL、Turbo 和 DMD2 蒸馏候选模型。生成后的图片可以继续交给本地视觉语言模型处理，用于图片描述、质量检查、内容理解和二次问答。这使应用不只是“生成图片”，还可以把生成结果重新纳入本地多模态理解链路。
+当前视频问答不内置转码，建议使用系统可正常解码的 MP4 文件。
 
-### 7. AI 键盘
+### 实时视觉旁白
 
-AI 键盘是最新稳定版本的重点功能。它把本地智能体广场作为 Android 系统输入法使用，在任意可输入文本框里提供：
+视觉旁白面向视障用户和移动场景理解。应用可以从相机抓帧，送入本地视觉语言模型生成场景描述，再用系统 TTS 播报。用户可调整抓帧间隔、提示词和播报策略，并导出历史记录。
 
-- 基础输入法键盘。
-- 标点和空格手动插入。
-- Vosk 离线语音输入。
-- 15 个语音转文字模型，覆盖中文、英文、日语、韩语、法语、德语、西班牙语、俄语、越南语、葡萄牙语。
-- 本地文本模型选择。
-- 流水线选择和单选菜单切换。
+### 本地视觉创作
+
+视觉创作注册 32 个图像生成模型，覆盖 SD1.5 QNN、SDXL QNN、MNN CPU 和 stable-diffusion.cpp 相关链路。用户可以先用本地文本模型优化提示词，再生成图片，生成结果还能继续交给本地视觉语言模型做描述、质量检查和二次问答。视觉创作流程会在文本模型、图像模型和视觉模型完成各自任务后尽量释放模型占用，降低连续生成时的内存累积风险。
+
+### AI 键盘
+
+AI 键盘把本地智能体广场作为 Android 系统输入法使用，在任意文本框中调用本地模型处理文本。当前能力包括：
+
+- 基础键盘输入、标点和空格插入。
+- Vosk 离线语音输入，15 个语音转文字模型覆盖中文、英文、日语、韩语、法语、德语、西班牙语、俄语、越南语、葡萄牙语。
+- 本地文本模型选择和单选列表切换。
 - 18 条预设流水线：润色、校对纠正、重写、简化、专业风格、日常风格、缩写、扩写、总结、要点、电子邮件、聊天、Twitter、列表、表格、翻译、文本补全、自定义。
-- 翻译目标语言设置。
+- 翻译目标语言配置。
 - 预设提示词查看和编辑。
-- 自定义流水线新增、编辑、删除。
-- 流水线日志：记录原文、提示词、原始输出、清洗输出、提交后文本、模型、耗时、首 token 延迟、输出速度、提交方式和目标编辑器信息。
+- 自定义流水线新增、编辑和删除。
+- 流水线日志复制、导出和清理。
 
-为了避免输入法服务直接承受大模型推理压力，AI 键盘的文本处理通过应用内模型运行链路隔离执行，稳定性已经过 2B、4B、12B 模型和重复流水线调用测试。文本补全流水线使用追加提交逻辑，适合把被截断或未完成的文本继续补齐，而不是替换原文。
+AI 键盘的模型推理通过应用内链路执行，避免输入法服务直接持有大模型上下文造成系统卡死。文本补全流水线使用追加提交模式，不替换原始未完成文本。
 
-### 8. Tiny Garden 与 Mobile Actions
+## 隐私与离线
 
-Tiny Garden 是上游保留的本地迷你交互任务，适合演示小模型在游戏化任务中的状态驱动能力。Mobile Actions 是上游移动端操作任务，用于探索模型理解手机操作意图、执行动作规划和移动端交互的能力。
-
-### 9. 模型管理与下载
-
-模型管理器负责统一展示模型、下载状态、任务适配关系、模型删除和配置入口。模型白名单跟随上游结构扩展，并额外加入本项目验证过的 LiteRT-LM、QNN、MNN 和视觉创作模型。
-
-## 隐私和离线能力
-
-默认对话、推理、视觉旁白、AI 键盘流水线、语音识别和视觉创作都在设备本地运行。只有用户主动使用联网搜索、MCP 远程服务、Hugging Face 下载、模型白名单下载、外部链接或需要第三方 API 的技能时，才会访问网络。
+默认对话、推理、图片问答、音频问答、视频抽帧、视觉旁白、AI 键盘流水线、语音识别和视觉创作都在设备本地运行。联网只发生在用户主动下载模型、调用搜索技能、连接 MCP、访问网页、下载 URL 或使用第三方 API 技能时。
 
 仓库保留 Firebase 依赖声明，但 `google-services` 插件默认 `apply false`，仓库内不包含 `google-services.json`，默认构建不会启用真实 Firebase 实例。
 
 ## 安装
 
-前往 Releases 下载最新稳定 APK。稳定版包名为 `com.localagent.plaza`。实验分支产物使用 `.experimental` 后缀，可与稳定版并行安装，便于测试新功能。
+前往 GitHub Releases 下载最新稳定 APK。稳定版包名为 `com.localagent.plaza`。实验分支产物包名为 `com.localagent.plaza.mcp`，用于和稳定版并行安装测试。
 
-推荐 Android 14 或更新系统，以及 12GB 以上内存设备；如果要运行 12B 级文本模型、SDXL QNN 图像生成或长时间 AI 键盘流水线，建议 16GB 到 24GB 内存设备。
+推荐 Android 14 或更新系统，以及 12GB 以上内存设备。运行 12B 文本模型、SDXL QNN 图像生成、视频问答高分辨率抽帧或连续视觉创作时，建议 16GB 到 24GB 内存设备。
 
 ## 文档
 
-- [TECHNICAL_OVERVIEW.md](docs/TECHNICAL_OVERVIEW.md)：模块、模型、推理链路和发布策略说明。
+- [TECHNICAL_OVERVIEW.md](docs/TECHNICAL_OVERVIEW.md)：模块、模型、推理链路、技能和发布策略。
 - [RELEASE_NOTES.md](RELEASE_NOTES.md)：版本历史。
+- [Function_Calling_Guide.md](Function_Calling_Guide.md)：智能体工具调用与技能扩展说明。
 - [VISION_NARRATION.md](VISION_NARRATION.md)：实时视觉旁白说明。
-- [HANDOVER_AND_LINEAGE.md](HANDOVER_AND_LINEAGE.md)：项目来源和交接记录。
-- [Function_Calling_Guide.md](Function_Calling_Guide.md)：工具调用说明。
+- [HANDOVER_AND_LINEAGE.md](HANDOVER_AND_LINEAGE.md)：项目来源、分支和交接记录。
 
 ## 上游与许可
 
