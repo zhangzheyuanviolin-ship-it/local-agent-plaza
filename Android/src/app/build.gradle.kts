@@ -97,10 +97,8 @@ android {
     compose = true
     buildConfig = true
   }
-  packaging {
-    jniLibs {
-      pickFirsts += listOf("lib/arm64-v8a/libLiteRt*.so")
-    }
+  packagingOptions {
+    jniLibs.pickFirsts.add("lib/arm64-v8a/libLiteRt*.so")
   }
   externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } }
 }
