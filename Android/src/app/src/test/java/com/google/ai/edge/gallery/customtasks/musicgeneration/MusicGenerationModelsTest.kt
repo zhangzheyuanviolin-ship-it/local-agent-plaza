@@ -31,6 +31,12 @@ class MusicGenerationModelsTest {
   }
 
   @Test
+  fun createMusicGenerationModels_marksAllModelsForMusicTask() {
+    val models = createMusicGenerationModels()
+    assertTrue(models.all { it.bestForTaskIds.contains(TASK_ID_LOCAL_MUSIC_GENERATION) })
+  }
+
+  @Test
   fun createMusicGenerationModels_keepsRequiredExtraFiles() {
     val models = createMusicGenerationModels()
     assertTrue(models[0].extraDataFiles.map { it.downloadFileName }.containsAll(listOf("sg_text.litert", "sg_decode.litert", "sg_vocab.spm")))

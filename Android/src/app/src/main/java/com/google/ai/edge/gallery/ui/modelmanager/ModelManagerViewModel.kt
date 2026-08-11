@@ -32,6 +32,8 @@ import com.google.ai.edge.gallery.common.isAICoreSupported
 import com.google.ai.edge.gallery.customtasks.aikeyboard.TASK_ID_AI_KEYBOARD
 import com.google.ai.edge.gallery.customtasks.aikeyboard.createAiKeyboardSettingsModel
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
+import com.google.ai.edge.gallery.customtasks.musicgeneration.TASK_ID_LOCAL_MUSIC_GENERATION
+import com.google.ai.edge.gallery.customtasks.musicgeneration.createMusicGenerationModels
 import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NARRATION
 import com.google.ai.edge.gallery.customtasks.videoqa.TASK_ID_VIDEO_QUESTION_ANSWER
 import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_LOCAL_VISUAL_CREATION
@@ -192,6 +194,7 @@ private val PREDEFINED_LLM_TASK_ORDER =
     BuiltInTaskId.LLM_CHAT,
     BuiltInTaskId.LLM_AGENT_CHAT,
     TASK_ID_AI_KEYBOARD,
+    TASK_ID_LOCAL_MUSIC_GENERATION,
     BuiltInTaskId.LLM_PROMPT_LAB,
     BuiltInTaskId.LLM_TINY_GARDEN,
     BuiltInTaskId.LLM_MOBILE_ACTIONS,
@@ -318,10 +321,25 @@ constructor(
     }
   }
 
+  private fun restoreLocalMusicGenerationModels(tasks: Collection<Task>) {
+    val task = tasks.firstOrNull { it.id == TASK_ID_LOCAL_MUSIC_GENERATION } ?: return
+    var changed = false
+    for (model in createMusicGenerationModels()) {
+      if (task.models.none { it.name == model.name }) {
+        task.models.add(model)
+        changed = true
+      }
+    }
+    if (changed) {
+      task.updateTrigger.value = System.currentTimeMillis()
+    }
+  }
+
   fun processTasks() {
     val curTasks = getActiveCustomTasks().map { it.task }
     restoreLocalVisualCreationModels(curTasks)
     restoreAiKeyboardSettingsModel(curTasks)
+    restoreLocalMusicGenerationModels(curTasks)
     for (task in curTasks) {
       for (model in task.models) {
         model.preProcess()
@@ -1054,6 +1072,7 @@ constructor(
         clearNonImportedModelsFromTasks(curTasks)
         restoreLocalVisualCreationModels(curTasks)
         restoreAiKeyboardSettingsModel(curTasks)
+        restoreLocalMusicGenerationModels(curTasks)
 
         // Clear existing allowlist models.
         _allowlistModels.clear()
@@ -1335,6 +1354,7 @@ constructor(
     clearAllModelsFromTasks(activeTasks)
     restoreLocalVisualCreationModels(activeTasks)
     restoreAiKeyboardSettingsModel(activeTasks)
+    restoreLocalMusicGenerationModels(activeTasks)
 
     val modelDownloadStatus: MutableMap<String, ModelDownloadStatus> = mutableMapOf()
     val modelInstances: MutableMap<String, ModelInitializationStatus> = mutableMapOf()
