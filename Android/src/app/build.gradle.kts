@@ -97,7 +97,7 @@ android {
     compose = true
     buildConfig = true
   }
-  packagingOptions.pickFirst("lib/arm64-v8a/libLiteRt*.so")
+  packagingOptions.pickFirst("lib/**/libLiteRt*.so")
   externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } }
 }
 
