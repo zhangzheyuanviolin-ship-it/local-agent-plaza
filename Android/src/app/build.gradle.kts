@@ -98,6 +98,7 @@ android {
     buildConfig = true
   }
   packagingOptions.pickFirst("lib/**/libLiteRt*.so")
+  packagingOptions.doNotStrip("**/libLiteRt*.so")
   externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } }
 }
 

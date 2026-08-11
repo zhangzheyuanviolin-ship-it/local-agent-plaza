@@ -37,6 +37,17 @@ class MusicGenerationModelsTest {
   }
 
   @Test
+  fun createHdTextMask_convertsAttentionMaskToFixedLengthFloatMask() {
+    val mask = createHdTextMask(longArrayOf(1L, 1L, 0L, 1L))
+    assertEquals(256, mask.size)
+    assertEquals(1f, mask[0])
+    assertEquals(1f, mask[1])
+    assertEquals(0f, mask[2])
+    assertEquals(1f, mask[3])
+    assertEquals(0f, mask[4])
+  }
+
+  @Test
   fun createMusicGenerationModels_keepsRequiredExtraFiles() {
     val models = createMusicGenerationModels()
     assertTrue(models[0].extraDataFiles.map { it.downloadFileName }.containsAll(listOf("sg_text.litert", "sg_decode.litert", "sg_vocab.spm")))

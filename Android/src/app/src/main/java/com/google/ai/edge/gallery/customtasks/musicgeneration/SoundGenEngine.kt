@@ -184,7 +184,7 @@ class HdSoundGenEngine(private val model: Model, context: Context, private val b
       textInputs[1].writeLong(attentionMask)
       textModel.run(textInputs, textOutputs)
       val textEmbedding = textOutputs[0].readFloat()
-      val textMask = textOutputs[1].readFloat().copyOf(HD_TEXT_TOKEN_COUNT)
+      val textMask = createHdTextMask(attentionMask)
       onProgress(0.05f)
 
       val sigmas = hdSigmas(blockCount)
@@ -300,6 +300,12 @@ private fun closeBuffers(buffers: List<TensorBuffer>) {
 private fun gaussianArray(size: Int, seed: Long): FloatArray {
   val random = Random(seed)
   return FloatArray(size) { random.nextGaussian().toFloat() }
+}
+
+internal fun createHdTextMask(attentionMask: LongArray): FloatArray {
+  return FloatArray(HD_TEXT_TOKEN_COUNT) { index ->
+    if (attentionMask.getOrNull(index) == 1L) 1f else 0f
+  }
 }
 
 private fun basicSigmas(): FloatArray {
