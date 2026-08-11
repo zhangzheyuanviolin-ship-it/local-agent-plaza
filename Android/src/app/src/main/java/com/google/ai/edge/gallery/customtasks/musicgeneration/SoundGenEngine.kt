@@ -72,6 +72,7 @@ class BasicSoundGenEngine(private val model: Model, context: Context) : MusicGen
 
     val textInputs = textModel.createInputBuffers()
     val textOutputs = textModel.createOutputBuffers()
+    var textBuffersClosed = false
     try {
       textInputs[0].writeLong(tokenIds)
       textInputs[1].writeLong(attentionMask)
@@ -80,6 +81,9 @@ class BasicSoundGenEngine(private val model: Model, context: Context) : MusicGen
       val textEmbedding = textOutputs[0].readFloat()
       val textCondition = textOutputs[2].readFloat()
       onProgress(0.1f)
+      closeBuffers(textInputs)
+      closeBuffers(textOutputs)
+      textBuffersClosed = true
 
       val sigmas = basicSigmas()
       var latent = gaussianArray(BASIC_LATENT_SIZE, seed)
@@ -134,9 +138,12 @@ class BasicSoundGenEngine(private val model: Model, context: Context) : MusicGen
         closeBuffers(decodeInputs)
         closeBuffers(decodeOutputs)
       }
-    } finally {
-      closeBuffers(textInputs)
-      closeBuffers(textOutputs)
+    } catch (e: Throwable) {
+      if (!textBuffersClosed) {
+        closeBuffers(textInputs)
+        closeBuffers(textOutputs)
+      }
+      throw e
     }
   }
 
@@ -179,6 +186,7 @@ class HdSoundGenEngine(private val model: Model, context: Context, private val b
 
     val textInputs = textModel.createInputBuffers()
     val textOutputs = textModel.createOutputBuffers()
+    var textBuffersClosed = false
     try {
       textInputs[0].writeLong(tokenIds)
       textInputs[1].writeLong(attentionMask)
@@ -186,6 +194,9 @@ class HdSoundGenEngine(private val model: Model, context: Context, private val b
       val textEmbedding = textOutputs[0].readFloat()
       val textMask = createHdTextMask(attentionMask)
       onProgress(0.05f)
+      closeBuffers(textInputs)
+      closeBuffers(textOutputs)
+      textBuffersClosed = true
 
       val sigmas = hdSigmas(blockCount)
       var latent = gaussianArray(latentSize, seed)
@@ -248,9 +259,12 @@ class HdSoundGenEngine(private val model: Model, context: Context, private val b
         closeBuffers(decodeInputs)
         closeBuffers(decodeOutputs)
       }
-    } finally {
-      closeBuffers(textInputs)
-      closeBuffers(textOutputs)
+    } catch (e: Throwable) {
+      if (!textBuffersClosed) {
+        closeBuffers(textInputs)
+        closeBuffers(textOutputs)
+      }
+      throw e
     }
   }
 

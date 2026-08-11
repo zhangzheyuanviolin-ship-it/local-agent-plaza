@@ -28,6 +28,7 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.roundToInt
 
 private const val TAG = "MusicWavFiles"
 private const val WAV_SAMPLE_RATE = 44_100
@@ -119,7 +120,8 @@ fun shareMusicFile(context: Context, file: File) {
   context.startActivity(chooser)
 }
 
-private fun toPcm16(value: Float): Short {
+internal fun toPcm16(value: Float): Short {
   val clipped = value.coerceIn(-1f, 1f)
-  return (clipped * 32767f).toInt().toShort()
+  val scaled = clipped * 32767f
+  return if (scaled.isNaN()) 0 else scaled.roundToInt().toShort()
 }

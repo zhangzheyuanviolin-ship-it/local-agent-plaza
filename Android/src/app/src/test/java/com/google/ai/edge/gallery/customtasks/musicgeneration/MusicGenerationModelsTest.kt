@@ -48,6 +48,15 @@ class MusicGenerationModelsTest {
   }
 
   @Test
+  fun toPcm16_roundsLikeBoxWavWriter() {
+    assertEquals(1.toShort(), toPcm16(0.5f / 32767f))
+    assertEquals((-1).toShort(), toPcm16(-0.5f / 32767f))
+    assertEquals(32767.toShort(), toPcm16(2f))
+    assertEquals((-32767).toShort(), toPcm16(-2f))
+    assertEquals(0.toShort(), toPcm16(Float.NaN))
+  }
+
+  @Test
   fun createMusicGenerationModels_keepsRequiredExtraFiles() {
     val models = createMusicGenerationModels()
     assertTrue(models[0].extraDataFiles.map { it.downloadFileName }.containsAll(listOf("sg_text.litert", "sg_decode.litert", "sg_vocab.spm")))
