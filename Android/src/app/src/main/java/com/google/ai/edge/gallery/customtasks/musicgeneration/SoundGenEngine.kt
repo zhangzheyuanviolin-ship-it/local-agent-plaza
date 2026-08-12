@@ -25,18 +25,8 @@ import com.google.ai.edge.litert.TensorBuffer
 import java.io.Closeable
 import java.io.File
 import java.util.Random
-import kotlin.math.exp
-import kotlin.math.roundToInt
 
 private const val TAG = "SoundGenEngine"
-private const val SAMPLE_RATE = 44_100
-private const val BASIC_TEXT_TOKEN_COUNT = 128
-private const val HD_TEXT_TOKEN_COUNT = 256
-private const val BASIC_LATENT_SIZE = 16_384
-private const val HD_LATENT_SCALE = 256
-private const val HD_DECODER_SCALE = 257
-private const val HD_AUDIO_SCALE = 4096
-private const val DIFFUSION_STEPS = 8
 
 interface MusicGenerationEngine : Closeable {
   suspend fun generate(
@@ -63,9 +53,9 @@ class BasicSoundGenEngine(private val model: Model, context: Context) : MusicGen
     onProgress: (Float) -> Unit,
   ): GeneratedMusicFile {
     val tokens = tokenizer.encode(prompt)
-    val tokenIds = LongArray(BASIC_TEXT_TOKEN_COUNT)
-    val attentionMask = LongArray(BASIC_TEXT_TOKEN_COUNT)
-    for (index in 0 until minOf(tokens.size, BASIC_TEXT_TOKEN_COUNT)) {
+    val tokenIds = LongArray(BoxSoundGenCore.BASIC_TEXT_TOKEN_COUNT)
+    val attentionMask = LongArray(BoxSoundGenCore.BASIC_TEXT_TOKEN_COUNT)
+    for (index in 0 until minOf(tokens.size, BoxSoundGenCore.BASIC_TEXT_TOKEN_COUNT)) {
       tokenIds[index] = tokens[index].toLong()
       attentionMask[index] = 1L
     }
@@ -85,27 +75,27 @@ class BasicSoundGenEngine(private val model: Model, context: Context) : MusicGen
       closeBuffers(textOutputs)
       textBuffersClosed = true
 
-      val sigmas = basicSigmas()
-      var latent = gaussianArray(BASIC_LATENT_SIZE, seed)
+      val sigmas = BoxSoundGenCore.basicSigmas()
+      var latent = gaussianArray(BoxSoundGenCore.BASIC_LATENT_SIZE, seed)
       val coreInputs = coreModel.createInputBuffers()
       val coreOutputs = coreModel.createOutputBuffers()
       try {
         coreInputs[0].writeFloat(textEmbedding)
         coreInputs[1].writeFloat(textCondition)
-        for (step in 0 until DIFFUSION_STEPS) {
+        for (step in 0 until BoxSoundGenCore.DIFFUSION_STEPS) {
           val sigma = sigmas[step]
           val nextSigma = sigmas[step + 1]
           coreInputs[2].writeFloat(latent)
           coreInputs[3].writeFloat(floatArrayOf(sigma))
           coreModel.run(coreInputs, coreOutputs)
           val predictedNoise = coreOutputs[0].readFloat()
-          val nextNoise = gaussianArray(BASIC_LATENT_SIZE, seed + step + 4564)
+          val nextNoise = gaussianArray(BoxSoundGenCore.BASIC_LATENT_SIZE, seed + step + 4564)
           latent =
-            FloatArray(BASIC_LATENT_SIZE) { index ->
+            FloatArray(BoxSoundGenCore.BASIC_LATENT_SIZE) { index ->
               (nextNoise[index] * nextSigma) +
                 ((1f - nextSigma) * (latent[index] - (predictedNoise[index] * sigma)))
             }
-          onProgress(0.1f + ((step + 1) * 0.8f / DIFFUSION_STEPS))
+          onProgress(0.1f + ((step + 1) * 0.8f / BoxSoundGenCore.DIFFUSION_STEPS))
         }
       } finally {
         closeBuffers(coreInputs)
@@ -119,7 +109,11 @@ class BasicSoundGenEngine(private val model: Model, context: Context) : MusicGen
         decodeModel.run(decodeInputs, decodeOutputs)
         val waveform = decodeOutputs[0].readFloat()
         onProgress(0.95f)
-        val samples = requestedSamples(durationSeconds, model.musicGenerationSpec()?.maxOutputSamplesPerChannel ?: 524_288)
+        val samples =
+          BoxSoundGenCore.requestedSamples(
+            durationSeconds,
+            model.musicGenerationSpec()?.maxOutputSamplesPerChannel ?: 524_288,
+          )
         val output =
           writeStereoFloatWav(
             file =
@@ -160,9 +154,10 @@ class BasicSoundGenEngine(private val model: Model, context: Context) : MusicGen
 
 class HdSoundGenEngine(private val model: Model, context: Context, private val blockCount: Int) :
   MusicGenerationEngine {
-  private val latentSize = blockCount * HD_LATENT_SCALE
-  private val decoderConditionSize = blockCount * HD_DECODER_SCALE
-  private val maxOutputSamplesPerChannel = blockCount * HD_AUDIO_SCALE
+  private val shape = BoxSoundGenCore.hdShape(blockCount)
+  private val latentSize = shape.latentSize
+  private val decoderConditionSize = shape.decoderConditionSize
+  private val maxOutputSamplesPerChannel = shape.maxOutputSamplesPerChannel
   private val textModel = createCpuModel(model.getPath(context, "sghd_text.litert"))
   private val coreModel = createCpuModel(model.getPath(context, "sghd_core.litert"))
   private val decodeModel = createCpuModel(model.getPath(context, "sghd_decode.litert"))
@@ -177,9 +172,9 @@ class HdSoundGenEngine(private val model: Model, context: Context, private val b
     onProgress: (Float) -> Unit,
   ): GeneratedMusicFile {
     val tokens = tokenizer.encode(prompt)
-    val tokenIds = LongArray(HD_TEXT_TOKEN_COUNT)
-    val attentionMask = LongArray(HD_TEXT_TOKEN_COUNT)
-    for (index in 0 until minOf(tokens.size, HD_TEXT_TOKEN_COUNT)) {
+    val tokenIds = LongArray(BoxSoundGenCore.HD_TEXT_TOKEN_COUNT)
+    val attentionMask = LongArray(BoxSoundGenCore.HD_TEXT_TOKEN_COUNT)
+    for (index in 0 until minOf(tokens.size, BoxSoundGenCore.HD_TEXT_TOKEN_COUNT)) {
       tokenIds[index] = tokens[index].toLong()
       attentionMask[index] = 1L
     }
@@ -198,7 +193,7 @@ class HdSoundGenEngine(private val model: Model, context: Context, private val b
       closeBuffers(textOutputs)
       textBuffersClosed = true
 
-      val sigmas = hdSigmas(blockCount)
+      val sigmas = BoxSoundGenCore.hdSigmas(blockCount)
       var latent = gaussianArray(latentSize, seed)
       val decoderCondition = FloatArray(decoderConditionSize)
       val coreInputs = coreModel.createInputBuffers()
@@ -208,7 +203,7 @@ class HdSoundGenEngine(private val model: Model, context: Context, private val b
         coreInputs[3].writeFloat(textMask)
         coreInputs[4].writeFloat(floatArrayOf(durationSeconds))
         coreInputs[5].writeFloat(decoderCondition)
-        for (step in 0 until DIFFUSION_STEPS) {
+        for (step in 0 until BoxSoundGenCore.DIFFUSION_STEPS) {
           val sigma = sigmas[step]
           val nextSigma = sigmas[step + 1]
           coreInputs[0].writeFloat(latent)
@@ -216,7 +211,11 @@ class HdSoundGenEngine(private val model: Model, context: Context, private val b
           coreModel.run(coreInputs, coreOutputs)
           val predictedNoise = coreOutputs[0].readFloat()
           val nextNoise =
-            if (step < DIFFUSION_STEPS - 1) gaussianArray(latentSize, seed + step + 1) else null
+            if (step < BoxSoundGenCore.DIFFUSION_STEPS - 1) {
+              gaussianArray(latentSize, seed + step + 1)
+            } else {
+              null
+            }
           latent =
             FloatArray(latentSize) { index ->
               val denoised = latent[index] - (predictedNoise[index] * sigma)
@@ -226,7 +225,7 @@ class HdSoundGenEngine(private val model: Model, context: Context, private val b
                 denoised
               }
             }
-          onProgress(0.05f + ((step + 1) * 0.8f / DIFFUSION_STEPS))
+          onProgress(0.05f + ((step + 1) * 0.8f / BoxSoundGenCore.DIFFUSION_STEPS))
         }
       } finally {
         closeBuffers(coreInputs)
@@ -240,7 +239,7 @@ class HdSoundGenEngine(private val model: Model, context: Context, private val b
         decodeModel.run(decodeInputs, decodeOutputs)
         val waveform = decodeOutputs[0].readFloat()
         onProgress(0.97f)
-        val samples = requestedSamples(durationSeconds, maxOutputSamplesPerChannel)
+        val samples = BoxSoundGenCore.requestedSamples(durationSeconds, maxOutputSamplesPerChannel)
         val output =
           writeStereoFloatWav(
             file =
@@ -317,46 +316,7 @@ private fun gaussianArray(size: Int, seed: Long): FloatArray {
 }
 
 internal fun createHdTextMask(attentionMask: LongArray): FloatArray {
-  return FloatArray(HD_TEXT_TOKEN_COUNT) { index ->
+  return FloatArray(BoxSoundGenCore.HD_TEXT_TOKEN_COUNT) { index ->
     if (attentionMask.getOrNull(index) == 1L) 1f else 0f
   }
-}
-
-private fun basicSigmas(): FloatArray {
-  val values = FloatArray(DIFFUSION_STEPS + 1)
-  for (index in values.indices) {
-    values[index] = if (index == 0) -6f else values[index - 1] + 1f
-  }
-  values[DIFFUSION_STEPS] = 2f
-  for (index in values.indices) {
-    values[index] = 1f / (exp(values[index].toDouble()).toFloat() + 1f)
-  }
-  values[0] = 1f
-  values[DIFFUSION_STEPS] = 0f
-  return values
-}
-
-private fun hdSigmas(blockCount: Int): FloatArray {
-  val expFactor =
-    exp(
-        -((((blockCount.coerceIn(HD_TEXT_TOKEN_COUNT, 4096) - HD_TEXT_TOKEN_COUNT) * 0.65f) /
-            3840f) + 0.5f)
-          .toDouble()
-      )
-      .toFloat()
-  return FloatArray(DIFFUSION_STEPS + 1) { index ->
-      val t = 1f - (index / DIFFUSION_STEPS.toFloat())
-      if (t >= 1f) {
-        1f
-      } else if (t <= 0f) {
-        0f
-      } else {
-        1f - (expFactor / (((1f / (1f - t)) - 1f) + expFactor))
-      }
-    }
-    .also { it[0] = 1f }
-}
-
-private fun requestedSamples(durationSeconds: Float, maxSamples: Int): Int {
-  return (durationSeconds * SAMPLE_RATE).roundToInt().coerceAtLeast(1).coerceAtMost(maxSamples)
 }
