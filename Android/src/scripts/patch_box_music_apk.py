@@ -21,48 +21,75 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def load_exact_runtime() -> tuple[Path, dict[str, bytes]]:
+def load_exact_runtime() -> tuple[dict[str, str], dict[str, bytes]]:
+    """Find each device-validated Box 0.4.9 native binary independently."""
     gradle_home = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
-    roots = [
-        gradle_home / "caches" / "modules-2" / "files-2.1" / "com.google.ai.edge.litert" / "litert" / VERSION,
-        gradle_home / "caches",
-    ]
-    candidates: list[Path] = []
-    seen: set[Path] = set()
-    for root in roots:
-        if not root.exists():
-            continue
-        for candidate in root.rglob("*.aar"):
-            if candidate not in seen:
-                seen.add(candidate)
-                candidates.append(candidate)
+    cache = gradle_home / "caches"
+    if not cache.exists():
+        raise RuntimeError(f"Gradle cache does not exist: {cache}")
 
-    diagnostics: list[str] = []
-    for aar in candidates:
-        try:
-            with zipfile.ZipFile(aar) as zf:
-                names = zf.namelist()
-                runtime: dict[str, bytes] = {}
-                for lib, expected in EXPECTED.items():
-                    members = [n for n in names if n.endswith(f"/{ABI}/{lib}")]
-                    if not members:
-                        diagnostics.append(f"{aar}: missing {lib}")
-                        break
-                    data = zf.read(members[0])
-                    actual = sha256(data)
-                    if actual != expected:
-                        diagnostics.append(f"{aar}: {lib} sha256={actual}")
-                        break
-                    runtime[lib] = data
-                if len(runtime) == len(EXPECTED):
-                    return aar, runtime
-        except (OSError, zipfile.BadZipFile) as exc:
-            diagnostics.append(f"{aar}: {exc}")
+    runtime: dict[str, bytes] = {}
+    sources: dict[str, str] = {}
+    seen_files: set[Path] = set()
 
-    raise RuntimeError(
-        "Exact Box 0.4.9 / LiteRT 2.1.6 runtime AAR was not found in Gradle cache.\n"
-        + "\n".join(diagnostics[-20:])
-    )
+    # AGP commonly expands AARs into transform directories before packaging.
+    # Accept an extracted candidate only when its bytes match Box 0.4.9 exactly.
+    for lib, expected_hash in EXPECTED.items():
+        for path in cache.rglob(lib):
+            if not path.is_file() or path in seen_files:
+                continue
+            seen_files.add(path)
+            try:
+                data = path.read_bytes()
+            except OSError:
+                continue
+            if sha256(data) == expected_hash:
+                runtime[lib] = data
+                sources[lib] = str(path)
+                break
+
+    # LiteRT 2.x may split API/runtime native pieces across multiple AARs. Collect
+    # each of the three files independently by immutable SHA-256 identity.
+    missing = set(EXPECTED) - set(runtime)
+    if missing:
+        for aar in cache.rglob("*.aar"):
+            if not missing:
+                break
+            try:
+                with zipfile.ZipFile(aar) as zf:
+                    names = zf.namelist()
+                    for lib in list(missing):
+                        expected_hash = EXPECTED[lib]
+                        for member in names:
+                            if not member.endswith(f"/{ABI}/{lib}"):
+                                continue
+                            data = zf.read(member)
+                            if sha256(data) == expected_hash:
+                                runtime[lib] = data
+                                sources[lib] = f"{aar}!/{member}"
+                                missing.remove(lib)
+                                break
+            except (OSError, zipfile.BadZipFile):
+                continue
+
+    missing = sorted(set(EXPECTED) - set(runtime))
+    if missing:
+        candidates: list[str] = []
+        for lib in missing:
+            hashes: set[str] = set()
+            for path in cache.rglob(lib):
+                if path.is_file():
+                    try:
+                        hashes.add(sha256(path.read_bytes()))
+                    except OSError:
+                        pass
+            candidates.append(f"{lib}: discovered hashes={sorted(hashes)}")
+        raise RuntimeError(
+            "Could not locate all device-validated Box 0.4.9 LiteRT 2.1.6 binaries in Gradle cache. "
+            f"Missing={missing}.\n" + "\n".join(candidates)
+        )
+
+    return sources, runtime
 
 
 def main() -> int:
@@ -73,14 +100,17 @@ def main() -> int:
     if not src.is_file():
         raise RuntimeError(f"Input APK not found: {src}")
 
-    aar, runtime = load_exact_runtime()
-    print(f"Using byte-verified Box 0.4.9 LiteRT runtime from: {aar}")
+    sources, runtime = load_exact_runtime()
+    for lib in EXPECTED:
+        print(f"Pinned source {lib}: {sources[lib]}")
     dst.parent.mkdir(parents=True, exist_ok=True)
     replaced: set[str] = set()
     with zipfile.ZipFile(src, "r") as zin, zipfile.ZipFile(dst, "w", allowZip64=True) as zout:
         for info in zin.infolist():
             upper = info.filename.upper()
-            if upper == "META-INF/MANIFEST.MF" or (upper.startswith("META-INF/") and upper.endswith((".RSA", ".DSA", ".EC", ".SF"))):
+            if upper == "META-INF/MANIFEST.MF" or (
+                upper.startswith("META-INF/") and upper.endswith((".RSA", ".DSA", ".EC", ".SF"))
+            ):
                 continue
             data = zin.read(info.filename)
             lib = TARGETS.get(info.filename)
