@@ -10,6 +10,8 @@ import com.google.ai.edge.gallery.customtasks.musicgeneration.box049.Box049Bridg
 import com.google.ai.edge.gallery.data.Model
 import java.io.File
 
+private val BOX049_BAD_FILE_PATTERN = Regex("integrity failure: ([^ ]+) actual=")
+
 /**
  * Thin adapter around the exact effective Box Local Music 0.4.9 Java runtime.
  *
@@ -28,7 +30,7 @@ class GoldenBox049RuntimeEngine(
 
   init {
     require(model.musicGenerationSpec() != null) { "Unsupported Box music model: ${model.name}" }
-    Box049Bridge.verifyFiles(model.name, modelDir)
+    verifyModelFilesOrInvalidateBrokenFile()
   }
 
   override suspend fun generate(
@@ -38,7 +40,7 @@ class GoldenBox049RuntimeEngine(
     accelerationMode: MusicAccelerationMode,
     onProgress: (Float) -> Unit,
   ): GeneratedMusicFile {
-    Box049Bridge.verifyFiles(model.name, modelDir)
+    verifyModelFilesOrInvalidateBrokenFile()
     val outputPath =
       Box049Bridge.generate(
         context,
@@ -59,6 +61,26 @@ class GoldenBox049RuntimeEngine(
 
   override fun close() {
     // The golden runtime opens/closes LiteRT models per generation exactly like standalone Box 0.4.9.
+  }
+
+  /**
+   * The generic Plaza downloader historically considered a completed HTTP stream successful without
+   * validating the final byte count. The golden Box runtime has the authoritative file sizes, so
+   * reject any mismatch before LiteRT sees it and remove the bad final file immediately. On the next
+   * model-manager pass the missing file is treated as not downloaded and can be fetched cleanly.
+   */
+  private fun verifyModelFilesOrInvalidateBrokenFile() {
+    try {
+      Box049Bridge.verifyFiles(model.name, modelDir)
+    } catch (error: IllegalStateException) {
+      val badFileName =
+        BOX049_BAD_FILE_PATTERN.find(error.message.orEmpty())?.groupValues?.getOrNull(1)
+      if (!badFileName.isNullOrBlank()) {
+        File(modelDir, badFileName).delete()
+        File(modelDir, "$badFileName.gallerytmp").delete()
+      }
+      throw error
+    }
   }
 
   private fun verifyGeneratedWav(file: File) {
