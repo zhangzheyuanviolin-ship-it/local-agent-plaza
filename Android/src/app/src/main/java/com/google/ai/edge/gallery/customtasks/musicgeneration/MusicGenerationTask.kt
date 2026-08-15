@@ -59,7 +59,9 @@ class MusicGenerationTask @Inject constructor() : CustomTask {
     onDone: (String) -> Unit,
   ) {
     try {
-      model.instance = createMusicEngine(context, model)
+      // Use the exact effective standalone Box 0.4.9 runtime generated from the pinned golden
+      // commit. This removes the hand-translated Kotlin inference implementation from production.
+      model.instance = GoldenBox049RuntimeEngine(context = context, model = model)
       onDone("")
     } catch (e: Exception) {
       model.instance = null

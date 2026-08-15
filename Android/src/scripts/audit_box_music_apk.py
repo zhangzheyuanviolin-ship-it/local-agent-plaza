@@ -21,6 +21,18 @@ GOLDEN_REMOVED_VS_MCP189 = {
     "LiteRtGetCompiledModelEnvironment",
     "LiteRtSetEnvironmentOptionsValue",
 }
+DEX_REQUIRED = {
+    b"com/google/ai/edge/gallery/customtasks/musicgeneration/box049/Box049Bridge":
+        "generated Box 0.4.9 bridge",
+    b"com/google/ai/edge/gallery/customtasks/musicgeneration/box049/OfficialSoundGenEngine":
+        "effective golden Box 0.4.9 engine",
+    b"com/google/ai/edge/gallery/customtasks/musicgeneration/GoldenBox049RuntimeEngine":
+        "Plaza golden-runtime adapter",
+    b"30036c4c3db7da656672a9490f9f821105068daf":
+        "pinned golden commit fingerprint",
+    b"box-0.4.9-golden-runtime-r1":
+        "fresh music model cache version",
+}
 
 
 def run(*args: str) -> str:
@@ -59,11 +71,32 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="box-music-audit-") as tmp_name:
         tmp = Path(tmp_name)
         with zipfile.ZipFile(apk) as zf:
-            members = [n for n in zf.namelist() if n.startswith(f"lib/{ABI}/") and n.endswith(".so")]
+            members = [
+                n for n in zf.namelist()
+                if n.startswith(f"lib/{ABI}/") and n.endswith(".so")
+            ]
             if not members:
                 raise RuntimeError(f"APK contains no {ABI} native libraries")
             for member in members:
                 zf.extract(member, tmp)
+
+            dex_members = sorted(
+                n for n in zf.namelist()
+                if re.fullmatch(r"classes\d*\.dex", Path(n).name)
+            )
+            if not dex_members:
+                raise RuntimeError("APK contains no classes*.dex")
+            dex_blob = b"".join(zf.read(name) for name in dex_members)
+
+        missing_dex = [
+            label for needle, label in DEX_REQUIRED.items() if needle not in dex_blob
+        ]
+        if missing_dex:
+            raise RuntimeError(
+                "Golden Box 0.4.9 runtime is not fully wired into the APK: "
+                + ", ".join(missing_dex)
+            )
+
         lib_dir = tmp / "lib" / ABI
 
         for lib, expected_hash in EXPECTED.items():
@@ -73,7 +106,8 @@ def main() -> int:
             actual = hashlib.sha256(path.read_bytes()).hexdigest()
             if actual != expected_hash:
                 raise RuntimeError(
-                    f"{lib} is not the device-validated Box 0.4.9 binary: sha256={actual}, expected={expected_hash}"
+                    f"{lib} is not the device-validated Box 0.4.9 binary: "
+                    f"sha256={actual}, expected={expected_hash}"
                 )
 
         core = lib_dir / "libLiteRt.so"
@@ -103,14 +137,15 @@ def main() -> int:
         risky = {sym: libs for sym, libs in consumers.items() if libs}
         if risky:
             raise RuntimeError(
-                "Pinning the Box 0.4.9 core would remove LiteRT APIs still consumed by other APK libraries: "
-                + repr(risky)
+                "Pinning the Box 0.4.9 core would remove LiteRT APIs still consumed "
+                "by other APK libraries: " + repr(risky)
             )
 
         lm_jni = lib_dir / "liblitertlm_jni.so"
         if lm_jni.is_file() and "libLiteRt.so" in needed_libraries(lm_jni):
             raise RuntimeError(
-                "LiteRT-LM JNI now directly links libLiteRt.so; the Box runtime pin needs a new compatibility review"
+                "LiteRT-LM JNI now directly links libLiteRt.so; "
+                "the Box runtime pin needs a new compatibility review"
             )
 
         expected_jni_deps = {
@@ -126,7 +161,8 @@ def main() -> int:
         print(
             f"Box music runtime audit passed: exact 0.4.9 hashes; "
             f"JNI LiteRT ABI {len(jni_required)}/{len(jni_required)} satisfied; "
-            "LiteRT-LM direct-core isolation preserved."
+            "LiteRT-LM direct-core isolation preserved; "
+            "golden engine/bridge/commit/cache fingerprints present in DEX."
         )
     return 0
 

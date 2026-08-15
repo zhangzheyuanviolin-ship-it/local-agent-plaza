@@ -28,6 +28,13 @@ plugins {
   kotlin("kapt")
 }
 
+// Build the music runtime from the exact device-validated Box Local Music 0.4.9 golden source.
+// The preparation script pins the commit, replays the complete patch chain, audits the effective
+// engine, rewrites only the Java package, and emits it into this app's normal Java source set.
+providers.exec {
+  commandLine("python3", rootProject.file("scripts/prepare_box049_runtime.py").absolutePath)
+}.result.get().assertNormalExitValue()
+
 android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
@@ -97,6 +104,7 @@ android {
     compose = true
     buildConfig = true
   }
+  sourceSets.getByName("main").java.srcDir(rootProject.file("build/generated/box049/java"))
   packagingOptions.pickFirst("lib/**/libLiteRt*.so")
   packagingOptions.doNotStrip("**/libLiteRt*.so")
   externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } }
