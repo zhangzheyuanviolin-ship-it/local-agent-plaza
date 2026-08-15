@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Save
@@ -38,15 +39,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -66,11 +70,27 @@ fun MusicGenerationScreen(
   val spec = model.musicGenerationSpec()
   val isModelReady =
     model.name.isNotEmpty() && modelManagerUiState.isModelInitialized(model = model)
+
+  var durationInputText by rememberSaveable(model.name) { mutableStateOf("") }
+  val durationInputSeconds = durationInputText.toIntOrNull()
+  val isDurationInputValid =
+    spec == null ||
+      (durationInputSeconds != null &&
+        durationInputSeconds.toFloat() in spec.minDurationSeconds..spec.maxDurationSeconds)
   val canGenerate =
-    isModelReady && spec != null && !uiState.isGenerating && uiState.prompt.isNotBlank()
+    isModelReady &&
+      spec != null &&
+      !uiState.isGenerating &&
+      uiState.prompt.isNotBlank() &&
+      isDurationInputValid
 
   LaunchedEffect(model.name) {
     if (model.name.isNotEmpty()) viewModel.ensureModelDefaults(model)
+  }
+  LaunchedEffect(model.name, uiState.activeModelName) {
+    if (spec != null && uiState.activeModelName == model.name) {
+      durationInputText = uiState.durationSeconds.roundToInt().toString()
+    }
   }
   LaunchedEffect(uiState.isGenerating) { setAppBarControlsDisabled(uiState.isGenerating) }
   DisposableEffect(Unit) {
@@ -105,18 +125,33 @@ fun MusicGenerationScreen(
     )
 
     if (spec != null) {
-      Text(
-        text = "生成时长：${formatMusicDurationSeconds(uiState.durationSeconds)} 秒",
-        style = MaterialTheme.typography.titleSmall,
-      )
-      Slider(
-        value = uiState.durationSeconds,
-        onValueChange = { value -> viewModel.updateDurationSeconds(value.roundToInt().toFloat()) },
-        valueRange = spec.minDurationSeconds..spec.maxDurationSeconds,
-        steps =
-          (spec.maxDurationSeconds.roundToInt() - spec.minDurationSeconds.roundToInt() - 1)
-            .coerceAtLeast(0),
+      OutlinedTextField(
+        value = durationInputText,
+        onValueChange = { input ->
+          val digitsOnly = input.filter(Char::isDigit).take(3)
+          durationInputText = digitsOnly
+          val seconds = digitsOnly.toIntOrNull()
+          if (
+            seconds != null &&
+              seconds.toFloat() in spec.minDurationSeconds..spec.maxDurationSeconds
+          ) {
+            viewModel.updateDurationSeconds(seconds.toFloat())
+          }
+        },
         enabled = !uiState.isGenerating,
+        singleLine = true,
+        isError = !isDurationInputValid,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        label = { Text("生成时长（秒）") },
+        supportingText = {
+          val minSeconds = spec.minDurationSeconds.roundToInt()
+          val maxSeconds = spec.maxDurationSeconds.roundToInt()
+          if (isDurationInputValid) {
+            Text("请输入 $minSeconds–$maxSeconds 秒")
+          } else {
+            Text("时长必须是 $minSeconds–$maxSeconds 秒之间的整数")
+          }
+        },
         modifier = Modifier.fillMaxWidth(),
       )
     }
