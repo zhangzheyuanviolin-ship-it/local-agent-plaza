@@ -46,34 +46,11 @@ fun writeStereoFloatWav(
 ): GeneratedMusicFile {
   file.parentFile?.mkdirs()
   val actualSamples = samplesPerChannel.coerceAtLeast(1)
-  val scale =
-    if (normalize) {
-      val maxAmplitude = interleavedChannels.fold(0f) { current, value -> maxOf(current, kotlin.math.abs(value)) }
-      if (maxAmplitude > 1.0e-6f) 1f / maxAmplitude else 1f
-    } else {
-      1f
-    }
+  val scale = normalizationScale(interleavedChannels, normalize)
   val dataSize = actualSamples * WAV_CHANNELS * WAV_BITS_PER_SAMPLE / 8
   RandomAccessFile(file, "rw").use { wav ->
     wav.setLength(0)
-    wav.write(
-      ByteBuffer.allocate(44)
-        .order(ByteOrder.LITTLE_ENDIAN)
-        .put("RIFF".toByteArray(Charsets.US_ASCII))
-        .putInt(dataSize + 36)
-        .put("WAVE".toByteArray(Charsets.US_ASCII))
-        .put("fmt ".toByteArray(Charsets.US_ASCII))
-        .putInt(16)
-        .putShort(1.toShort())
-        .putShort(WAV_CHANNELS.toShort())
-        .putInt(WAV_SAMPLE_RATE)
-        .putInt(WAV_SAMPLE_RATE * WAV_CHANNELS * WAV_BITS_PER_SAMPLE / 8)
-        .putShort((WAV_CHANNELS * WAV_BITS_PER_SAMPLE / 8).toShort())
-        .putShort(WAV_BITS_PER_SAMPLE.toShort())
-        .put("data".toByteArray(Charsets.US_ASCII))
-        .putInt(dataSize)
-        .array()
-    )
+    wav.write(wavHeader(dataSize))
     val samples = ByteBuffer.allocate(dataSize).order(ByteOrder.LITTLE_ENDIAN)
     for (index in 0 until actualSamples) {
       samples.putShort(toPcm16(interleavedChannels[index] * scale))
@@ -84,20 +61,86 @@ fun writeStereoFloatWav(
   return GeneratedMusicFile(file = file, durationSeconds = actualSamples.toFloat() / WAV_SAMPLE_RATE)
 }
 
-fun saveMusicFileToMediaStore(context: Context, source: File, displayPrefix: String): Boolean {
+fun writeStereoFloatWavStreaming(
+  file: File,
+  interleavedChannels: FloatArray,
+  samplesPerChannel: Int,
+  firstRightChannelIndex: Int,
+  normalize: Boolean,
+): GeneratedMusicFile {
+  file.parentFile?.mkdirs()
+  val actualSamples = samplesPerChannel.coerceAtLeast(1)
+  val scale = normalizationScale(interleavedChannels, normalize)
+  val dataSize = Math.multiplyExact(actualSamples, 4)
+  RandomAccessFile(file, "rw").use { wav ->
+    wav.setLength(0)
+    wav.write(wavHeader(dataSize))
+    val chunkFrames = 16_384
+    val bytes = ByteArray(chunkFrames * 4)
+    val pcm = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+    var start = 0
+    while (start < actualSamples) {
+      val count = minOf(chunkFrames, actualSamples - start)
+      pcm.clear()
+      for (offset in 0 until count) {
+        val frame = start + offset
+        pcm.putShort(toPcm16(interleavedChannels[frame] * scale))
+        pcm.putShort(toPcm16(interleavedChannels[firstRightChannelIndex + frame] * scale))
+      }
+      wav.write(bytes, 0, count * 4)
+      start += count
+    }
+  }
+  return GeneratedMusicFile(file = file, durationSeconds = actualSamples.toFloat() / WAV_SAMPLE_RATE)
+}
+
+private fun normalizationScale(values: FloatArray, normalize: Boolean): Float {
+  if (!normalize) return 1f
+  var peak = 0f
+  for (value in values) {
+    peak = maxOf(peak, kotlin.math.abs(value))
+  }
+  return if (peak > 1.0e-6f) 1f / peak else 1f
+}
+
+private fun wavHeader(dataSize: Int): ByteArray {
+  return ByteBuffer.allocate(44)
+    .order(ByteOrder.LITTLE_ENDIAN)
+    .put("RIFF".toByteArray(Charsets.US_ASCII))
+    .putInt(dataSize + 36)
+    .put("WAVE".toByteArray(Charsets.US_ASCII))
+    .put("fmt ".toByteArray(Charsets.US_ASCII))
+    .putInt(16)
+    .putShort(1.toShort())
+    .putShort(WAV_CHANNELS.toShort())
+    .putInt(WAV_SAMPLE_RATE)
+    .putInt(WAV_SAMPLE_RATE * WAV_CHANNELS * WAV_BITS_PER_SAMPLE / 8)
+    .putShort((WAV_CHANNELS * WAV_BITS_PER_SAMPLE / 8).toShort())
+    .putShort(WAV_BITS_PER_SAMPLE.toShort())
+    .put("data".toByteArray(Charsets.US_ASCII))
+    .putInt(dataSize)
+    .array()
+}
+
+fun saveMusicFileToMediaStore(context: Context, source: File): Boolean {
   val resolver = context.contentResolver
   val values =
     ContentValues().apply {
-      put(MediaStore.Audio.Media.DISPLAY_NAME, "${displayPrefix}_${System.currentTimeMillis()}.wav")
+      put(MediaStore.Audio.Media.DISPLAY_NAME, source.name)
       put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
       put(
         MediaStore.Audio.Media.RELATIVE_PATH,
-        "${Environment.DIRECTORY_MUSIC}/SoundGen",
+        "${Environment.DIRECTORY_MUSIC}/BoxLocalMusic",
       )
+      put(MediaStore.Audio.Media.IS_PENDING, 1)
     }
   val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values) ?: return false
   return try {
     resolver.openOutputStream(uri)?.use { output -> source.inputStream().use { it.copyTo(output) } }
+      ?: return false
+    values.clear()
+    values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+    resolver.update(uri, values, null, null)
     true
   } catch (e: Exception) {
     Log.e(TAG, "Failed to save generated audio", e)
@@ -114,7 +157,7 @@ fun shareMusicFile(context: Context, file: File) {
           putExtra(Intent.EXTRA_STREAM, uri)
           addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         },
-        "分享生成音频",
+        "分享音频",
       )
       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
   context.startActivity(chooser)

@@ -24,7 +24,7 @@ const val TASK_ID_LOCAL_MUSIC_GENERATION = "llm_local_music_generation"
 
 private const val SOUNDGEN_BASE_URL = "https://huggingface.co/jegly/audio/resolve/main/"
 private const val SOUNDGEN_HD_BASE_URL = "https://huggingface.co/jegly/noise/resolve/main/"
-private const val SOUNDGEN_VERSION = "v1.0.0"
+private const val SOUNDGEN_VERSION = "box-0.4.9"
 
 enum class MusicGenerationKind {
   SOUNDGEN,
@@ -36,6 +36,9 @@ data class MusicGenerationSpec(
   val kind: MusicGenerationKind,
   val maxOutputSamplesPerChannel: Int,
   val taskProgressLabel: String,
+  val minDurationSeconds: Float,
+  val maxDurationSeconds: Float,
+  val defaultDurationSeconds: Float,
 )
 
 fun Model.musicGenerationSpec(): MusicGenerationSpec? {
@@ -45,18 +48,27 @@ fun Model.musicGenerationSpec(): MusicGenerationSpec? {
         kind = MusicGenerationKind.SOUNDGEN,
         maxOutputSamplesPerChannel = 524_288,
         taskProgressLabel = "SoundGen",
+        minDurationSeconds = 1f,
+        maxDurationSeconds = 12f,
+        defaultDurationSeconds = 8f,
       )
     "soundgen_hd" ->
       MusicGenerationSpec(
         kind = MusicGenerationKind.SOUNDGEN_HD,
         maxOutputSamplesPerChannel = 256 * 4096,
         taskProgressLabel = "SoundGen HD",
+        minDurationSeconds = 1f,
+        maxDurationSeconds = 24f,
+        defaultDurationSeconds = 12f,
       )
     "soundgen_hd_long" ->
       MusicGenerationSpec(
         kind = MusicGenerationKind.SOUNDGEN_HD_LONG,
         maxOutputSamplesPerChannel = 2048 * 4096,
         taskProgressLabel = "SoundGen HD Long",
+        minDurationSeconds = 1f,
+        maxDurationSeconds = 180f,
+        defaultDurationSeconds = 60f,
       )
     else -> null
   }
@@ -68,7 +80,7 @@ fun createMusicGenerationModels(): List<Model> {
       name = "soundgen",
       displayName = "SoundGen",
       info =
-        "Describe a sound or piece of music and generate it on-device -- fully offline. Choose a length, then play, export or share the result. Downloads about 1.1GB on first use.",
+        "Box 官方 SoundGen 本地音乐生成模型。模型下载完成后可完全离线使用，首次下载约 1.1GB。",
       url = SOUNDGEN_BASE_URL + "dit_model.tflite",
       sizeInBytes = 344_293_232L,
       downloadFileName = "sg_core.litert",
@@ -102,7 +114,7 @@ fun createMusicGenerationModels(): List<Model> {
       name = "soundgen_hd",
       displayName = "SoundGen HD",
       info =
-        "Describe a sound or piece of music and generate it on-device in higher quality, fully offline. Choose a length, then play, export or share. Generation takes about a minute. Downloads about 2.1GB on first use.",
+        "Box 官方 SoundGen HD 高质量本地音乐生成模型，最长约 24 秒，首次下载约 2.1GB。",
       url = SOUNDGEN_HD_BASE_URL + "dit_L256_int8.tflite",
       sizeInBytes = 1_468_553_968L,
       downloadFileName = "sghd_core.litert",
@@ -136,7 +148,7 @@ fun createMusicGenerationModels(): List<Model> {
       name = "soundgen_hd_long",
       displayName = "SoundGen HD Long",
       info =
-        "Same high quality as SoundGen HD, but for much longer clips -- up to about 3 minutes, fully offline. Generation is slow, around 10 to 15 minutes per clip. Downloads about 2.1GB on first use.",
+        "Box 官方 SoundGen HD Long 长音频高质量音乐生成模型，最长约 3 分钟。",
       url = SOUNDGEN_HD_BASE_URL + "dit_L2048_int8.tflite",
       sizeInBytes = 1_469_012_720L,
       downloadFileName = "sghd_core.litert",

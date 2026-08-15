@@ -18,7 +18,7 @@ package com.google.ai.edge.gallery.customtasks.musicgeneration
 
 import java.util.Locale
 
-const val DEFAULT_MUSIC_DURATION_SECONDS = 12f
+const val DEFAULT_MUSIC_DURATION_SECONDS = 8f
 
 fun parseMusicDurationSeconds(input: String): Float? {
   val normalized =
