@@ -85,7 +85,6 @@ jobs:
                 VNAME="${ALLOWLIST_BASE}-dev.${GITHUB_RUN_NUMBER}"
                 ;;
             esac
-            # prerelease 判定：含 smoketest/alpha/beta/rc/dev 等关键字
             case "$REF_NAME" in
               *smoketest*|*alpha*|*beta*|*rc*|*dev*|*experimental*)
                 IS_PRERELEASE="true"
@@ -137,6 +136,26 @@ jobs:
           echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
       - name: Build
         run: ./gradlew assembleRelease
+      - name: Pin Box 0.4.9 LiteRT runtime and audit native ABI
+        if: steps.channel.outputs.channel == 'mcp'
+        run: |
+          APK="app/build/outputs/apk/release/app-release.apk"
+          PATCHED="$RUNNER_TEMP/box-music-runtime-pinned-unsigned.apk"
+          ALIGNED="$RUNNER_TEMP/box-music-runtime-pinned-aligned.apk"
+          SIGNED="$RUNNER_TEMP/box-music-runtime-pinned-signed.apk"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          python3 scripts/patch_box_music_apk.py "$APK" "$PATCHED"
+          "$BUILD_TOOLS/zipalign" -f 4 "$PATCHED" "$ALIGNED"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$ANDROID_RELEASE_KEYSTORE_PATH" \
+            --ks-key-alias "$ANDROID_RELEASE_KEY_ALIAS" \
+            --ks-pass env:ANDROID_RELEASE_KEYSTORE_PASSWORD \
+            --key-pass env:ANDROID_RELEASE_KEY_PASSWORD \
+            --out "$SIGNED" \
+            "$ALIGNED"
+          mv "$SIGNED" "$APK"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          python3 scripts/audit_box_music_apk.py "$APK"
       - name: Verify APK signing and version
         run: |
           "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk
