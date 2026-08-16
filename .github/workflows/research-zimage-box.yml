@@ -7,28 +7,32 @@ on:
       - '.github/workflows/research-zimage-box.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  decompile:
+  extract:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download Box 3.3.3 and JADX
+        with:
+          ref: mcp201-zimage-work
+      - name: Extract verified Z-Image host constants from Box 3.3.3
         run: |
           curl -L --fail --retry 3 -o "$RUNNER_TEMP/Box.apk" \
             https://github.com/jegly/Box/releases/download/v3.3.3/Box_v3.3.3_Main_Signed_Release.apk
-          curl -L --fail --retry 3 -o "$RUNNER_TEMP/jadx.zip" \
-            https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
-          unzip -q "$RUNNER_TEMP/jadx.zip" -d "$RUNNER_TEMP/jadx"
-      - name: Decompile and extract Z-Image host constants
+          mkdir -p Android/src/app/src/main/assets/zimage
+          unzip -p "$RUNNER_TEMP/Box.apk" assets/zimage/zimage_cap_pad_token.bin \
+            > Android/src/app/src/main/assets/zimage/zimage_cap_pad_token.bin
+          unzip -p "$RUNNER_TEMP/Box.apk" assets/zimage/zimage_temb_mlp.bin \
+            > Android/src/app/src/main/assets/zimage/zimage_temb_mlp.bin
+          test "$(stat -c%s Android/src/app/src/main/assets/zimage/zimage_cap_pad_token.bin)" = "15360"
+          test "$(stat -c%s Android/src/app/src/main/assets/zimage/zimage_temb_mlp.bin)" = "2102272"
+          sha256sum Android/src/app/src/main/assets/zimage/*.bin
+      - name: Commit constants
         run: |
-          "$RUNNER_TEMP/jadx/bin/jadx" -j 4 --no-res -d "$RUNNER_TEMP/box-src" "$RUNNER_TEMP/Box.apk" || true
-          echo '===== Z-IMAGE APK ASSETS ====='
-          unzip -l "$RUNNER_TEMP/Box.apk" | grep -Ei 'zimage|z_image|temb|pad|rope|\.bin|qwen' | head -n 300 || true
-          echo '===== CONSTANT LOAD REFERENCES ====='
-          grep -RInE 'capPadToken|tembMlp|I0001Ioi1lo|I000II|assets.*open|\.bin|3840|526336|525312' "$RUNNER_TEMP/box-src/sources/defpackage/i0I00l.java" "$RUNNER_TEMP/box-src/sources/defpackage/II10oiOO.java" | head -n 500 || true
-          echo '===== Z ENGINE INIT CLASS ====='
-          sed -n '1,650p' "$RUNNER_TEMP/box-src/sources/defpackage/II10oiOO.java" || true
-          echo '===== Z ENGINE CORE CLASS ====='
-          sed -n '1,420p' "$RUNNER_TEMP/box-src/sources/defpackage/i0I00l.java" || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Android/src/app/src/main/assets/zimage/zimage_cap_pad_token.bin
+          git add Android/src/app/src/main/assets/zimage/zimage_temb_mlp.bin
+          git commit -m "MCP201: add Box-verified Z-Image host constants"
+          git push origin HEAD:mcp201-zimage-work
