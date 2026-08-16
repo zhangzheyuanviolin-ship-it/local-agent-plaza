@@ -21,15 +21,14 @@ jobs:
           curl -L --fail --retry 3 -o "$RUNNER_TEMP/jadx.zip" \
             https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
           unzip -q "$RUNNER_TEMP/jadx.zip" -d "$RUNNER_TEMP/jadx"
-      - name: Decompile and locate Z-Image implementation
+      - name: Decompile and extract Z-Image host constants
         run: |
           "$RUNNER_TEMP/jadx/bin/jadx" -j 4 --no-res -d "$RUNNER_TEMP/box-src" "$RUNNER_TEMP/Box.apk" || true
-          echo '===== MATCHING FILES ====='
-          grep -RIlE 'Z-Image|ZImage|z_embx|z_embc|z_refx|z_refc|zc_main|zc_final|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 100 || true
-          echo '===== MATCHING LINES ====='
-          grep -RInE 'Z-Image|ZImage|z_embx|z_embc|z_refx|z_refc|zc_main|zc_final|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 500 || true
-          echo '===== CANDIDATE SOURCE CONTENT ====='
-          while IFS= read -r f; do
-            echo "----- FILE: $f -----"
-            sed -n '1,1600p' "$f"
-          done < <(grep -RIlE 'z_embx|z_embc|z_refx|z_refc|zc_main|zc_final|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 24)
+          echo '===== Z-IMAGE APK ASSETS ====='
+          unzip -l "$RUNNER_TEMP/Box.apk" | grep -Ei 'zimage|z_image|temb|pad|rope|\.bin|qwen' | head -n 300 || true
+          echo '===== CONSTANT LOAD REFERENCES ====='
+          grep -RInE 'capPadToken|tembMlp|I0001Ioi1lo|I000II|assets.*open|\.bin|3840|526336|525312' "$RUNNER_TEMP/box-src/sources/defpackage/i0I00l.java" "$RUNNER_TEMP/box-src/sources/defpackage/II10oiOO.java" | head -n 500 || true
+          echo '===== Z ENGINE INIT CLASS ====='
+          sed -n '1,650p' "$RUNNER_TEMP/box-src/sources/defpackage/II10oiOO.java" || true
+          echo '===== Z ENGINE CORE CLASS ====='
+          sed -n '1,420p' "$RUNNER_TEMP/box-src/sources/defpackage/i0I00l.java" || true
