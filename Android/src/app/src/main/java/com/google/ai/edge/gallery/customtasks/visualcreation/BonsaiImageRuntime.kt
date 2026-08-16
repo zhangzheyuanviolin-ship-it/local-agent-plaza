@@ -24,6 +24,7 @@ import java.io.File
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.ln
@@ -33,13 +34,15 @@ import org.json.JSONObject
 import org.tensorflow.lite.Interpreter
 
 object BonsaiImageGenerationClient {
+  private val tokenizerCache = ConcurrentHashMap<String, BonsaiQwenTokenizer>()
+
   fun generateImage(
     modelPath: String,
     prompt: String,
     seed: Long,
     steps: Int,
     threadCount: Int,
-    progressListener: ((step: Int, steps: Int) -> Unit)? = null,
+    progressListener: ((ImageGenerationStageProgress) -> Unit)? = null,
   ): NativeImageGenerationResult {
     val primary = File(modelPath)
     require(primary.exists()) { "Bonsai DiT文件不存在：$modelPath" }
@@ -55,10 +58,13 @@ object BonsaiImageGenerationClient {
     val missing = BonsaiPipeline.missingFiles(modelDir, meta)
     require(missing.isEmpty()) { "Bonsai模型文件缺失：${missing.joinToString()}" }
 
+    progressListener?.invoke(ImageGenerationStageProgress("读取模型元数据和 tokenizer"))
+    val tokenizerKey = "${vocabFile.absolutePath}:${vocabFile.lastModified()}:${mergesFile.lastModified()}"
     val tokenizer =
-      vocabFile.inputStream().use { vocab ->
-        mergesFile.inputStream().use { merges -> BonsaiQwenTokenizer(vocab, merges) }
-      }
+      tokenizerCache[tokenizerKey] ?:
+        vocabFile.inputStream().use { vocab ->
+          mergesFile.inputStream().use { merges -> BonsaiQwenTokenizer(vocab, merges) }
+        }.also { tokenizerCache[tokenizerKey] = it }
     val pipeline = BonsaiPipeline(modelDir = modelDir, meta = meta)
     val safeSteps = steps.coerceIn(1, 20)
     val safeThreads = threadCount.coerceIn(2, 6)
@@ -69,7 +75,7 @@ object BonsaiImageGenerationClient {
         seed = seed,
         steps = safeSteps,
         threads = safeThreads,
-        onSamplingProgress = { step, total -> progressListener?.invoke(step, total) },
+        onStageProgress = { update -> progressListener?.invoke(update) },
       )
     return NativeImageGenerationResult(
       width = 512,
@@ -184,10 +190,13 @@ private class BonsaiPipeline(private val modelDir: File, meta: JSONObject) {
     seed: Long,
     steps: Int,
     threads: Int,
-    onSamplingProgress: (step: Int, steps: Int) -> Unit,
+    onStageProgress: (ImageGenerationStageProgress) -> Unit,
   ): Result {
+    val totalStart = System.currentTimeMillis()
+    onStageProgress(ImageGenerationStageProgress("提示词编码与文本编码器加载中"))
     val encoded = tokenizer.encodePrompt(prompt)
     val embeddings: FloatArray
+    val textStart = System.currentTimeMillis()
     Graph(modelFile(textEncoderFile), threads).use { textEncoder ->
       embeddings =
         textEncoder.run(
@@ -195,6 +204,14 @@ private class BonsaiPipeline(private val modelDir: File, meta: JSONObject) {
           outputFloatCount = BonsaiMath.SEQ * 7680,
         )
     }
+    val textMs = System.currentTimeMillis() - textStart
+    onStageProgress(
+      ImageGenerationStageProgress(
+        stageText = "文本编码完成，准备 DiT 扩散模型",
+        timingText = "文本编码 %.1f 秒".format(textMs / 1000.0),
+        totalSteps = steps,
+      )
+    )
     System.gc()
 
     val sigmas = BonsaiMath.sigmas(steps)
@@ -203,6 +220,8 @@ private class BonsaiPipeline(private val modelDir: File, meta: JSONObject) {
     val embeddingBuffer = floatBuffer(embeddings)
     var latents = BonsaiMath.noise(seed)
 
+    val diffusionStart = System.currentTimeMillis()
+    onStageProgress(ImageGenerationStageProgress("正在加载 Bonsai DiT 扩散模型", totalSteps = steps))
     Graph(modelFile(ditFile), threads).use { dit ->
       for (step in 0 until steps) {
         val velocity =
@@ -221,13 +240,31 @@ private class BonsaiPipeline(private val modelDir: File, meta: JSONObject) {
         for (i in latents.indices) {
           latents[i] += deltaSigma * velocity[i]
         }
-        onSamplingProgress(step + 1, steps)
+        val diffusionMs = System.currentTimeMillis() - diffusionStart
+        onStageProgress(
+          ImageGenerationStageProgress(
+            stageText = "DiT 扩散采样：第 ${step + 1} / $steps 步",
+            timingText = "扩散累计 %.1f 秒".format(diffusionMs / 1000.0),
+            step = step + 1,
+            totalSteps = steps,
+          )
+        )
       }
     }
     System.gc()
 
+    val diffusionMs = System.currentTimeMillis() - diffusionStart
+    onStageProgress(
+      ImageGenerationStageProgress(
+        stageText = "扩散完成，正在加载 VAE 解码器",
+        timingText = "扩散总耗时 %.1f 秒".format(diffusionMs / 1000.0),
+        step = steps,
+        totalSteps = steps,
+      )
+    )
     val vaeLatents = BonsaiMath.unpatchify(latents, bnScale, bnShift)
     val rgb = ByteArray(512 * 512 * 3)
+    val vaeStart = System.currentTimeMillis()
     Graph(modelFile(vaeFile), threads).use { vae ->
       val output = vae.run(listOf(floatBuffer(vaeLatents)), 3 * 512 * 512)
       for (channel in 0 until 3) {
@@ -238,6 +275,16 @@ private class BonsaiPipeline(private val modelDir: File, meta: JSONObject) {
         }
       }
     }
+    val vaeMs = System.currentTimeMillis() - vaeStart
+    val totalMs = System.currentTimeMillis() - totalStart
+    onStageProgress(
+      ImageGenerationStageProgress(
+        stageText = "VAE 解码完成，正在整理图片",
+        timingText = "VAE %.1f 秒；总计 %.1f 秒".format(vaeMs / 1000.0, totalMs / 1000.0),
+        step = steps,
+        totalSteps = steps,
+      )
+    )
     return Result(rgb = rgb)
   }
 }

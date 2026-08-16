@@ -58,6 +58,8 @@ data class VisualCreationUiState(
   val generationStartedAtMs: Long = 0L,
   val generationProgressStep: Int = 0,
   val generationProgressSteps: Int = 0,
+  val generationStageText: String = "等待开始",
+  val generationTimingText: String = "",
   val generatedImagePath: String? = null,
   val generatedImageWidth: Int = 0,
   val generatedImageHeight: Int = 0,
@@ -351,6 +353,8 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
         generationStartedAtMs = startedAtMs,
         generationProgressStep = 0,
         generationProgressSteps = settings.steps,
+        generationStageText = "准备模型和推理环境",
+        generationTimingText = "",
       )
     }
 
@@ -412,30 +416,17 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
               seed = seed,
               steps = settings.steps,
               threadCount = settings.threadCount,
-              progressListener = { step, steps ->
+              progressListener = { progress ->
                 _uiState.update { current ->
                   if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
                     current.copy(
-                      generationProgressStep = step,
-                      generationProgressSteps = steps,
-                      statusText =
-                        if (step >= steps) {
-                          buildDecodingStatusText(
-                            modelName = model.displayName.ifBlank { model.name },
-                            prompt = current.submittedPrompt,
-                          )
-                        } else {
-                          buildSamplingStatusText(
-                            modelName = model.displayName.ifBlank { model.name },
-                            step = step,
-                            steps = steps,
-                            prompt = current.submittedPrompt,
-                          )
-                        },
+                      generationProgressStep = progress.step,
+                      generationProgressSteps = if (progress.totalSteps > 0) progress.totalSteps else current.generationProgressSteps,
+                      generationStageText = progress.stageText,
+                      generationTimingText = progress.timingText,
+                      statusText = progress.stageText,
                     )
-                  } else {
-                    current
-                  }
+                  } else current
                 }
               },
             )

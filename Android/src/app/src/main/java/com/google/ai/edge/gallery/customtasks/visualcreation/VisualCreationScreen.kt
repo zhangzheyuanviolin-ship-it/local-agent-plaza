@@ -287,15 +287,17 @@ fun VisualCreationScreen(
           }
           if (uiState.status == VisualCreationStatus.GENERATING_IMAGE) {
             Text(
-              text =
-                if (uiState.generationProgressStep > 0) {
-                  "采样进度：第 ${uiState.generationProgressStep} / ${uiState.generationProgressSteps} 步"
-                } else {
-                  "进度：正在加载模型和初始化推理引擎"
-                },
+              text = "当前阶段：${uiState.generationStageText}",
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.primary,
             )
+            if (uiState.generationTimingText.isNotBlank()) {
+              Text(
+                text = uiState.generationTimingText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
           }
         }
       }
