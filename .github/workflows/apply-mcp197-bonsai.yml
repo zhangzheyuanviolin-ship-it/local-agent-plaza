@@ -1,0 +1,27 @@
+name: Apply MCP197 Bonsai telemetry
+
+on:
+  push:
+    branches: [mcp197-work]
+    paths:
+      - '.github/workflows/apply-mcp197-bonsai.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mcp197-work
+          fetch-depth: 0
+      - run: python3 Android/src/scripts/mcp197_bonsai_telemetry_patch.py
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation
+          git commit -m 'MCP197: add Bonsai stage telemetry and cache tokenizer'
+          git push origin HEAD:mcp197-work
