@@ -307,7 +307,11 @@ constructor(
   private fun restoreLocalVisualCreationModels(tasks: Collection<Task>) {
     val task = tasks.firstOrNull { it.id == TASK_ID_LOCAL_VISUAL_CREATION } ?: return
     var changed = false
-    for (model in createVisualCreationImageModels()) {
+    for (
+      model in
+        listOf(createBonsaiImageModel(), createFluxKleinImageModel()) +
+          createVisualCreationImageModels()
+    ) {
       if (task.models.none { it.name == model.name }) {
         task.models.add(model)
         changed = true
@@ -395,10 +399,11 @@ constructor(
       for (model in task.models) {
         model.preProcess()
       }
-      // Move the model that is best for this task to the front.
-      val bestModel = task.models.find { it.bestForTaskIds.contains(task.id) }
-      if (bestModel != null) {
-        task.models.remove(bestModel)
+      // Move the model that is best for this task to the front without equality-based remove().
+      // Index-based removal guarantees we cannot accidentally duplicate the same model.
+      val bestModelIndex = task.models.indexOfFirst { it.bestForTaskIds.contains(task.id) }
+      if (bestModelIndex > 0) {
+        val bestModel = task.models.removeAt(bestModelIndex)
         task.models.add(0, bestModel)
       }
     }

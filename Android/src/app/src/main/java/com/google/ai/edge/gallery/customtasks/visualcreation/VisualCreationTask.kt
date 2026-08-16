@@ -41,10 +41,8 @@ const val TASK_ID_FLUX_KLEIN_IMAGE = "llm_flux_klein_image"
 class VisualCreationWorkbenchInstance
 
 /**
- * The model allowlist refresh in ModelManagerViewModel removes every non-imported custom-task model
- * before restoring the built-in local model sets. Bonsai is app-owned and must remain reachable
- * through that refresh. This list behaves normally for all user/model operations, while the
- * allowlist cleanup iterator deliberately keeps the Bonsai entry alive.
+ * App-owned image models use ordinary mutable lists. ModelManagerViewModel explicitly restores
+ * them after bootstrap and allowlist refresh so dedicated tasks remain canonical and single-model.
  */
 private fun visualCreationModels(): MutableList<Model> =
   (listOf(createBonsaiImageModel(), createFluxKleinImageModel()) + createVisualCreationImageModels())
