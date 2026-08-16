@@ -45,7 +45,8 @@ class VisualCreationTask @Inject constructor() : CustomTask {
       label = "本地视觉创作",
       category = Category.LLM,
       icon = Icons.Outlined.Image,
-      models = createVisualCreationImageModels().toMutableList(),
+      models =
+        (listOf(createBonsaiImageModel()) + createVisualCreationImageModels()).toMutableList(),
       description = "在设备本地生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。",
       shortDescription = "生成图片、理解图片，并基于图片继续创作",
       docUrl = "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza",
