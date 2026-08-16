@@ -1,0 +1,35 @@
+name: Research Box Z-Image runtime
+
+on:
+  push:
+    branches: [ "mcp201-zimage-work" ]
+    paths:
+      - '.github/workflows/research-zimage-box.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  decompile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Box 3.3.3 and JADX
+        run: |
+          curl -L --fail --retry 3 -o "$RUNNER_TEMP/Box.apk" \
+            https://github.com/jegly/Box/releases/download/v3.3.3/Box_v3.3.3_Main_Signed_Release.apk
+          curl -L --fail --retry 3 -o "$RUNNER_TEMP/jadx.zip" \
+            https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
+          unzip -q "$RUNNER_TEMP/jadx.zip" -d "$RUNNER_TEMP/jadx"
+      - name: Decompile and locate Z-Image implementation
+        run: |
+          "$RUNNER_TEMP/jadx/bin/jadx" -j 4 --no-res -d "$RUNNER_TEMP/box-src" "$RUNNER_TEMP/Box.apk"
+          echo '===== MATCHING FILES ====='
+          grep -RIlE 'Z-Image|ZImage|z_embx|z_refx|zc_main|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 100 || true
+          echo '===== MATCHING LINES ====='
+          grep -RInE 'Z-Image|ZImage|z_embx|z_refx|zc_main|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 400 || true
+          echo '===== CANDIDATE SOURCE CONTENT ====='
+          while IFS= read -r f; do
+            echo "----- FILE: $f -----"
+            sed -n '1,1200p' "$f"
+          done < <(grep -RIlE 'z_embx|z_refx|zc_main|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 20)
