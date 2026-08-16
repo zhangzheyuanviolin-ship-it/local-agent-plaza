@@ -1,0 +1,49 @@
+name: Inspect Box FLUX implementation
+
+on:
+  push:
+    branches: [mcp197-work]
+    paths:
+      - '.github/workflows/inspect-box-flux.yml'
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Box 3.3.3 APK
+        run: |
+          curl -L --fail --retry 3 -o box.apk \
+            https://github.com/jegly/Box/releases/download/v3.3.3/Box_v3.3.3_Main_Signed_Release.apk
+          sha256sum box.apk
+      - name: Install JADX
+        run: |
+          curl -L --fail --retry 3 -o jadx.zip \
+            https://github.com/skylot/jadx/releases/download/v1.5.1/jadx-1.5.1.zip
+          unzip -q jadx.zip -d jadx
+          chmod +x jadx/bin/jadx
+      - name: Decompile APK
+        run: |
+          mkdir -p decompiled
+          jadx/bin/jadx --no-res --show-bad-code -d decompiled box.apk
+      - name: Collect FLUX and LiteRT image sources
+        run: |
+          mkdir -p flux_extract
+          grep -RIlE 'FLUX|Flux|flux|ke_enc0|kc_prep|qwen_embed_fp16|CompiledModel|Bonsai|Z-Image|ZImage' decompiled/sources \
+            | sort > flux_extract/matching_files.txt || true
+          while IFS= read -r file; do
+            [ -f "$file" ] || continue
+            rel="${file#decompiled/sources/}"
+            mkdir -p "flux_extract/$(dirname "$rel")"
+            cp "$file" "flux_extract/$rel"
+          done < flux_extract/matching_files.txt
+          echo '=== MATCHING FILES ==='
+          cat flux_extract/matching_files.txt
+          echo '=== KEY HITS ==='
+          grep -RInE 'ke_enc0|kc_prep|qwen_embed_fp16|FLUX\.2|Flux2|CompiledModel|Environment\.create|Bonsai' flux_extract | head -n 800 || true
+      - name: Upload extracted sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: box-3.3.3-flux-extract
+          path: flux_extract
+          retention-days: 1
