@@ -25,7 +25,10 @@ jobs:
       - name: Decompile APK
         run: |
           mkdir -p decompiled
-          jadx/bin/jadx --no-res --show-bad-code -d decompiled box.apk
+          # JADX may return a non-zero code for a handful of unrelated methods while still emitting
+          # the image-generation classes we need. Keep the emitted source and inspect it below.
+          jadx/bin/jadx --no-res --show-bad-code -d decompiled box.apk || true
+          test -d decompiled/sources
       - name: Collect FLUX and LiteRT image sources
         run: |
           mkdir -p flux_extract
@@ -40,7 +43,7 @@ jobs:
           echo '=== MATCHING FILES ==='
           cat flux_extract/matching_files.txt
           echo '=== KEY HITS ==='
-          grep -RInE 'ke_enc0|kc_prep|qwen_embed_fp16|FLUX\.2|Flux2|CompiledModel|Environment\.create|Bonsai' flux_extract | head -n 800 || true
+          grep -RInE 'ke_enc0|kc_prep|qwen_embed_fp16|FLUX\.2|Flux2|CompiledModel|Environment\.create|Bonsai' flux_extract | head -n 1200 || true
       - name: Upload extracted sources
         uses: actions/upload-artifact@v4
         with:
