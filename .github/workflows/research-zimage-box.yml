@@ -16,21 +16,18 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download and decompile Box 3.3.3
         run: |
-          curl -L --fail --retry 3 -o "$RUNNER_TEMP/Box.apk" \
-            https://github.com/jegly/Box/releases/download/v3.3.3/Box_v3.3.3_Main_Signed_Release.apk
-          curl -L --fail --retry 3 -o "$RUNNER_TEMP/jadx.zip" \
-            https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
+          curl -L --fail --retry 3 -o "$RUNNER_TEMP/Box.apk" https://github.com/jegly/Box/releases/download/v3.3.3/Box_v3.3.3_Main_Signed_Release.apk
+          curl -L --fail --retry 3 -o "$RUNNER_TEMP/jadx.zip" https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
           unzip -q "$RUNNER_TEMP/jadx.zip" -d "$RUNNER_TEMP/jadx"
           "$RUNNER_TEMP/jadx/bin/jadx" -j 4 --no-res -d "$RUNNER_TEMP/box-src" "$RUNNER_TEMP/Box.apk" || true
-      - name: Print exact RoPE implementation and call sites
+      - name: Print exact Z-Image RoPE dimensions and position preparation
         run: |
-          SRC="$RUNNER_TEMP/box-src/sources"
-          echo '===== Z ENGINE ROPE CALLS ====='
-          grep -nE 'I00000oIO|rope|RoPE|256\.0|32, 32, 64|33,' "$SRC/defpackage/i0I00l.java" || true
-          echo '===== I00000oIO DEFINITIONS / REFERENCES ====='
-          grep -RIn 'I00000oIO' "$SRC" | head -n 100 || true
-          echo '===== CANDIDATE HELPER FILES ====='
-          for f in $(grep -RIlE 'I00000oIO|Math\.pow\(256|pow\(256|cos\(|sin\(' "$SRC/defpackage" | head -n 20); do
-            echo "----- $f -----"
-            sed -n '1,900p' "$f"
-          done
+          SRC="$RUNNER_TEMP/box-src/sources/defpackage"
+          echo '===== Z ENGINE LINES 35-115 ====='
+          sed -n '35,115p' "$SRC/i0I00l.java"
+          echo '===== STATIC ROPE DIM ARRAY CLASS ====='
+          sed -n '1,220p' "$SRC/iO1Oo1o0OOio.java" || true
+          echo '===== ALL REFERENCES TO STATIC ROPE ARRAY ====='
+          grep -RIn 'iO1Oo1o0OOio.I00000oIO' "$SRC" | head -n 100 || true
+          echo '===== CAPTION POSITION PREP CANDIDATES ====='
+          grep -RInE 'new int\[\]\{.*i4|new int\[\]\{.*0, 0|capPadToken|3840|z_refc' "$SRC/i0I00l.java" "$SRC/OOl11O0ii0II.java" | head -n 250 || true
