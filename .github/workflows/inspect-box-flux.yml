@@ -25,25 +25,26 @@ jobs:
       - name: Decompile APK
         run: |
           mkdir -p decompiled
-          # JADX may return a non-zero code for a handful of unrelated methods while still emitting
-          # the image-generation classes we need. Keep the emitted source and inspect it below.
           jadx/bin/jadx --no-res --show-bad-code -d decompiled box.apk || true
           test -d decompiled/sources
-      - name: Collect FLUX and LiteRT image sources
+      - name: Collect FLUX implementation and assets
         run: |
-          mkdir -p flux_extract
+          mkdir -p flux_extract/sources flux_extract/assets
           grep -RIlE 'FLUX|Flux|flux|ke_enc0|kc_prep|qwen_embed_fp16|CompiledModel|Bonsai|Z-Image|ZImage' decompiled/sources \
             | sort > flux_extract/matching_files.txt || true
           while IFS= read -r file; do
             [ -f "$file" ] || continue
             rel="${file#decompiled/sources/}"
-            mkdir -p "flux_extract/$(dirname "$rel")"
-            cp "$file" "flux_extract/$rel"
+            mkdir -p "flux_extract/sources/$(dirname "$rel")"
+            cp "$file" "flux_extract/sources/$rel"
           done < flux_extract/matching_files.txt
-          echo '=== MATCHING FILES ==='
-          cat flux_extract/matching_files.txt
-          echo '=== KEY HITS ==='
-          grep -RInE 'ke_enc0|kc_prep|qwen_embed_fp16|FLUX\.2|Flux2|CompiledModel|Environment\.create|Bonsai' flux_extract | head -n 1200 || true
+          for cls in I0Oi111ii Ili000 I0O0il1iIl Ili00l1oO1l; do
+            file="decompiled/sources/defpackage/$cls.java"
+            [ -f "$file" ] && cp "$file" flux_extract/sources/
+          done
+          unzip -q box.apk 'assets/fluxklein/*' -d flux_extract/assets || true
+          find flux_extract -type f -printf '%p %s bytes\n' | sort > flux_extract/inventory.txt
+          cat flux_extract/inventory.txt
       - name: Upload extracted sources
         uses: actions/upload-artifact@v4
         with:
