@@ -1,0 +1,33 @@
+name: Apply MCP197 core repairs v3
+
+on:
+  push:
+    branches: [mcp197-work]
+    paths:
+      - '.github/workflows/apply-mcp197-core-v3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mcp197-work
+          fetch-depth: 0
+      - name: Apply source patch
+        run: python3 Android/src/scripts/mcp197_core_patch.py
+      - name: Verify
+        run: |
+          grep -q 'Treat cancellation as pause' Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/modelmanager/ModelManagerViewModel.kt
+          grep -q 'Resume: keeping completed component' Android/src/app/src/main/java/com/google/ai/edge/gallery/worker/DownloadWorker.kt
+          grep -q 'LiteRT CPU / XNNPACK' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation/BonsaiImageModel.kt
+      - name: Commit source repairs
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Android/src/app/src/main/java/com/google/ai/edge/gallery
+          git commit -m 'MCP197: preserve resumable downloads and fix Bonsai backend label'
+          git push origin HEAD:mcp197-work
