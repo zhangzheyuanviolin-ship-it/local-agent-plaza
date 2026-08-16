@@ -36,7 +36,13 @@ import com.google.ai.edge.gallery.customtasks.musicgeneration.TASK_ID_LOCAL_MUSI
 import com.google.ai.edge.gallery.customtasks.musicgeneration.createMusicGenerationModels
 import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NARRATION
 import com.google.ai.edge.gallery.customtasks.videoqa.TASK_ID_VIDEO_QUESTION_ANSWER
+import com.google.ai.edge.gallery.customtasks.visualcreation.BONSAI_IMAGE_MODEL_ID
+import com.google.ai.edge.gallery.customtasks.visualcreation.FLUX_KLEIN_IMAGE_MODEL_ID
+import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_BONSAI_IMAGE
+import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_FLUX_KLEIN_IMAGE
 import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_LOCAL_VISUAL_CREATION
+import com.google.ai.edge.gallery.customtasks.visualcreation.createBonsaiImageModel
+import com.google.ai.edge.gallery.customtasks.visualcreation.createFluxKleinImageModel
 import com.google.ai.edge.gallery.customtasks.visualcreation.createVisualCreationImageModels
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.BuiltInTaskId
@@ -312,6 +318,45 @@ constructor(
     }
   }
 
+  private fun restoreDedicatedSingleModelTask(
+    tasks: Collection<Task>,
+    taskId: String,
+    modelId: String,
+    createModel: () -> Model,
+  ) {
+    val task = tasks.firstOrNull { it.id == taskId } ?: return
+    val alreadyCanonical = task.models.size == 1 && task.models.first().name == modelId
+    if (alreadyCanonical) return
+
+    task.models.clear()
+    task.models.add(createModel())
+    task.updateTrigger.value = System.currentTimeMillis()
+  }
+
+  private fun restoreBonsaiImageModel(tasks: Collection<Task>) {
+    restoreDedicatedSingleModelTask(
+      tasks = tasks,
+      taskId = TASK_ID_BONSAI_IMAGE,
+      modelId = BONSAI_IMAGE_MODEL_ID,
+      createModel = ::createBonsaiImageModel,
+    )
+  }
+
+  private fun restoreFluxKleinImageModel(tasks: Collection<Task>) {
+    restoreDedicatedSingleModelTask(
+      tasks = tasks,
+      taskId = TASK_ID_FLUX_KLEIN_IMAGE,
+      modelId = FLUX_KLEIN_IMAGE_MODEL_ID,
+      createModel = ::createFluxKleinImageModel,
+    )
+  }
+
+  private fun restoreLocalImageGenerationModels(tasks: Collection<Task>) {
+    restoreLocalVisualCreationModels(tasks)
+    restoreBonsaiImageModel(tasks)
+    restoreFluxKleinImageModel(tasks)
+  }
+
   private fun restoreAiKeyboardSettingsModel(tasks: Collection<Task>) {
     val task = tasks.firstOrNull { it.id == TASK_ID_AI_KEYBOARD } ?: return
     val model = createAiKeyboardSettingsModel()
@@ -337,10 +382,16 @@ constructor(
 
   fun processTasks() {
     val curTasks = getActiveCustomTasks().map { it.task }
-    restoreLocalVisualCreationModels(curTasks)
+    restoreLocalImageGenerationModels(curTasks)
     restoreAiKeyboardSettingsModel(curTasks)
     restoreLocalMusicGenerationModels(curTasks)
     for (task in curTasks) {
+      val uniqueModels = task.models.distinctBy { it.name }
+      if (uniqueModels.size != task.models.size) {
+        task.models.clear()
+        task.models.addAll(uniqueModels)
+        task.updateTrigger.value = System.currentTimeMillis()
+      }
       for (model in task.models) {
         model.preProcess()
       }
@@ -1068,7 +1119,7 @@ constructor(
       try {
         val curTasks = getActiveCustomTasks().map { it.task }
         clearNonImportedModelsFromTasks(curTasks)
-        restoreLocalVisualCreationModels(curTasks)
+        restoreLocalImageGenerationModels(curTasks)
         restoreAiKeyboardSettingsModel(curTasks)
         restoreLocalMusicGenerationModels(curTasks)
 
@@ -1366,7 +1417,7 @@ constructor(
   private fun createBootstrapUiState(): ModelManagerUiState {
     val activeTasks = getActiveCustomTasks().map { it.task }
     clearAllModelsFromTasks(activeTasks)
-    restoreLocalVisualCreationModels(activeTasks)
+    restoreLocalImageGenerationModels(activeTasks)
     restoreAiKeyboardSettingsModel(activeTasks)
     restoreLocalMusicGenerationModels(activeTasks)
 

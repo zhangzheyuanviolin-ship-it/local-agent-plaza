@@ -46,64 +46,13 @@ class VisualCreationWorkbenchInstance
  * through that refresh. This list behaves normally for all user/model operations, while the
  * allowlist cleanup iterator deliberately keeps the Bonsai entry alive.
  */
-private class BonsaiPreservingModelList(models: List<Model>) : AbstractMutableList<Model>() {
-  private val delegate = models.toMutableList()
+private fun visualCreationModels(): MutableList<Model> =
+  (listOf(createBonsaiImageModel(), createFluxKleinImageModel()) + createVisualCreationImageModels())
+    .toMutableList()
 
-  override val size: Int
-    get() = delegate.size
+private fun bonsaiOnlyModels(): MutableList<Model> = mutableListOf(createBonsaiImageModel())
 
-  override fun get(index: Int): Model = delegate[index]
-
-  override fun set(index: Int, element: Model): Model = delegate.set(index, element)
-
-  override fun add(index: Int, element: Model) {
-    delegate.add(index, element)
-  }
-
-  override fun removeAt(index: Int): Model = delegate.removeAt(index)
-
-  override fun clear() {
-    delegate.removeAll { it.name != BONSAI_IMAGE_MODEL_ID && it.name != FLUX_KLEIN_IMAGE_MODEL_ID }
-  }
-
-  override fun iterator(): MutableIterator<Model> {
-    return object : MutableIterator<Model> {
-      private var cursor = 0
-      private var lastReturned = -1
-
-      override fun hasNext(): Boolean = cursor < delegate.size
-
-      override fun next(): Model {
-        if (!hasNext()) throw NoSuchElementException()
-        lastReturned = cursor
-        return delegate[cursor++]
-      }
-
-      override fun remove() {
-        check(lastReturned >= 0) { "next() must be called before remove()" }
-        if (
-          delegate[lastReturned].name != BONSAI_IMAGE_MODEL_ID &&
-            delegate[lastReturned].name != FLUX_KLEIN_IMAGE_MODEL_ID
-        ) {
-          delegate.removeAt(lastReturned)
-          if (lastReturned < cursor) cursor--
-        }
-        lastReturned = -1
-      }
-    }
-  }
-}
-
-private fun bonsaiVisualModels(): MutableList<Model> =
-  BonsaiPreservingModelList(
-    listOf(createBonsaiImageModel(), createFluxKleinImageModel()) + createVisualCreationImageModels()
-  )
-
-private fun bonsaiOnlyModels(): MutableList<Model> =
-  BonsaiPreservingModelList(listOf(createBonsaiImageModel()))
-
-private fun fluxOnlyModels(): MutableList<Model> =
-  BonsaiPreservingModelList(listOf(createFluxKleinImageModel()))
+private fun fluxOnlyModels(): MutableList<Model> = mutableListOf(createFluxKleinImageModel())
 
 class VisualCreationTask @Inject constructor() : CustomTask {
   override val task: Task =
@@ -112,7 +61,7 @@ class VisualCreationTask @Inject constructor() : CustomTask {
       label = "本地视觉创作",
       category = Category.LLM,
       icon = Icons.Outlined.Image,
-      models = bonsaiVisualModels(),
+      models = visualCreationModels(),
       description = "在设备本地生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。包含 Bonsai Image 4B 与 FLUX.2 Klein 4B LiteRT。",
       shortDescription = "生成图片、理解图片，并基于图片继续创作",
       docUrl = "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza",
