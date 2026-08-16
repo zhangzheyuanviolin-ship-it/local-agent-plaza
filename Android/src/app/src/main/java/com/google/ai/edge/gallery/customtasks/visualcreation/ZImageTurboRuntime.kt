@@ -287,7 +287,7 @@ private class ZImageTurboEngine(
   }
 
   private fun buildRope(positions: Array<IntArray>): Pair<FloatArray, FloatArray> {
-    val axisDims = intArrayOf(32, 32, 64)
+    val axisDims = intArrayOf(32, 48, 48) // Exact Box 3.3.3 Z-Image RoPE axes.
     val cosValues = FloatArray(positions.size * 64)
     val sinValues = FloatArray(positions.size * 64)
     for (token in positions.indices) {
