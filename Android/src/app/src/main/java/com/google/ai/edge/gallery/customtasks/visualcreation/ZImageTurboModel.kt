@@ -45,26 +45,22 @@ private data class ZImageFile(
   val fromQwenAssetRepo: Boolean = false,
 )
 
-/*
- * Sizes are intentionally approximate metadata used by the existing download progress UI.
- * Completion is determined by the downloader/final files and successful LiteRT graph loading.
- * The immutable Z-Image revision pins the actual graph bytes.
- */
+/* Exact graph/file sizes from the Box 3.3.3 Z-Image package definition. */
 private val Z_IMAGE_FILES =
   listOf(
-    ZImageFile(Z_QWEN_ENCODER, 3_550_000_000L, Z_QWEN_ENCODER),
-    ZImageFile(Z_EMBED_CAPTION, 9_910_000L, Z_EMBED_CAPTION),
-    ZImageFile(Z_EMBED_IMAGE, 308_000L, Z_EMBED_IMAGE),
-    ZImageFile(Z_REFINE_CAPTION, 355_000_000L, Z_REFINE_CAPTION),
-    ZImageFile(Z_REFINE_IMAGE, 363_000_000L, Z_REFINE_IMAGE),
-    ZImageFile(Z_MAIN_0, 908_000_000L, Z_MAIN_0),
-    ZImageFile(Z_MAIN_1, 908_000_000L, Z_MAIN_1),
-    ZImageFile(Z_MAIN_2, 908_000_000L, Z_MAIN_2),
-    ZImageFile(Z_MAIN_3, 908_000_000L, Z_MAIN_3),
-    ZImageFile(Z_MAIN_4, 908_000_000L, Z_MAIN_4),
-    ZImageFile(Z_MAIN_5, 908_000_000L, Z_MAIN_5),
-    ZImageFile(Z_FINAL, 1_300_000L, Z_FINAL),
-    ZImageFile(Z_VAE, 50_100_000L, Z_VAE),
+    ZImageFile(Z_QWEN_ENCODER, 3_547_652_208L, Z_QWEN_ENCODER),
+    ZImageFile(Z_EMBED_IMAGE, 308_272L, Z_EMBED_IMAGE),
+    ZImageFile(Z_REFINE_IMAGE, 363_386_160L, Z_REFINE_IMAGE),
+    ZImageFile(Z_EMBED_CAPTION, 9_906_096L, Z_EMBED_CAPTION),
+    ZImageFile(Z_REFINE_CAPTION, 355_025_040L, Z_REFINE_CAPTION),
+    ZImageFile(Z_MAIN_0, 908_480_960L, Z_MAIN_0),
+    ZImageFile(Z_MAIN_1, 908_480_960L, Z_MAIN_1),
+    ZImageFile(Z_MAIN_2, 908_480_960L, Z_MAIN_2),
+    ZImageFile(Z_MAIN_3, 908_480_960L, Z_MAIN_3),
+    ZImageFile(Z_MAIN_4, 908_480_960L, Z_MAIN_4),
+    ZImageFile(Z_MAIN_5, 908_480_960L, Z_MAIN_5),
+    ZImageFile(Z_FINAL, 1_295_936L, Z_FINAL),
+    ZImageFile(Z_VAE, 50_139_872L, Z_VAE),
     ZImageFile(Z_QWEN_EMBED, 777_912_320L, "tokenizer/$Z_QWEN_EMBED", true),
     ZImageFile(Z_QWEN_VOCAB, 1_521_491L, "tokenizer/$Z_QWEN_VOCAB", true),
     ZImageFile(Z_QWEN_MERGES, 1_671_838L, "tokenizer/$Z_QWEN_MERGES", true),
@@ -113,10 +109,10 @@ val Z_IMAGE_TURBO_MODEL_INFO: ImageGenerationModelInfo =
     recommendedWidth = 256,
     recommendedHeight = 256,
     notes =
-      "Alibaba Tongyi-MAI Z-Image-Turbo 6B 的 LiteRT 端侧文生图路线。固定 256 x 256、默认 8 步；" +
+      "Alibaba Tongyi-MAI Z-Image-Turbo 6B 的 LiteRT 端侧文生图路线。固定 256 x 256、默认 9 步；" +
         "Qwen3-4B 文本编码器、图像/文本 refiner 与 30 层 S3-DiT 被拆分为顺序驻留图，" +
-        "使用单一共享 LiteRT Environment，GPU CompiledModel 强制 FP32。默认 Turbo guidance 为 0，" +
-        "总下载约 10.6 GB。",
+        "使用单一共享 LiteRT Environment，GPU CompiledModel 强制 FP32。Turbo 路线仅跑正向分支，" +
+        "总下载约 10.6 GB；若 FLUX.2 Klein 已安装，约 0.8 GB Qwen 资源内容相同。",
   )
 
 fun isZImageTurboModel(modelId: String): Boolean = modelId == Z_IMAGE_TURBO_MODEL_ID
