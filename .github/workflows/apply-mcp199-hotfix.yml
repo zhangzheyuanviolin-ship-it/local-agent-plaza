@@ -1,0 +1,28 @@
+name: Apply MCP199 emergency hotfix
+
+on:
+  push:
+    branches: [ "mcp199-hotfix" ]
+    paths:
+      - '.github/workflows/apply-mcp199-hotfix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mcp199-hotfix
+      - name: Apply hotfix
+        run: python3 Android/src/scripts/mcp199_hotfix.py
+      - name: Commit hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation/VisualCreationTask.kt
+          git add -- Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/modelmanager/ModelManagerViewModel.kt
+          git commit -m "MCP199: fix duplicate image task models and entry crash"
+          git push origin HEAD:mcp199-hotfix
