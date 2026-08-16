@@ -290,6 +290,7 @@ fun VisualCreationScreen(
               text = "当前阶段：${uiState.generationStageText}",
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
             if (uiState.generationTimingText.isNotBlank()) {
               Text(

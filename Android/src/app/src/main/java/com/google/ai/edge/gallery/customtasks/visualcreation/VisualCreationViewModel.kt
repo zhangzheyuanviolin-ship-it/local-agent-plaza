@@ -310,8 +310,9 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
     }
 
     val bonsaiModel = isBonsaiImageModel(model.name)
+    val fluxModel = isFluxKleinImageModel(model.name)
     val nativeFiles =
-      if (modelInfo.backend == ImageGenerationBackend.STABLE_DIFFUSION_CPP && !bonsaiModel) {
+      if (modelInfo.backend == ImageGenerationBackend.STABLE_DIFFUSION_CPP) {
         resolveNativeImageGenerationFiles(context = context, model = model, modelInfo = modelInfo)
       } else {
         NativeImageGenerationFiles(modelPath = model.getPath(context), diffusionModelPath = "", vaePath = "", llmPath = "")
@@ -422,6 +423,26 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
                     current.copy(
                       generationProgressStep = progress.step,
                       generationProgressSteps = if (progress.totalSteps > 0) progress.totalSteps else current.generationProgressSteps,
+                      generationStageText = progress.stageText,
+                      generationTimingText = progress.timingText,
+                      statusText = progress.stageText,
+                    )
+                  } else current
+                }
+              },
+            )
+          } else if (fluxModel) {
+            FluxKleinImageGenerationClient.generateImage(
+              context = context.applicationContext,
+              modelPath = nativeFiles.modelPath,
+              prompt = prompt,
+              seed = seed,
+              progressListener = { progress ->
+                _uiState.update { current ->
+                  if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
+                    current.copy(
+                      generationProgressStep = progress.step,
+                      generationProgressSteps = if (progress.totalSteps > 0) progress.totalSteps else 4,
                       generationStageText = progress.stageText,
                       generationTimingText = progress.timingText,
                       statusText = progress.stageText,
@@ -969,6 +990,7 @@ private fun defaultSettingsForModel(
     )
   return when (modelInfo.family) {
     "Bonsai Image 4B" -> base.copy(width = 512, height = 512, steps = 4, cfgScale = 1.0f)
+    "FLUX.2 Klein 4B" -> base.copy(width = 256, height = 256, steps = 4, cfgScale = 1.0f)
     "Z-Image" -> base.copy(steps = 8, cfgScale = 1.0f)
     "Stable Diffusion 1.5" -> base.copy(steps = 28, cfgScale = 7.0f)
     "Absolute Reality SD1.5" -> base.copy(steps = 28, cfgScale = 7.0f)

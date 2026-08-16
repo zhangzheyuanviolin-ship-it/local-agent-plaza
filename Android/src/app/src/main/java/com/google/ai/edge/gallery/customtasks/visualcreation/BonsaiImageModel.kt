@@ -48,9 +48,7 @@ val BONSAI_IMAGE_MODEL_INFO: ImageGenerationModelInfo =
     modelId = BONSAI_IMAGE_MODEL_ID,
     displayName = "Bonsai Image 4B LiteRT",
     family = "Bonsai Image 4B",
-    // MCP195 gives Bonsai its own Kotlin/LiteRT execution route. This legacy enum value is retained
-    // only so the shared settings data class remains binary-compatible with the MCP194 UI model.
-    backend = ImageGenerationBackend.STABLE_DIFFUSION_CPP,
+    backend = ImageGenerationBackend.BONSAI_LITERT_CPU_XNNPACK,
     format = "LiteRT TFLite (CPU/XNNPACK)",
     requiredFiles =
       listOf(
@@ -114,17 +112,20 @@ fun imageGenerationBackendDisplayName(
   modelInfo: ImageGenerationModelInfo?,
 ): String =
   when {
-    isBonsaiImageModel(modelName) -> "LiteRT CPU / XNNPACK"
+    isBonsaiImageModel(modelName) || modelInfo?.backend == ImageGenerationBackend.BONSAI_LITERT_CPU_XNNPACK ->
+      "LiteRT CPU / XNNPACK"
+    isFluxKleinImageModel(modelName) || modelInfo?.backend == ImageGenerationBackend.FLUX_LITERT_GPU_COMPILED_MODEL ->
+      "LiteRT GPU / CompiledModel FP32"
     modelInfo?.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN -> "Local Dream QNN / MNN"
     modelInfo?.backend == ImageGenerationBackend.STABLE_DIFFUSION_CPP -> "stable-diffusion.cpp"
     else -> "未知"
   }
 
 fun findVisualCreationImageModelInfo(modelId: String): ImageGenerationModelInfo? =
-  if (isBonsaiImageModel(modelId)) {
-    BONSAI_IMAGE_MODEL_INFO
-  } else {
-    ImageGenerationModelRegistry.findModel(modelId)
+  when {
+    isBonsaiImageModel(modelId) -> BONSAI_IMAGE_MODEL_INFO
+    isFluxKleinImageModel(modelId) -> FLUX_KLEIN_IMAGE_MODEL_INFO
+    else -> ImageGenerationModelRegistry.findModel(modelId)
   }
 
 fun createBonsaiImageModel(): Model {
@@ -138,7 +139,7 @@ fun createBonsaiImageModel(): Model {
           "固定输出 ${info.recommendedWidth} x ${info.recommendedHeight}；默认4步；" +
           "许可证：${info.license}。",
       learnMoreUrl = info.learnMoreUrl,
-      bestForTaskIds = listOf(TASK_ID_LOCAL_VISUAL_CREATION),
+      bestForTaskIds = listOf(TASK_ID_LOCAL_VISUAL_CREATION, TASK_ID_BONSAI_IMAGE),
       minDeviceMemoryInGb = info.minMemoryGb,
       url = bonsaiDownloadUrl(BONSAI_DIT_FILE),
       sizeInBytes = BONSAI_DIT_SIZE,

@@ -36,6 +36,7 @@ import kotlinx.coroutines.CoroutineScope
 
 const val TASK_ID_LOCAL_VISUAL_CREATION = "llm_local_visual_creation"
 const val TASK_ID_BONSAI_IMAGE = "llm_bonsai_image"
+const val TASK_ID_FLUX_KLEIN_IMAGE = "llm_flux_klein_image"
 
 class VisualCreationWorkbenchInstance
 
@@ -62,7 +63,7 @@ private class BonsaiPreservingModelList(models: List<Model>) : AbstractMutableLi
   override fun removeAt(index: Int): Model = delegate.removeAt(index)
 
   override fun clear() {
-    delegate.removeAll { it.name != BONSAI_IMAGE_MODEL_ID }
+    delegate.removeAll { it.name != BONSAI_IMAGE_MODEL_ID && it.name != FLUX_KLEIN_IMAGE_MODEL_ID }
   }
 
   override fun iterator(): MutableIterator<Model> {
@@ -80,7 +81,10 @@ private class BonsaiPreservingModelList(models: List<Model>) : AbstractMutableLi
 
       override fun remove() {
         check(lastReturned >= 0) { "next() must be called before remove()" }
-        if (delegate[lastReturned].name != BONSAI_IMAGE_MODEL_ID) {
+        if (
+          delegate[lastReturned].name != BONSAI_IMAGE_MODEL_ID &&
+            delegate[lastReturned].name != FLUX_KLEIN_IMAGE_MODEL_ID
+        ) {
           delegate.removeAt(lastReturned)
           if (lastReturned < cursor) cursor--
         }
@@ -91,10 +95,15 @@ private class BonsaiPreservingModelList(models: List<Model>) : AbstractMutableLi
 }
 
 private fun bonsaiVisualModels(): MutableList<Model> =
-  BonsaiPreservingModelList(listOf(createBonsaiImageModel()) + createVisualCreationImageModels())
+  BonsaiPreservingModelList(
+    listOf(createBonsaiImageModel(), createFluxKleinImageModel()) + createVisualCreationImageModels()
+  )
 
 private fun bonsaiOnlyModels(): MutableList<Model> =
   BonsaiPreservingModelList(listOf(createBonsaiImageModel()))
+
+private fun fluxOnlyModels(): MutableList<Model> =
+  BonsaiPreservingModelList(listOf(createFluxKleinImageModel()))
 
 class VisualCreationTask @Inject constructor() : CustomTask {
   override val task: Task =
@@ -104,7 +113,7 @@ class VisualCreationTask @Inject constructor() : CustomTask {
       category = Category.LLM,
       icon = Icons.Outlined.Image,
       models = bonsaiVisualModels(),
-      description = "在设备本地生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。包含 Bonsai Image 4B LiteRT。",
+      description = "在设备本地生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。包含 Bonsai Image 4B 与 FLUX.2 Klein 4B LiteRT。",
       shortDescription = "生成图片、理解图片，并基于图片继续创作",
       docUrl = "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza",
       sourceCodeUrl = "",
@@ -195,6 +204,56 @@ class BonsaiImageTask @Inject constructor() : CustomTask {
   }
 }
 
+/** Dedicated FLUX.2 Klein entry with one directly downloadable model. */
+class FluxKleinImageTask @Inject constructor() : CustomTask {
+  override val task: Task =
+    Task(
+      id = TASK_ID_FLUX_KLEIN_IMAGE,
+      label = "FLUX.2 Klein 图像生成",
+      category = Category.LLM,
+      icon = Icons.Outlined.Image,
+      models = fluxOnlyModels(),
+      description = "FLUX.2 Klein 4B LiteRT 本地图像生成。模型约 7.45 GB，固定 256 × 256、4 步，优先使用 LiteRT GPU CompiledModel FP32。",
+      shortDescription = "下载 FLUX.2 Klein 4B，在手机 GPU 本地生成图片",
+      docUrl = "https://huggingface.co/litert-community/FLUX.2-klein-4B-LiteRT",
+      sourceCodeUrl = "",
+      handleModelConfigChangesInTask = true,
+      newFeature = true,
+      useThemeColor = true,
+    )
+
+  override fun initializeModelFn(
+    context: Context,
+    coroutineScope: CoroutineScope,
+    model: Model,
+    systemInstruction: Contents?,
+    onDone: (String) -> Unit,
+  ) {
+    model.instance = VisualCreationWorkbenchInstance()
+    onDone("")
+  }
+
+  override fun cleanUpModelFn(
+    context: Context,
+    coroutineScope: CoroutineScope,
+    model: Model,
+    onDone: () -> Unit,
+  ) {
+    model.instance = null
+    onDone()
+  }
+
+  @Composable
+  override fun MainScreen(data: Any) {
+    val customTaskData = data as CustomTaskData
+    VisualCreationScreen(
+      modelManagerViewModel = customTaskData.modelManagerViewModel,
+      bottomPadding = customTaskData.bottomPadding,
+      setAppBarControlsDisabled = customTaskData.setAppBarControlsDisabled,
+    )
+  }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 internal object VisualCreationTaskModule {
@@ -205,4 +264,8 @@ internal object VisualCreationTaskModule {
   @Provides
   @IntoSet
   fun provideBonsaiImageTask(): CustomTask = BonsaiImageTask()
+
+  @Provides
+  @IntoSet
+  fun provideFluxKleinImageTask(): CustomTask = FluxKleinImageTask()
 }
