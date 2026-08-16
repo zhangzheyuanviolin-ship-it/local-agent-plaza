@@ -23,13 +23,13 @@ jobs:
           unzip -q "$RUNNER_TEMP/jadx.zip" -d "$RUNNER_TEMP/jadx"
       - name: Decompile and locate Z-Image implementation
         run: |
-          "$RUNNER_TEMP/jadx/bin/jadx" -j 4 --no-res -d "$RUNNER_TEMP/box-src" "$RUNNER_TEMP/Box.apk"
+          "$RUNNER_TEMP/jadx/bin/jadx" -j 4 --no-res -d "$RUNNER_TEMP/box-src" "$RUNNER_TEMP/Box.apk" || true
           echo '===== MATCHING FILES ====='
-          grep -RIlE 'Z-Image|ZImage|z_embx|z_refx|zc_main|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 100 || true
+          grep -RIlE 'Z-Image|ZImage|z_embx|z_embc|z_refx|z_refc|zc_main|zc_final|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 100 || true
           echo '===== MATCHING LINES ====='
-          grep -RInE 'Z-Image|ZImage|z_embx|z_refx|zc_main|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 400 || true
+          grep -RInE 'Z-Image|ZImage|z_embx|z_embc|z_refx|z_refc|zc_main|zc_final|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 500 || true
           echo '===== CANDIDATE SOURCE CONTENT ====='
           while IFS= read -r f; do
             echo "----- FILE: $f -----"
-            sed -n '1,1200p' "$f"
-          done < <(grep -RIlE 'z_embx|z_refx|zc_main|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 20)
+            sed -n '1,1600p' "$f"
+          done < <(grep -RIlE 'z_embx|z_embc|z_refx|z_refc|zc_main|zc_final|qwen_enc|zvae' "$RUNNER_TEMP/box-src/sources" | head -n 24)
