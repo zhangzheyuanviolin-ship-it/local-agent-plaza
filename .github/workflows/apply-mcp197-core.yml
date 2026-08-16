@@ -1,0 +1,135 @@
+name: Apply MCP197 core repairs
+
+on:
+  push:
+    branches: [mcp197-work]
+    paths:
+      - '.github/workflows/apply-mcp197-core.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mcp197-work
+          fetch-depth: 0
+      - name: Apply deterministic source patches
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"pattern not found in {path}: {old[:120]!r}")
+              if text.count(old) != 1:
+                  raise SystemExit(f"pattern count != 1 in {path}: {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+
+          vm = 'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/modelmanager/ModelManagerViewModel.kt'
+          replace_once(vm,
+          '''    // Delete the model files first.\n    deleteModel(model = model)\n\n    downloadRepository.downloadModel(''',
+          '''    // Preserve completed files and .tmp ranges. DownloadWorker resumes from the existing\n    // byte offset; only the explicit delete action is allowed to clear model data.\n    downloadRepository.downloadModel(''')
+          replace_once(vm,
+          '''  fun cancelDownloadModel(model: Model) {\n    if (model.runtimeType == RuntimeType.AICORE) {\n      return\n    }\n    downloadRepository.cancelDownloadModel(model)\n    deleteModel(model = model)\n  }''',
+          '''  fun cancelDownloadModel(model: Model) {\n    if (model.runtimeType == RuntimeType.AICORE) {\n      return\n    }\n    // Cancellation is a pause for file-backed models. Keep completed files and .tmp ranges so the\n    // next tap, app restart, or device reboot can continue instead of starting from zero.\n    downloadRepository.cancelDownloadModel(model)\n  }''')
+          replace_once(vm,
+          '''  private fun isModelPartiallyDownloaded(model: Model): Boolean {\n    if (model.localModelFilePathOverride.isNotEmpty()) {\n      return false\n    }\n\n    // A model is partially downloaded when the tmp file exists.\n    return getModelDownloadTempFile(model).exists()\n  }\n\n  private fun getModelDownloadTempFile(model: Model): File {\n    return File(\n      externalFilesDir,\n      listOf(model.normalizedName, model.version, "${model.downloadFileName}.$TMP_FILE_EXT")\n        .joinToString(File.separator),\n    )\n  }''',
+          '''  private fun modelDownloadFileNames(model: Model): List<String> =\n    listOf(model.downloadFileName) + model.extraDataFiles.map { it.downloadFileName }\n\n  private fun modelDownloadDirectory(model: Model): File =\n    File(\n      externalFilesDir,\n      listOf(model.normalizedName, model.version).joinToString(File.separator),\n    )\n\n  private fun isModelPartiallyDownloaded(model: Model): Boolean {\n    if (model.localModelFilePathOverride.isNotEmpty()) {\n      return false\n    }\n    val dir = modelDownloadDirectory(model)\n    return modelDownloadFileNames(model).any { fileName ->\n      File(dir, fileName).exists() || File(dir, "$fileName.$TMP_FILE_EXT").exists()\n    }\n  }\n\n  private fun getModelDownloadedBytes(model: Model): Long {\n    val dir = modelDownloadDirectory(model)\n    return modelDownloadFileNames(model).sumOf { fileName ->\n      val completed = File(dir, fileName)\n      val partial = File(dir, "$fileName.$TMP_FILE_EXT")\n      when {\n        partial.exists() -> partial.length()\n        completed.exists() -> completed.length()\n        else -> 0L\n      }\n    }\n  }''')
+          replace_once(vm,
+          '''      val tmpFile = getModelDownloadTempFile(model)\n      receivedBytes = tmpFile.length()''',
+          '''      receivedBytes = getModelDownloadedBytes(model)''')
+
+          worker = 'Android/src/app/src/main/java/com/google/ai/edge/gallery/worker/DownloadWorker.kt'
+          replace_once(worker,
+          '''          for (file in allFiles) {\n            val candidateUrls =\n              file.url.split("\\n").map { it.trim() }.filter { it.isNotEmpty() }.distinct()''',
+          '''          for (file in allFiles) {\n            val outputDir =\n              File(\n                applicationContext.getExternalFilesDir(null),\n                listOf(modelDir, version).joinToString(separator = File.separator),\n              )\n            if (!outputDir.exists()) outputDir.mkdirs()\n            val completedFile = File(outputDir, file.fileName)\n            val partialFile = File(outputDir, "${file.fileName}.$TMP_FILE_EXT")\n            // A file is renamed from .tmp only after its stream reaches EOF. Therefore an existing\n            // final file is a durable completed chunk and can be skipped on a later worker run.\n            if (completedFile.exists() && completedFile.length() > 0L && !partialFile.exists()) {\n              downloadedBytes += completedFile.length()\n              setProgress(\n                Data.Builder()\n                  .putLong(KEY_MODEL_DOWNLOAD_RECEIVED_BYTES, downloadedBytes)\n                  .build()\n              )\n              setForeground(\n                createForegroundInfo(\n                  progress = if (totalBytes > 0L) (downloadedBytes * 100 / totalBytes).toInt() else 0,\n                  modelName = modelName,\n                )\n              )\n              Log.d(TAG, "Skipping completed file '${completedFile.name}' (${completedFile.length()} bytes)")\n              continue\n            }\n\n            val candidateUrls =\n              file.url.split("\\n").map { it.trim() }.filter { it.isNotEmpty() }.distinct()''')
+
+          repo = 'Android/src/app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt'
+          replace_once(repo,
+          '''            val partialFile = getPartialDownloadFile(model)\n            val partialBytes = partialFile.length()\n            if (partialBytes > 0L) {\n              status = ModelDownloadStatusType.PARTIALLY_DOWNLOADED\n            }''',
+          '''            val partialBytes = getDownloadedBytes(model)\n            if (hasPersistentPartialDownload(model)) {\n              status = ModelDownloadStatusType.PARTIALLY_DOWNLOADED\n            }''')
+          replace_once(repo,
+          '''  private fun getPartialDownloadFile(model: Model): File {\n    return File(\n      context.getExternalFilesDir(null),\n      listOf(model.normalizedName, model.version, "${model.downloadFileName}.$TMP_FILE_EXT")\n        .joinToString(File.separator),\n    )\n  }''',
+          '''  private fun modelDownloadDirectory(model: Model): File =\n    File(\n      context.getExternalFilesDir(null),\n      listOf(model.normalizedName, model.version).joinToString(File.separator),\n    )\n\n  private fun modelDownloadFileNames(model: Model): List<String> =\n    listOf(model.downloadFileName) + model.extraDataFiles.map { it.downloadFileName }\n\n  private fun getDownloadedBytes(model: Model): Long {\n    val dir = modelDownloadDirectory(model)\n    return modelDownloadFileNames(model).sumOf { fileName ->\n      val completed = File(dir, fileName)\n      val partial = File(dir, "$fileName.$TMP_FILE_EXT")\n      when {\n        partial.exists() -> partial.length()\n        completed.exists() -> completed.length()\n        else -> 0L\n      }\n    }\n  }\n\n  private fun hasPersistentPartialDownload(model: Model): Boolean {\n    val dir = modelDownloadDirectory(model)\n    val names = modelDownloadFileNames(model)\n    val hasAnyBytes =\n      names.any { fileName ->\n        File(dir, fileName).length() > 0L || File(dir, "$fileName.$TMP_FILE_EXT").length() > 0L\n      }\n    val allCompleted = names.all { fileName -> File(dir, fileName).length() > 0L }\n    return hasAnyBytes && !allCompleted\n  }''')
+
+          screen = 'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation/VisualCreationScreen.kt'
+          replace_once(screen,
+          '''  val selectedModelInfo = ImageGenerationModelRegistry.findModel(selectedAppModel.name)''',
+          '''  val selectedModelInfo = findVisualCreationImageModelInfo(selectedAppModel.name)''')
+          replace_once(screen,
+          '''          text = "推理后端：${selectedModelInfo?.backend ?: ImageGenerationBackend.STABLE_DIFFUSION_CPP}",''',
+          '''          text = "推理后端：${imageGenerationBackendDisplayName(selectedAppModel.name, selectedModelInfo)}",''')
+          replace_once(screen,
+          '''          if (uiState.status == VisualCreationStatus.GENERATING_IMAGE) {\n            Text(\n              text =\n                if (uiState.generationProgressStep > 0) {\n                  "采样进度：第 ${uiState.generationProgressStep} / ${uiState.generationProgressSteps} 步"\n                } else {\n                  "进度：正在加载模型和初始化推理引擎"\n                },\n              style = MaterialTheme.typography.bodyMedium,\n              color = MaterialTheme.colorScheme.primary,\n            )\n          }''',
+          '''          if (uiState.status == VisualCreationStatus.GENERATING_IMAGE) {\n            Text(\n              text = "当前阶段：${uiState.generationStageText}",\n              style = MaterialTheme.typography.bodyMedium,\n              color = MaterialTheme.colorScheme.primary,\n              modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },\n            )\n            if (uiState.generationTimingText.isNotBlank()) {\n              Text(\n                text = uiState.generationTimingText,\n                style = MaterialTheme.typography.bodySmall,\n                color = MaterialTheme.colorScheme.onSurfaceVariant,\n              )\n            }\n          }''')
+
+          bmodel = 'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation/BonsaiImageModel.kt'
+          text = Path(bmodel).read_text()
+          insertion = '''\nfun imageGenerationBackendDisplayName(\n  modelName: String,\n  modelInfo: ImageGenerationModelInfo?,\n): String =\n  when {\n    isBonsaiImageModel(modelName) -> "LiteRT CPU / XNNPACK"\n    isFluxKleinImageModel(modelName) -> "LiteRT GPU / CompiledModel FP32"\n    modelInfo?.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN -> "Local Dream QNN / MNN"\n    modelInfo?.backend == ImageGenerationBackend.STABLE_DIFFUSION_CPP -> "stable-diffusion.cpp"\n    else -> "未知"\n  }\n'''
+          marker = '\nfun isBonsaiImageModel(modelId: String): Boolean = modelId == BONSAI_IMAGE_MODEL_ID\n'
+          if marker not in text:
+              raise SystemExit('Bonsai model marker not found')
+          text = text.replace(marker, marker + insertion, 1)
+          Path(bmodel).write_text(text)
+
+          view = 'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation/VisualCreationViewModel.kt'
+          replace_once(view,
+          '''  val generationProgressSteps: Int = 0,\n  val generatedImagePath: String? = null,''',
+          '''  val generationProgressSteps: Int = 0,\n  val generationStageText: String = "等待开始",\n  val generationTimingText: String = "",\n  val generatedImagePath: String? = null,''')
+          replace_once(view,
+          '''        generationProgressStep = 0,\n        generationProgressSteps = settings.steps,''',
+          '''        generationProgressStep = 0,\n        generationProgressSteps = settings.steps,\n        generationStageText = "准备模型和推理环境",\n        generationTimingText = "",''')
+          replace_once(view,
+          '''              progressListener = { step, steps ->\n                _uiState.update { current ->\n                  if (current.status == VisualCreationStatus.GENERATING_IMAGE) {\n                    current.copy(\n                      generationProgressStep = step,\n                      generationProgressSteps = steps,\n                      statusText =\n                        if (step >= steps) {\n                          buildDecodingStatusText(\n                            modelName = model.displayName.ifBlank { model.name },\n                            prompt = current.submittedPrompt,\n                          )\n                        } else {\n                          buildSamplingStatusText(\n                            modelName = model.displayName.ifBlank { model.name },\n                            step = step,\n                            steps = steps,\n                            prompt = current.submittedPrompt,\n                          )\n                        },\n                    )\n                  } else {\n                    current\n                  }\n                }\n              },''',
+          '''              progressListener = { progress ->\n                _uiState.update { current ->\n                  if (current.status == VisualCreationStatus.GENERATING_IMAGE) {\n                    current.copy(\n                      generationProgressStep = progress.step,\n                      generationProgressSteps = progress.totalSteps,\n                      generationStageText = progress.stageText,\n                      generationTimingText = progress.timingText,\n                      statusText = progress.stageText,\n                    )\n                  } else current\n                }\n              },''')
+
+          runtime = 'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation/BonsaiImageRuntime.kt'
+          text = Path(runtime).read_text()
+          text = text.replace('import java.nio.ByteOrder\n', 'import java.nio.ByteOrder\nimport java.util.concurrent.ConcurrentHashMap\n')
+          text = text.replace('import kotlin.math.sqrt\n', 'import kotlin.math.sqrt\nimport kotlin.system.measureTimeMillis\n')
+          old_sig = '''object BonsaiImageGenerationClient {\n  fun generateImage(\n    modelPath: String,\n    prompt: String,\n    seed: Long,\n    steps: Int,\n    threadCount: Int,\n    progressListener: ((step: Int, steps: Int) -> Unit)? = null,\n  ): NativeImageGenerationResult {'''
+          new_sig = '''data class ImageGenerationStageProgress(\n  val stageText: String,\n  val timingText: String = "",\n  val step: Int = 0,\n  val totalSteps: Int = 0,\n)\n\nobject BonsaiImageGenerationClient {\n  private val tokenizerCache = ConcurrentHashMap<String, BonsaiQwenTokenizer>()\n\n  fun generateImage(\n    modelPath: String,\n    prompt: String,\n    seed: Long,\n    steps: Int,\n    threadCount: Int,\n    progressListener: ((ImageGenerationStageProgress) -> Unit)? = null,\n  ): NativeImageGenerationResult {'''
+          if old_sig not in text:
+              raise SystemExit('Bonsai signature not found')
+          text = text.replace(old_sig, new_sig, 1)
+          old_token = '''    val tokenizer =\n      vocabFile.inputStream().use { vocab ->\n        mergesFile.inputStream().use { merges -> BonsaiQwenTokenizer(vocab, merges) }\n      }\n    val pipeline = BonsaiPipeline(modelDir = modelDir, meta = meta)'''
+          new_token = '''    progressListener?.invoke(ImageGenerationStageProgress("读取 Bonsai 元数据与 tokenizer"))\n    val tokenizerKey =\n      "${modelDir.absolutePath}:${vocabFile.lastModified()}:${mergesFile.lastModified()}"\n    val tokenizer =\n      tokenizerCache[tokenizerKey] ?:\n        vocabFile.inputStream().use { vocab ->\n          mergesFile.inputStream().use { merges -> BonsaiQwenTokenizer(vocab, merges) }\n        }.also { tokenizerCache[tokenizerKey] = it }\n    val pipeline = BonsaiPipeline(modelDir = modelDir, meta = meta)'''
+          if old_token not in text:
+              raise SystemExit('Bonsai tokenizer block not found')
+          text = text.replace(old_token, new_token, 1)
+          text = text.replace('''        onSamplingProgress = { step, total -> progressListener?.invoke(step, total) },''',
+                              '''        onStageProgress = { update -> progressListener?.invoke(update) },''', 1)
+          text = text.replace('''    onSamplingProgress: (step: Int, steps: Int) -> Unit,\n  ): Result {\n    val encoded = tokenizer.encodePrompt(prompt)\n    val embeddings: FloatArray\n    Graph(modelFile(textEncoderFile), threads).use { textEncoder ->\n      embeddings =\n        textEncoder.run(''',
+                              '''    onStageProgress: (ImageGenerationStageProgress) -> Unit,\n  ): Result {\n    val totalStartedAt = System.currentTimeMillis()\n    onStageProgress(ImageGenerationStageProgress("正在编码提示词"))\n    val encoded = tokenizer.encodePrompt(prompt)\n    val embeddings: FloatArray\n    val textEncoderMs = measureTimeMillis {\n      Graph(modelFile(textEncoderFile), threads).use { textEncoder ->\n        embeddings =\n          textEncoder.run(''', 1)
+          text = text.replace('''          outputFloatCount = BonsaiMath.SEQ * 7680,\n        )\n    }\n    System.gc()''',
+                              '''            outputFloatCount = BonsaiMath.SEQ * 7680,\n          )\n      }\n    }\n    onStageProgress(\n      ImageGenerationStageProgress(\n        stageText = "文本编码完成，准备扩散模型",\n        timingText = "文本编码 ${textEncoderMs / 1000.0} 秒",\n      )\n    )\n    System.gc()''', 1)
+          text = text.replace('''    Graph(modelFile(ditFile), threads).use { dit ->\n      for (step in 0 until steps) {''',
+                              '''    val diffusionStartedAt = System.currentTimeMillis()\n    onStageProgress(ImageGenerationStageProgress("正在加载 Bonsai DiT 扩散模型", totalSteps = steps))\n    Graph(modelFile(ditFile), threads).use { dit ->\n      for (step in 0 until steps) {''', 1)
+          text = text.replace('''        onSamplingProgress(step + 1, steps)''',
+                              '''        val diffusionMs = System.currentTimeMillis() - diffusionStartedAt\n        onStageProgress(\n          ImageGenerationStageProgress(\n            stageText = "Bonsai 扩散采样：第 ${step + 1} / $steps 步",\n            timingText = "扩散阶段累计 ${diffusionMs / 1000.0} 秒",\n            step = step + 1,\n            totalSteps = steps,\n          )\n        )''', 1)
+          text = text.replace('''    val vaeLatents = BonsaiMath.unpatchify(latents, bnScale, bnShift)\n    val rgb = ByteArray(512 * 512 * 3)\n    Graph(modelFile(vaeFile), threads).use { vae ->''',
+                              '''    onStageProgress(\n      ImageGenerationStageProgress(\n        stageText = "扩散完成，正在加载 VAE 解码器",\n        timingText = "扩散总耗时 ${(System.currentTimeMillis() - diffusionStartedAt) / 1000.0} 秒",\n        step = steps,\n        totalSteps = steps,\n      )\n    )\n    val vaeLatents = BonsaiMath.unpatchify(latents, bnScale, bnShift)\n    val rgb = ByteArray(512 * 512 * 3)\n    val vaeStartedAt = System.currentTimeMillis()\n    Graph(modelFile(vaeFile), threads).use { vae ->''', 1)
+          text = text.replace('''    return Result(rgb = rgb)''',
+                              '''    onStageProgress(\n      ImageGenerationStageProgress(\n        stageText = "VAE 解码完成，正在整理图片",\n        timingText =\n          "VAE ${(System.currentTimeMillis() - vaeStartedAt) / 1000.0} 秒；总计 ${(System.currentTimeMillis() - totalStartedAt) / 1000.0} 秒",\n        step = steps,\n        totalSteps = steps,\n      )\n    )\n    return Result(rgb = rgb)''', 1)
+          Path(runtime).write_text(text)
+
+          print('MCP197 core patches applied successfully')
+          PY
+      - name: Verify patch markers
+        run: |
+          grep -R "LiteRT CPU / XNNPACK" Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation
+          grep -R "Skipping completed file" Android/src/app/src/main/java/com/google/ai/edge/gallery/worker/DownloadWorker.kt
+          grep -R "Cancellation is a pause" Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/modelmanager/ModelManagerViewModel.kt
+      - name: Commit core repairs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Android/src/app/src/main/java/com/google/ai/edge/gallery
+          git commit -m "MCP197: preserve download ranges and expose Bonsai runtime telemetry"
+          git push origin HEAD:mcp197-work
