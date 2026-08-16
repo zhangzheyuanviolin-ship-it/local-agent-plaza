@@ -116,6 +116,8 @@ fun imageGenerationBackendDisplayName(
       "LiteRT CPU / XNNPACK"
     isFluxKleinImageModel(modelName) || modelInfo?.backend == ImageGenerationBackend.FLUX_LITERT_GPU_COMPILED_MODEL ->
       "LiteRT GPU / CompiledModel FP32"
+    isZImageTurboModel(modelName) || modelInfo?.backend == ImageGenerationBackend.Z_IMAGE_LITERT_GPU_COMPILED_MODEL ->
+      "LiteRT GPU / CompiledModel FP32"
     modelInfo?.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN -> "Local Dream QNN / MNN"
     modelInfo?.backend == ImageGenerationBackend.STABLE_DIFFUSION_CPP -> "stable-diffusion.cpp"
     else -> "未知"
@@ -125,6 +127,7 @@ fun findVisualCreationImageModelInfo(modelId: String): ImageGenerationModelInfo?
   when {
     isBonsaiImageModel(modelId) -> BONSAI_IMAGE_MODEL_INFO
     isFluxKleinImageModel(modelId) -> FLUX_KLEIN_IMAGE_MODEL_INFO
+    isZImageTurboModel(modelId) -> Z_IMAGE_TURBO_MODEL_INFO
     else -> ImageGenerationModelRegistry.findModel(modelId)
   }
 

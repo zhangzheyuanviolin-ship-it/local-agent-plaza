@@ -38,11 +38,14 @@ import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NAR
 import com.google.ai.edge.gallery.customtasks.videoqa.TASK_ID_VIDEO_QUESTION_ANSWER
 import com.google.ai.edge.gallery.customtasks.visualcreation.BONSAI_IMAGE_MODEL_ID
 import com.google.ai.edge.gallery.customtasks.visualcreation.FLUX_KLEIN_IMAGE_MODEL_ID
+import com.google.ai.edge.gallery.customtasks.visualcreation.Z_IMAGE_TURBO_MODEL_ID
 import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_BONSAI_IMAGE
 import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_FLUX_KLEIN_IMAGE
+import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_Z_IMAGE_TURBO
 import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_LOCAL_VISUAL_CREATION
 import com.google.ai.edge.gallery.customtasks.visualcreation.createBonsaiImageModel
 import com.google.ai.edge.gallery.customtasks.visualcreation.createFluxKleinImageModel
+import com.google.ai.edge.gallery.customtasks.visualcreation.createZImageTurboModel
 import com.google.ai.edge.gallery.customtasks.visualcreation.createVisualCreationImageModels
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.BuiltInTaskId
@@ -309,7 +312,7 @@ constructor(
     var changed = false
     for (
       model in
-        listOf(createBonsaiImageModel(), createFluxKleinImageModel()) +
+        listOf(createBonsaiImageModel(), createFluxKleinImageModel(), createZImageTurboModel()) +
           createVisualCreationImageModels()
     ) {
       if (task.models.none { it.name == model.name }) {
@@ -355,10 +358,20 @@ constructor(
     )
   }
 
+  private fun restoreZImageTurboModel(tasks: Collection<Task>) {
+    restoreDedicatedSingleModelTask(
+      tasks = tasks,
+      taskId = TASK_ID_Z_IMAGE_TURBO,
+      modelId = Z_IMAGE_TURBO_MODEL_ID,
+      createModel = ::createZImageTurboModel,
+    )
+  }
+
   private fun restoreLocalImageGenerationModels(tasks: Collection<Task>) {
     restoreLocalVisualCreationModels(tasks)
     restoreBonsaiImageModel(tasks)
     restoreFluxKleinImageModel(tasks)
+    restoreZImageTurboModel(tasks)
   }
 
   private fun restoreAiKeyboardSettingsModel(tasks: Collection<Task>) {

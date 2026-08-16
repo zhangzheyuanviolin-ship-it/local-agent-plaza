@@ -37,6 +37,7 @@ import kotlinx.coroutines.CoroutineScope
 const val TASK_ID_LOCAL_VISUAL_CREATION = "llm_local_visual_creation"
 const val TASK_ID_BONSAI_IMAGE = "llm_bonsai_image"
 const val TASK_ID_FLUX_KLEIN_IMAGE = "llm_flux_klein_image"
+const val TASK_ID_Z_IMAGE_TURBO = "llm_z_image_turbo"
 
 class VisualCreationWorkbenchInstance
 
@@ -45,12 +46,15 @@ class VisualCreationWorkbenchInstance
  * them after bootstrap and allowlist refresh so dedicated tasks remain canonical and single-model.
  */
 private fun visualCreationModels(): MutableList<Model> =
-  (listOf(createBonsaiImageModel(), createFluxKleinImageModel()) + createVisualCreationImageModels())
+  (listOf(createBonsaiImageModel(), createFluxKleinImageModel(), createZImageTurboModel()) +
+      createVisualCreationImageModels())
     .toMutableList()
 
 private fun bonsaiOnlyModels(): MutableList<Model> = mutableListOf(createBonsaiImageModel())
 
 private fun fluxOnlyModels(): MutableList<Model> = mutableListOf(createFluxKleinImageModel())
+
+private fun zImageOnlyModels(): MutableList<Model> = mutableListOf(createZImageTurboModel())
 
 class VisualCreationTask @Inject constructor() : CustomTask {
   override val task: Task =
@@ -60,7 +64,7 @@ class VisualCreationTask @Inject constructor() : CustomTask {
       category = Category.LLM,
       icon = Icons.Outlined.Image,
       models = visualCreationModels(),
-      description = "在设备本地生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。包含 Bonsai Image 4B 与 FLUX.2 Klein 4B LiteRT。",
+      description = "在设备本地生成图片，并把生成结果继续交给本地视觉语言模型进行描述、评审、分析和文本创作。包含 Bonsai Image 4B、FLUX.2 Klein 4B 与 Z-Image Turbo 6B LiteRT。",
       shortDescription = "生成图片、理解图片，并基于图片继续创作",
       docUrl = "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza",
       sourceCodeUrl = "",
@@ -201,6 +205,56 @@ class FluxKleinImageTask @Inject constructor() : CustomTask {
   }
 }
 
+/** Dedicated Alibaba Z-Image Turbo entry with one directly downloadable model. */
+class ZImageTurboTask @Inject constructor() : CustomTask {
+  override val task: Task =
+    Task(
+      id = TASK_ID_Z_IMAGE_TURBO,
+      label = "Z-Image Turbo 图像生成",
+      category = Category.LLM,
+      icon = Icons.Outlined.Image,
+      models = zImageOnlyModels(),
+      description = "Alibaba Tongyi-MAI Z-Image-Turbo 6B LiteRT 本地图像生成。模型约 10.6 GB，固定 256 × 256、9 步，优先使用 LiteRT GPU CompiledModel FP32。",
+      shortDescription = "下载 Z-Image Turbo 6B，在手机 GPU 本地生成图片",
+      docUrl = "https://huggingface.co/litert-community/Z-Image-Turbo-LiteRT",
+      sourceCodeUrl = "",
+      handleModelConfigChangesInTask = true,
+      newFeature = true,
+      useThemeColor = true,
+    )
+
+  override fun initializeModelFn(
+    context: Context,
+    coroutineScope: CoroutineScope,
+    model: Model,
+    systemInstruction: Contents?,
+    onDone: (String) -> Unit,
+  ) {
+    model.instance = VisualCreationWorkbenchInstance()
+    onDone("")
+  }
+
+  override fun cleanUpModelFn(
+    context: Context,
+    coroutineScope: CoroutineScope,
+    model: Model,
+    onDone: () -> Unit,
+  ) {
+    model.instance = null
+    onDone()
+  }
+
+  @Composable
+  override fun MainScreen(data: Any) {
+    val customTaskData = data as CustomTaskData
+    VisualCreationScreen(
+      modelManagerViewModel = customTaskData.modelManagerViewModel,
+      bottomPadding = customTaskData.bottomPadding,
+      setAppBarControlsDisabled = customTaskData.setAppBarControlsDisabled,
+    )
+  }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 internal object VisualCreationTaskModule {
@@ -215,4 +269,8 @@ internal object VisualCreationTaskModule {
   @Provides
   @IntoSet
   fun provideFluxKleinImageTask(): CustomTask = FluxKleinImageTask()
+
+  @Provides
+  @IntoSet
+  fun provideZImageTurboTask(): CustomTask = ZImageTurboTask()
 }
