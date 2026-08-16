@@ -50,8 +50,7 @@ data class VisualCreationUiState(
   val prompt: String = "",
   val negativePrompt: String = "",
   val settings: ImageGenerationSettings = ImageGenerationSettings.default(),
-  val selectedImageGenerationModelId: String? =
-    ImageGenerationModelRegistry.recommendedModels.firstOrNull()?.modelId,
+  val selectedImageGenerationModelId: String? = BONSAI_IMAGE_MODEL_ID,
   val status: VisualCreationStatus = VisualCreationStatus.IMAGE_MODEL_MISSING,
   val statusText: String = "请选择或导入图像生成模型",
   val submittedPrompt: String = "",
@@ -91,7 +90,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
   }
 
   fun syncSelectedImageGenerationModel(model: Model) {
-    val modelInfo = ImageGenerationModelRegistry.findModel(model.name)
+    val modelInfo = findVisualCreationImageModelInfo(model.name)
     val nextSettings = defaultSettingsForModel(modelInfo, _uiState.value.settings)
     _uiState.update {
       it.copy(
@@ -104,7 +103,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
   }
 
   fun selectImageGenerationModel(modelId: String) {
-    val model = ImageGenerationModelRegistry.findModel(modelId) ?: return
+    val model = findVisualCreationImageModelInfo(modelId) ?: return
     _uiState.update {
       it.copy(
         selectedImageGenerationModelId = model.modelId,
@@ -297,7 +296,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
       return
     }
 
-    val modelInfo = ImageGenerationModelRegistry.findModel(model.name)
+    val modelInfo = findVisualCreationImageModelInfo(model.name)
     if (modelInfo == null || !modelInfo.supportsTextToImage) {
       _uiState.update {
         it.copy(
@@ -308,8 +307,9 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
       return
     }
 
+    val bonsaiModel = isBonsaiImageModel(model.name)
     val nativeFiles =
-      if (modelInfo.backend == ImageGenerationBackend.STABLE_DIFFUSION_CPP) {
+      if (modelInfo.backend == ImageGenerationBackend.STABLE_DIFFUSION_CPP && !bonsaiModel) {
         resolveNativeImageGenerationFiles(context = context, model = model, modelInfo = modelInfo)
       } else {
         NativeImageGenerationFiles(modelPath = model.getPath(context), diffusionModelPath = "", vaePath = "", llmPath = "")
@@ -405,7 +405,41 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
           settleDelayMs = 350L,
         )
         val nativeResult =
-          if (modelInfo.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN) {
+          if (bonsaiModel) {
+            BonsaiImageGenerationClient.generateImage(
+              modelPath = nativeFiles.modelPath,
+              prompt = prompt,
+              seed = seed,
+              steps = settings.steps,
+              threadCount = settings.threadCount,
+              progressListener = { step, steps ->
+                _uiState.update { current ->
+                  if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
+                    current.copy(
+                      generationProgressStep = step,
+                      generationProgressSteps = steps,
+                      statusText =
+                        if (step >= steps) {
+                          buildDecodingStatusText(
+                            modelName = model.displayName.ifBlank { model.name },
+                            prompt = current.submittedPrompt,
+                          )
+                        } else {
+                          buildSamplingStatusText(
+                            modelName = model.displayName.ifBlank { model.name },
+                            step = step,
+                            steps = steps,
+                            prompt = current.submittedPrompt,
+                          )
+                        },
+                    )
+                  } else {
+                    current
+                  }
+                }
+              },
+            )
+          } else if (modelInfo.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN) {
             LocalDreamImageGenerationClient(context)
               .generateImage(
                 modelPath = nativeFiles.modelPath,
@@ -943,6 +977,7 @@ private fun defaultSettingsForModel(
       vaeTiling = false,
     )
   return when (modelInfo.family) {
+    "Bonsai Image 4B" -> base.copy(width = 512, height = 512, steps = 4, cfgScale = 1.0f)
     "Z-Image" -> base.copy(steps = 8, cfgScale = 1.0f)
     "Stable Diffusion 1.5" -> base.copy(steps = 28, cfgScale = 7.0f)
     "Absolute Reality SD1.5" -> base.copy(steps = 28, cfgScale = 7.0f)
