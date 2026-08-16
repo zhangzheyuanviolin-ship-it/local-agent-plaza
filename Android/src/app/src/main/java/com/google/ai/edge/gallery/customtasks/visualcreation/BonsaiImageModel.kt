@@ -109,6 +109,17 @@ val BONSAI_IMAGE_MODEL_INFO: ImageGenerationModelInfo =
 
 fun isBonsaiImageModel(modelId: String): Boolean = modelId == BONSAI_IMAGE_MODEL_ID
 
+fun imageGenerationBackendDisplayName(
+  modelName: String,
+  modelInfo: ImageGenerationModelInfo?,
+): String =
+  when {
+    isBonsaiImageModel(modelName) -> "LiteRT CPU / XNNPACK"
+    modelInfo?.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN -> "Local Dream QNN / MNN"
+    modelInfo?.backend == ImageGenerationBackend.STABLE_DIFFUSION_CPP -> "stable-diffusion.cpp"
+    else -> "未知"
+  }
+
 fun findVisualCreationImageModelInfo(modelId: String): ImageGenerationModelInfo? =
   if (isBonsaiImageModel(modelId)) {
     BONSAI_IMAGE_MODEL_INFO

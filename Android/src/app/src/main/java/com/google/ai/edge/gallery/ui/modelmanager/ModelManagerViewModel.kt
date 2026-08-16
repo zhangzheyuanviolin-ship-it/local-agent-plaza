@@ -419,10 +419,8 @@ constructor(
       return
     }
 
-    // Delete the model files first.
-    deleteModel(model = model)
-
-    // Start to send download request.
+    // Keep completed files and .tmp ranges. The worker resumes from persisted bytes.
+    // Only the explicit delete action clears model data.
     downloadRepository.downloadModel(
       task = task,
       model = model,
@@ -437,8 +435,8 @@ constructor(
     if (model.runtimeType == RuntimeType.AICORE) {
       return
     }
+    // Treat cancellation as pause. Preserve final component files and .tmp ranges.
     downloadRepository.cancelDownloadModel(model)
-    deleteModel(model = model)
   }
 
   fun deleteModel(model: Model) {
@@ -1323,21 +1321,37 @@ constructor(
     }
   }
 
-  private fun isModelPartiallyDownloaded(model: Model): Boolean {
-    if (model.localModelFilePathOverride.isNotEmpty()) {
-      return false
-    }
+  private fun modelDownloadFileNames(model: Model): List<String> =
+    listOf(model.downloadFileName) + model.extraDataFiles.map { it.downloadFileName }
 
-    // A model is partially downloaded when the tmp file exists.
-    return getModelDownloadTempFile(model).exists()
+  private fun modelDownloadDirectory(model: Model): File =
+    File(
+      externalFilesDir,
+      listOf(model.normalizedName, model.version).joinToString(File.separator),
+    )
+
+  private fun isModelPartiallyDownloaded(model: Model): Boolean {
+    if (model.localModelFilePathOverride.isNotEmpty()) return false
+    val dir = modelDownloadDirectory(model)
+    val names = modelDownloadFileNames(model)
+    val hasAnyBytes = names.any { name ->
+      File(dir, name).length() > 0L || File(dir, "$name.$TMP_FILE_EXT").length() > 0L
+    }
+    val allCompleted = names.all { name -> File(dir, name).length() > 0L }
+    return hasAnyBytes && !allCompleted
   }
 
-  private fun getModelDownloadTempFile(model: Model): File {
-    return File(
-      externalFilesDir,
-      listOf(model.normalizedName, model.version, "${model.downloadFileName}.$TMP_FILE_EXT")
-        .joinToString(File.separator),
-    )
+  private fun getModelDownloadedBytes(model: Model): Long {
+    val dir = modelDownloadDirectory(model)
+    return modelDownloadFileNames(model).sumOf { name ->
+      val partial = File(dir, "$name.$TMP_FILE_EXT")
+      val completed = File(dir, name)
+      when {
+        partial.length() > 0L -> partial.length()
+        completed.length() > 0L -> completed.length()
+        else -> 0L
+      }
+    }
   }
 
   private fun createEmptyUiState(): ModelManagerUiState {
@@ -1723,8 +1737,7 @@ constructor(
     // Partially downloaded.
     else if (isModelPartiallyDownloaded(model = model)) {
       status = ModelDownloadStatusType.PARTIALLY_DOWNLOADED
-      val tmpFile = getModelDownloadTempFile(model)
-      receivedBytes = tmpFile.length()
+      receivedBytes = getModelDownloadedBytes(model)
       totalBytes = model.totalBytes
       Log.d(TAG, "${model.name} is partially downloaded. $receivedBytes/$totalBytes")
     }

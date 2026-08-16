@@ -71,7 +71,7 @@ fun VisualCreationScreen(
   val uiState by viewModel.uiState.collectAsState()
   val modelManagerUiState by modelManagerViewModel.uiState.collectAsState()
   val selectedAppModel = modelManagerUiState.selectedModel
-  val selectedModelInfo = ImageGenerationModelRegistry.findModel(selectedAppModel.name)
+  val selectedModelInfo = findVisualCreationImageModelInfo(selectedAppModel.name)
   val promptOptimizerTaskIds =
     listOf(BuiltInTaskId.LLM_CHAT, BuiltInTaskId.LLM_PROMPT_LAB, BuiltInTaskId.LLM_AGENT_CHAT)
   val promptOptimizerModels =
@@ -150,7 +150,7 @@ fun VisualCreationScreen(
           style = MaterialTheme.typography.bodyMedium,
         )
         Text(
-          text = "推理后端：${selectedModelInfo?.backend ?: ImageGenerationBackend.STABLE_DIFFUSION_CPP}",
+          text = "推理后端：${imageGenerationBackendDisplayName(selectedAppModel.name, selectedModelInfo)}",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -139,6 +139,28 @@ class DownloadWorker(context: Context, params: WorkerParameters) :
           val bytesReadSizeBuffer: MutableList<Long> = mutableListOf()
           val bytesReadLatencyBuffer: MutableList<Long> = mutableListOf()
           for (file in allFiles) {
+            val persistedDir =
+              File(
+                applicationContext.getExternalFilesDir(null),
+                listOf(modelDir, version).joinToString(separator = File.separator),
+              )
+            if (!persistedDir.exists()) persistedDir.mkdirs()
+            val completedFile = File(persistedDir, file.fileName)
+            val partialFile = File(persistedDir, "${file.fileName}.$TMP_FILE_EXT")
+            if (completedFile.length() > 0L && !partialFile.exists()) {
+              downloadedBytes += completedFile.length()
+              setProgress(
+                Data.Builder().putLong(KEY_MODEL_DOWNLOAD_RECEIVED_BYTES, downloadedBytes).build()
+              )
+              setForeground(
+                createForegroundInfo(
+                  progress = if (totalBytes > 0L) (downloadedBytes * 100 / totalBytes).toInt() else 0,
+                  modelName = modelName,
+                )
+              )
+              Log.d(TAG, "Resume: keeping completed component ${completedFile.name}")
+              continue
+            }
             val candidateUrls =
               file.url.split("\n").map { it.trim() }.filter { it.isNotEmpty() }.distinct()
             var downloadedCurrentFile = false
