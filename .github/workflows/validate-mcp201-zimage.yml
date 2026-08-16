@@ -27,9 +27,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Verify Z-Image assets and compile Android debug APK
+      - name: Verify corrected Z-Image runtime and compile Android debug APK
         working-directory: Android/src
         run: |
           test "$(stat -c%s app/src/main/assets/zimage/zimage_cap_pad_token.bin)" = "15360"
           test "$(stat -c%s app/src/main/assets/zimage/zimage_temb_mlp.bin)" = "2102272"
+          grep -F 'intArrayOf(32, 48, 48)' app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation/ZImageTurboRuntime.kt
           ./gradlew assembleDebug
