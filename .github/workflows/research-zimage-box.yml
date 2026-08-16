@@ -7,32 +7,30 @@ on:
       - '.github/workflows/research-zimage-box.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  extract:
+  rope:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: mcp201-zimage-work
-      - name: Extract verified Z-Image host constants from Box 3.3.3
+      - name: Download and decompile Box 3.3.3
         run: |
           curl -L --fail --retry 3 -o "$RUNNER_TEMP/Box.apk" \
             https://github.com/jegly/Box/releases/download/v3.3.3/Box_v3.3.3_Main_Signed_Release.apk
-          mkdir -p Android/src/app/src/main/assets/zimage
-          unzip -p "$RUNNER_TEMP/Box.apk" assets/zimage/zimage_cap_pad_token.bin \
-            > Android/src/app/src/main/assets/zimage/zimage_cap_pad_token.bin
-          unzip -p "$RUNNER_TEMP/Box.apk" assets/zimage/zimage_temb_mlp.bin \
-            > Android/src/app/src/main/assets/zimage/zimage_temb_mlp.bin
-          test "$(stat -c%s Android/src/app/src/main/assets/zimage/zimage_cap_pad_token.bin)" = "15360"
-          test "$(stat -c%s Android/src/app/src/main/assets/zimage/zimage_temb_mlp.bin)" = "2102272"
-          sha256sum Android/src/app/src/main/assets/zimage/*.bin
-      - name: Commit constants
+          curl -L --fail --retry 3 -o "$RUNNER_TEMP/jadx.zip" \
+            https://github.com/skylot/jadx/releases/download/v1.5.3/jadx-1.5.3.zip
+          unzip -q "$RUNNER_TEMP/jadx.zip" -d "$RUNNER_TEMP/jadx"
+          "$RUNNER_TEMP/jadx/bin/jadx" -j 4 --no-res -d "$RUNNER_TEMP/box-src" "$RUNNER_TEMP/Box.apk" || true
+      - name: Print exact RoPE implementation and call sites
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Android/src/app/src/main/assets/zimage/zimage_cap_pad_token.bin
-          git add Android/src/app/src/main/assets/zimage/zimage_temb_mlp.bin
-          git commit -m "MCP201: add Box-verified Z-Image host constants"
-          git push origin HEAD:mcp201-zimage-work
+          SRC="$RUNNER_TEMP/box-src/sources"
+          echo '===== Z ENGINE ROPE CALLS ====='
+          grep -nE 'I00000oIO|rope|RoPE|256\.0|32, 32, 64|33,' "$SRC/defpackage/i0I00l.java" || true
+          echo '===== I00000oIO DEFINITIONS / REFERENCES ====='
+          grep -RIn 'I00000oIO' "$SRC" | head -n 100 || true
+          echo '===== CANDIDATE HELPER FILES ====='
+          for f in $(grep -RIlE 'I00000oIO|Math\.pow\(256|pow\(256|cos\(|sin\(' "$SRC/defpackage" | head -n 20); do
+            echo "----- $f -----"
+            sed -n '1,900p' "$f"
+          done
