@@ -135,12 +135,12 @@ private data class CompatRuntimeState(
 )
 
 /**
- * MCP205 process-local runtime state for COMPAT Agent requests.
+ * MCP206 process-local runtime state for COMPAT Agent requests.
  *
  * LiteRT-LM Conversation objects are intentionally short-lived. Every top-level user request and
  * every tool continuation is executed in a fresh Conversation while the Engine remains loaded.
- * Cross-user-turn memory and current-task tool history are explicitly rehydrated under bounded
- * character budgets, avoiding hidden growth of LiteRT-LM Conversation history.
+ * Cross-user-turn memory is injected only for the top-level user pass. Tool continuations rehydrate
+ * only the current task and bounded TOOL_HISTORY, keeping the post-tool prefill path compact.
  */
 object AgentCompatRuntimeCoordinator {
   private val states = ConcurrentHashMap<String, CompatRuntimeState>()
@@ -210,8 +210,6 @@ object AgentCompatRuntimeCoordinator {
         )
       states[modelName] = state
 
-      // MCP205 deliberately resets for every top-level COMPAT request, including turn 1.
-      // The Engine remains loaded; only the lightweight Conversation object is replaced.
       return CompatPreparedInput(
         input = effectiveInput,
         requiresFreshConversation = true,
@@ -255,23 +253,19 @@ object AgentCompatRuntimeCoordinator {
     val parsed = parseToolResult(rawInput)
     state.history += parsed
 
-    val remainingToolBudget =
-      (historyBudgetChars - state.sessionHistoryChars).coerceAtLeast(MIN_HISTORY_BUDGET_CHARS)
+    // MCP206: the cross-turn SESSION_HISTORY already did its job in the top-level pass.
+    // Continuations get the full current-task history budget and do not prefill session context again.
     val historySection =
       buildHistorySection(
         originalUserRequest = state.originalUserRequest,
         entries = state.history,
-        historyBudgetChars = remainingToolBudget,
+        historyBudgetChars = historyBudgetChars,
       )
     state.historyChars = historySection.length
 
     val effectiveInput =
       buildString {
         append(state.instructionPrefix)
-        if (state.sessionContextSection.isNotBlank()) {
-          append("\n\n")
-          append(state.sessionContextSection)
-        }
         append("\n\n")
         append(historySection)
         append("\n\nNEXT_ACTION\n")
@@ -565,7 +559,7 @@ object AgentCompatRuntimeCoordinator {
         )
       }
     if (header.length >= sessionBudgetChars) {
-      return truncateWithMarker(header, sessionBudgetChars, "MCP205 session history budget")
+      return truncateWithMarker(header, sessionBudgetChars, "MCP206 session history budget")
     }
 
     val available = (sessionBudgetChars - header.length).coerceAtLeast(MIN_SESSION_ENTRY_CHARS)
@@ -584,23 +578,23 @@ object AgentCompatRuntimeCoordinator {
       if (body.isNotEmpty()) body.append("\n\n")
       body.append(entryHeader)
       body.append(
-        truncateWithMarker(entry.userRequest, userBudget, "MCP205 session user budget")
+        truncateWithMarker(entry.userRequest, userBudget, "MCP206 session user budget")
       )
       body.append(assistantHeader)
       body.append(
-        truncateWithMarker(entry.assistantResult, assistantBudget, "MCP205 session assistant budget")
+        truncateWithMarker(entry.assistantResult, assistantBudget, "MCP206 session assistant budget")
       )
       if (entry.toolContext.isNotBlank() && toolBudget > 0) {
         body.append(toolHeader)
         body.append(
-          truncateWithMarker(entry.toolContext, toolBudget, "MCP205 session tool budget")
+          truncateWithMarker(entry.toolContext, toolBudget, "MCP206 session tool budget")
         )
       }
     }
     return truncateWithMarker(
       header + body.toString(),
       sessionBudgetChars,
-      "MCP205 session history budget",
+      "MCP206 session history budget",
     )
   }
 
@@ -708,13 +702,13 @@ object AgentCompatRuntimeCoordinator {
         "STEP ${index + 1}\ntool: ${entry.toolName}\nstatus: ${entry.status}\npayload:\n"
       val payloadBudget = (allocations[index] - entryHeader.length).coerceAtLeast(80)
       val compactPayload =
-        truncateWithMarker(entry.payload, payloadBudget, "MCP205 COMPAT tool history budget")
+        truncateWithMarker(entry.payload, payloadBudget, "MCP206 COMPAT tool history budget")
       if (body.isNotEmpty()) body.append("\n\n")
       body.append(entryHeader)
       body.append(compactPayload)
     }
     val combined = header + body.toString()
-    return truncateWithMarker(combined, safeBudget, "MCP205 COMPAT tool history budget")
+    return truncateWithMarker(combined, safeBudget, "MCP206 COMPAT tool history budget")
   }
 
   private fun allocateHistoryChars(entryCount: Int, available: Int): IntArray {
