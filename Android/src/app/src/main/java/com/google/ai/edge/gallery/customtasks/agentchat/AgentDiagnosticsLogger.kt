@@ -41,6 +41,19 @@ object AgentDiagnosticsLogger {
     message: String,
     detail: String = "",
   ) {
+    // MCP202 only forwards the category plus raw detail length. The performance trace never receives
+    // prompt/tool-result contents, paths, credentials, or other log payload text.
+    val performanceCategory =
+      if (category == "tool.run_configured_intent.flattened") {
+        "tool.run_configured_intent.done"
+      } else {
+        category
+      }
+    AgentPerformanceCoordinator.observeDiagnosticEvent(
+      category = performanceCategory,
+      detailChars = detail.length,
+    )
+
     val line =
       buildString {
         append(timestampFormatter.format(Date()))

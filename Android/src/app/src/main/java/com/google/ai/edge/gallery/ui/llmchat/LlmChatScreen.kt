@@ -38,6 +38,10 @@ import androidx.compose.ui.unit.dp
 import com.google.ai.edge.gallery.GalleryEvent
 import com.google.ai.edge.gallery.R
 import com.google.ai.edge.gallery.customtasks.agentchat.AgentDiagnosticsLogger
+import com.google.ai.edge.gallery.customtasks.agentchat.AgentPerformanceCoordinator
+import com.google.ai.edge.gallery.customtasks.agentchat.AgentPerformanceDiagnosticsPanel
+import com.google.ai.edge.gallery.customtasks.agentchat.ResolvedAgentToolMode
+import com.google.ai.edge.gallery.customtasks.agentchat.resolveAgentToolMode
 import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.ModelCapability
@@ -266,12 +270,31 @@ fun ChatViewWrapper(
       }
       if ((text.isNotEmpty() && chatMessageText != null) || audioMessages.isNotEmpty()) {
         val runtimeText = if (text.isNotEmpty()) transformOutgoingText(model, text) else text
+        val activeSkills = getActiveSkills()
+        if (taskId == BuiltInTaskId.LLM_AGENT_CHAT) {
+          val resolvedMode = resolveAgentToolMode(model)
+          AgentPerformanceCoordinator.startRequest(
+            context = context,
+            model = model,
+            toolMode = resolvedMode.name,
+            originalInputChars = text.length,
+            runtimeInputChars = runtimeText.length,
+            compatAddedInputChars =
+              if (resolvedMode == ResolvedAgentToolMode.COMPAT) {
+                (runtimeText.length - text.length).coerceAtLeast(0)
+              } else {
+                null
+              },
+            activeSkillCount = activeSkills.size,
+            enabledMcpCount = mcpCount,
+          )
+        }
         AgentDiagnosticsLogger.log(
           context = context,
           category = "chat.send_message",
           message = "Submitting message to model ${model.name}",
           detail =
-            "text=${text.take(1000)} | runtime_text=${runtimeText.take(1000)} | images=${images.size} | audio=${audioMessages.size} | skills=${getActiveSkills().joinToString(",")}",
+            "text_chars=${text.length} | runtime_text_chars=${runtimeText.length} | images=${images.size} | audio=${audioMessages.size} | active_skill_count=${activeSkills.size}",
         )
         if (text.isNotEmpty()) {
           modelManagerViewModel.addTextInputHistory(text)
@@ -284,11 +307,14 @@ fun ChatViewWrapper(
           onFirstToken = onFirstToken,
           onDone = { onGenerateResponseDone(model) },
           onError = { errorMessage ->
+            if (taskId == BuiltInTaskId.LLM_AGENT_CHAT) {
+              AgentPerformanceCoordinator.finishWithError(model.name, errorMessage.length)
+            }
             AgentDiagnosticsLogger.log(
               context = context,
               category = "chat.error",
               message = "Inference error for model ${model.name}",
-              detail = errorMessage,
+              detail = "error_chars=${errorMessage.length}",
             )
             viewModel.handleError(
               context = context,
@@ -303,7 +329,6 @@ fun ChatViewWrapper(
           onInterceptPartialResult = onInterceptPartialResult,
         )
 
-        val activeSkills = getActiveSkills()
         Log.d(
           TAG,
           "Analytics: generate_action, capability_name=${task.id}, active_skills=${activeSkills.joinToString(",")}",
@@ -325,21 +350,43 @@ fun ChatViewWrapper(
     },
     onRunAgainClicked = { model, message ->
       if (message is ChatMessageText) {
+        val runtimeMessage =
+          if (message.side == ChatSide.USER) {
+            ChatMessageText(
+              content = transformOutgoingText(model, message.content),
+              side = message.side,
+              latencyMs = message.latencyMs,
+              accelerator = message.accelerator,
+              hideSenderLabel = message.hideSenderLabel,
+            )
+          } else {
+            message
+          }
+        if (taskId == BuiltInTaskId.LLM_AGENT_CHAT && message.side == ChatSide.USER) {
+          val resolvedMode = resolveAgentToolMode(model)
+          AgentPerformanceCoordinator.startRequest(
+            context = context,
+            model = model,
+            toolMode = resolvedMode.name,
+            originalInputChars = message.content.length,
+            runtimeInputChars = runtimeMessage.content.length,
+            compatAddedInputChars =
+              if (resolvedMode == ResolvedAgentToolMode.COMPAT) {
+                (runtimeMessage.content.length - message.content.length).coerceAtLeast(0)
+              } else {
+                null
+              },
+            activeSkillCount = getActiveSkills().size,
+            enabledMcpCount = mcpCount,
+          )
+        }
         viewModel.runAgain(
           model = model,
-          message =
-            if (message.side == ChatSide.USER) {
-              ChatMessageText(
-                content = transformOutgoingText(model, message.content),
-                side = message.side,
-                latencyMs = message.latencyMs,
-                accelerator = message.accelerator,
-                hideSenderLabel = message.hideSenderLabel,
-              )
-            } else {
-              message
-            },
+          message = runtimeMessage,
           onError = { errorMessage ->
+            if (taskId == BuiltInTaskId.LLM_AGENT_CHAT) {
+              AgentPerformanceCoordinator.finishWithError(model.name, errorMessage.length)
+            }
             viewModel.handleError(
               context = context,
               task = task,
@@ -355,6 +402,9 @@ fun ChatViewWrapper(
     },
     onBenchmarkClicked = { _, _, _, _ -> },
     onResetSessionClicked = { model, chatMessages, onDone ->
+      if (taskId == BuiltInTaskId.LLM_AGENT_CHAT) {
+        AgentPerformanceCoordinator.finishReset(model.name)
+      }
       AgentDiagnosticsLogger.log(
         context = context,
         category = "chat.reset_session",
@@ -384,6 +434,9 @@ fun ChatViewWrapper(
       } else {
         viewModel.stopResponse(model = model)
       }
+      if (taskId == BuiltInTaskId.LLM_AGENT_CHAT) {
+        AgentPerformanceCoordinator.finishStopped(model.name)
+      }
     },
     onSkillClicked = onSkillClicked,
     onMcpClicked = onMcpClicked,
@@ -391,7 +444,14 @@ fun ChatViewWrapper(
     mcpCount = mcpCount,
     navigateUp = navigateUp,
     modifier = modifier,
-    composableBelowMessageList = composableBelowMessageList,
+    composableBelowMessageList = { model ->
+      if (taskId == BuiltInTaskId.LLM_AGENT_CHAT) {
+        AgentPerformanceCoordinator.reports[model.name]?.let { report ->
+          AgentPerformanceDiagnosticsPanel(reportText = report)
+        }
+      }
+      composableBelowMessageList(model)
+    },
     showImagePicker = showImagePicker,
     emptyStateComposable = emptyStateComposable,
     allowEditingSystemPrompt = allowEditingSystemPrompt,
