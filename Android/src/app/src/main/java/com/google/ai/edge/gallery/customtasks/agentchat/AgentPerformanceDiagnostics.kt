@@ -43,6 +43,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,7 +68,7 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
 
-private const val DIAGNOSTICS_SCHEMA = "mcp204.agent_perf.v2"
+private const val DIAGNOSTICS_SCHEMA = "mcp205.agent_perf.v3"
 private const val LITERT_LM_VERSION = "0.15.0"
 private const val LITERT_VERSION = "2.1.6"
 private const val FINALIZATION_DELAY_MS = 1200L
@@ -98,7 +103,7 @@ private data class MemorySnapshot(
 )
 
 /**
- * Per-request MCP204 Agent performance trace.
+ * Per-request MCP205 Agent performance trace.
  *
  * Privacy rule: this class stores lengths and timings only. It never stores user prompts, tool
  * arguments, tool results, workspace file contents, paths, secrets, API keys, or access tokens.
@@ -227,7 +232,10 @@ class AgentPerformanceTrace(
     captureMemoryAsync("after_tool_${tools.size}")
   }
 
-  @Synchronized fun recordRetry() { retryCount += 1 }
+  @Synchronized
+  fun recordRetry() {
+    retryCount += 1
+  }
 
   @Synchronized
   fun reopen() {
@@ -243,7 +251,8 @@ class AgentPerformanceTrace(
     atNanos: Long? = null,
     captureFinalMemory: Boolean = true,
   ) {
-    finishedAtNanos = atNanos ?: passes.lastOrNull()?.doneNanos ?: SystemClock.elapsedRealtimeNanos()
+    finishedAtNanos =
+      atNanos ?: passes.lastOrNull()?.doneNanos ?: SystemClock.elapsedRealtimeNanos()
     finalStatus = status
     errorChars = errorLength.coerceAtLeast(0)
     finalRuntimeSnapshot = LlmChatPerformanceRegistry.snapshot(model.name)
@@ -271,7 +280,7 @@ class AgentPerformanceTrace(
       }
 
     return buildString {
-      appendLine("=== MCP204 Agent 性能诊断 ===")
+      appendLine("=== MCP205 Agent 性能诊断 ===")
       appendLine("schema=$DIAGNOSTICS_SCHEMA")
       appendLine("request_id=$requestId")
       appendLine("status=$finalStatus")
@@ -315,7 +324,36 @@ class AgentPerformanceTrace(
       )
       appendLine()
 
-      appendLine("[mcp204_runtime]")
+      appendLine("[mcp205_runtime]")
+      appendLine("session_id=${compatRuntime?.sessionId ?: "unavailable"}")
+      appendLine("user_turn_index=${valueOrUnavailable(compatRuntime?.userTurnIndex)}")
+      appendLine(
+        "session_history_turn_count=${valueOrUnavailable(compatRuntime?.sessionHistoryTurnCount)}"
+      )
+      appendLine("session_history_chars=${valueOrUnavailable(compatRuntime?.sessionHistoryChars)}")
+      appendLine(
+        "session_completed_turn_count=${valueOrUnavailable(compatRuntime?.sessionCompletedTurnCount)}"
+      )
+      appendLine(
+        "conversation_generation_id=${valueOrUnavailable(compatRuntime?.conversationGenerationId)}"
+      )
+      appendLine(
+        "last_fresh_conversation_reason=${compatRuntime?.lastFreshConversationReason ?: "unavailable"}"
+      )
+      appendLine("top_level_reset_count=${valueOrUnavailable(compatRuntime?.topLevelResetCount)}")
+      appendLine(
+        "top_level_prepare_ms_total=${msOrUnavailable(compatRuntime?.topLevelPrepareMsTotal)}"
+      )
+      appendLine(
+        "last_top_level_prepare_ms=${msOrUnavailable(compatRuntime?.lastTopLevelPrepareMs)}"
+      )
+      appendLine("last_top_level_reset_ms=${msOrUnavailable(compatRuntime?.lastTopLevelResetMs)}")
+      appendLine(
+        "top_level_raw_input_chars=${valueOrUnavailable(compatRuntime?.topLevelRawInputChars)}"
+      )
+      appendLine(
+        "top_level_effective_input_chars=${valueOrUnavailable(compatRuntime?.topLevelEffectiveInputChars)}"
+      )
       appendLine("pre_submit_wait_ms_total=${msOrUnavailable(compatRuntime?.preSubmitWaitMsTotal)}")
       appendLine(
         "continuation_prepare_ms_total=${msOrUnavailable(compatRuntime?.continuationPrepareMsTotal)}"
@@ -371,7 +409,9 @@ class AgentPerformanceTrace(
 
       appendLine("[tool_timing]")
       appendLine("compat_parser_exact_ms=unavailable")
-      appendLine("compat_parser_note=post_generation_to_tool_start_ms includes parser and orchestration overhead")
+      appendLine(
+        "compat_parser_note=post_generation_to_tool_start_ms includes parser and orchestration overhead"
+      )
       appendLine("observed_tool_event_count=${tools.size}")
       appendLine("observed_tool_exec_total_ms=${formatMs(totalToolExecMs)}")
       appendLine("observed_tool_logged_detail_chars_total=$totalLoggedDetailChars")
@@ -409,7 +449,7 @@ class AgentPerformanceTrace(
       appendLine(
         "privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged"
       )
-      append("=== MCP204 Agent 性能诊断结束 ===")
+      append("=== MCP205 Agent 性能诊断结束 ===")
     }
   }
 
@@ -431,7 +471,8 @@ class AgentPerformanceTrace(
       val pssKb = Debug.getPss().toLong()
       val javaHeapUsed = runtime.totalMemory() - runtime.freeMemory()
       val nativeHeapAllocated = Debug.getNativeHeapAllocatedSize()
-      val sampleDelayMs = nanosToMs((SystemClock.elapsedRealtimeNanos() - eventNanos).coerceAtLeast(0L))
+      val sampleDelayMs =
+        nanosToMs((SystemClock.elapsedRealtimeNanos() - eventNanos).coerceAtLeast(0L))
       synchronized(this) {
         if (memory.none { it.stage == stage }) {
           memory +=
@@ -475,7 +516,8 @@ class AgentPerformanceTrace(
 
   private fun formatMs(value: Double): String = String.format(Locale.US, "%.2f", value)
 
-  private fun msOrUnavailable(value: Double?): String = value?.let { formatMs(it) } ?: "unavailable"
+  private fun msOrUnavailable(value: Double?): String =
+    value?.let { formatMs(it) } ?: "unavailable"
 
   private fun floatOrUnavailable(value: Float?): String =
     value?.let { String.format(Locale.US, "%.4f", it) } ?: "unavailable"
@@ -507,11 +549,15 @@ private data class ToolStartState(
   val startNanos: Long,
 )
 
-/** Process-local MCP204 bridge between Agent UI, LiteRT-LM callbacks, and existing tool logs. */
+/** Process-local MCP205 bridge between Agent UI, LiteRT-LM callbacks, and existing tool logs. */
 object AgentPerformanceCoordinator {
   val reports = mutableStateMapOf<String, String>()
+  val sessionReports = mutableStateMapOf<String, String>()
+
   private val traces = mutableMapOf<String, ActiveTraceState>()
   private val openTools = mutableMapOf<String, ToolStartState>()
+  private val archivedRequestReports = mutableMapOf<String, MutableList<String>>()
+  private val boundSessionIds = mutableMapOf<String, String>()
   private val handler = Handler(Looper.getMainLooper())
   private var activeModelName: String? = null
 
@@ -526,6 +572,18 @@ object AgentPerformanceCoordinator {
     activeSkillCount: Int,
     enabledMcpCount: Int,
   ) {
+    val previous = reports[model.name]
+    if (!previous.isNullOrBlank() && isFinalRequestReport(previous)) {
+      val archive = archivedRequestReports.getOrPut(model.name) { mutableListOf() }
+      val previousRequestId = reportValue(previous, "request_id")
+      if (
+        previousRequestId.isNotBlank() &&
+          archive.none { reportValue(it, "request_id") == previousRequestId }
+      ) {
+        archive += previous
+      }
+    }
+
     val trace =
       AgentPerformanceTrace(
         context = context.applicationContext,
@@ -541,11 +599,19 @@ object AgentPerformanceCoordinator {
     traces[model.name] = state
     activeModelName = model.name
     reports[model.name] = trace.buildReport()
+    updateSessionReport(model.name)
   }
 
   @Synchronized
   fun onInferenceSubmitted(modelName: String, inputChars: Int) {
     val state = traces[modelName] ?: return
+    val runtimeSnapshot = AgentCompatRuntimeCoordinator.snapshot(modelName)
+    val sessionId = runtimeSnapshot?.sessionId
+    if (sessionId != null && boundSessionIds[modelName] != sessionId) {
+      archivedRequestReports.remove(modelName)
+      boundSessionIds[modelName] = sessionId
+    }
+
     state.activityGeneration += 1
     state.lastActivityNanos = SystemClock.elapsedRealtimeNanos()
     state.toolEventWindowUntilNanos = Long.MAX_VALUE
@@ -619,7 +685,12 @@ object AgentPerformanceCoordinator {
     val now = SystemClock.elapsedRealtimeNanos()
     val modelName = activeModelName ?: return
     val state = traces[modelName] ?: return
-    if (now > state.toolEventWindowUntilNanos && state.toolEventWindowUntilNanos != Long.MAX_VALUE) return
+    if (
+      now > state.toolEventWindowUntilNanos &&
+        state.toolEventWindowUntilNanos != Long.MAX_VALUE
+    ) {
+      return
+    }
     val suffix = category.substringAfterLast('.')
     val base = category.substringBeforeLast('.', missingDelimiterValue = category)
     when (suffix) {
@@ -653,6 +724,9 @@ object AgentPerformanceCoordinator {
 
   @Synchronized
   fun reportFor(modelName: String): String? = reports[modelName]
+
+  @Synchronized
+  fun sessionReportFor(modelName: String): String? = sessionReports[modelName]
 
   private fun scheduleFinalization(modelName: String, generation: Long) {
     handler.postDelayed(
@@ -689,17 +763,77 @@ object AgentPerformanceCoordinator {
 
   private fun publish(modelName: String, state: ActiveTraceState) {
     reports[modelName] = state.trace.buildReport()
+    updateSessionReport(modelName)
   }
 
   private fun persistFinalSummary(modelName: String, state: ActiveTraceState) {
     val report = state.trace.buildReport()
     reports[modelName] = report
+    updateSessionReport(modelName)
     AgentDiagnosticsLogger.log(
       context = state.context,
       category = "agent.performance.summary",
-      message = "MCP204 performance trace completed for $modelName",
+      message = "MCP205 performance trace completed for $modelName",
       detail = report,
     )
+  }
+
+  private fun updateSessionReport(modelName: String) {
+    val current = reports[modelName].orEmpty()
+    val archived = archivedRequestReports[modelName].orEmpty()
+    val allReports =
+      buildList {
+        addAll(archived)
+        if (current.isNotBlank()) {
+          val currentId = reportValue(current, "request_id")
+          if (currentId.isBlank() || none { reportValue(it, "request_id") == currentId }) {
+            add(current)
+          }
+        }
+      }
+    if (allReports.isEmpty()) {
+      sessionReports.remove(modelName)
+      return
+    }
+
+    val runtimeSnapshot = AgentCompatRuntimeCoordinator.snapshot(modelName)
+    val sessionId = runtimeSnapshot?.sessionId ?: boundSessionIds[modelName] ?: "unavailable"
+    val currentTurn = runtimeSnapshot?.userTurnIndex ?: allReports.size
+    sessionReports[modelName] =
+      buildString {
+        appendLine("=== MCP205 Agent 会话性能诊断 ===")
+        appendLine("schema=mcp205.agent_session_perf.v1")
+        appendLine("model_name=$modelName")
+        appendLine("session_id=$sessionId")
+        appendLine("current_user_turn_index=$currentTurn")
+        appendLine("included_request_reports=${allReports.size}")
+        appendLine(
+          "privacy=diagnostic_metrics_only;user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged"
+        )
+        allReports.forEachIndexed { index, report ->
+          appendLine()
+          appendLine("--- USER_TURN_${index + 1} ---")
+          appendLine(report)
+        }
+        append("=== MCP205 Agent 会话性能诊断结束 ===")
+      }
+  }
+
+  private fun isFinalRequestReport(report: String): Boolean {
+    val status = reportValue(report, "status")
+    return status == "COMPLETED" ||
+      status == "ERROR" ||
+      status == "STOPPED" ||
+      status == "RESET"
+  }
+
+  private fun reportValue(report: String, key: String): String {
+    val prefix = "$key="
+    return report.lineSequence()
+      .firstOrNull { it.startsWith(prefix) }
+      ?.removePrefix(prefix)
+      ?.trim()
+      .orEmpty()
   }
 }
 
@@ -707,25 +841,45 @@ object AgentPerformanceCoordinator {
 fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Modifier) {
   if (reportText.isBlank()) return
   val context = androidx.compose.ui.platform.LocalContext.current
+  val modelName = reportField(reportText, "model_name")
+  val sessionReportText =
+    if (modelName.isNotBlank()) {
+      AgentPerformanceCoordinator.sessionReports[modelName].orEmpty().ifBlank { reportText }
+    } else {
+      reportText
+    }
+
   var expanded by remember(reportText) { mutableStateOf(false) }
-  var copied by remember(reportText) { mutableStateOf(false) }
+  var copiedCurrent by remember(reportText) { mutableStateOf(false) }
+  var copiedSession by remember(sessionReportText) { mutableStateOf(false) }
 
   Card(modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
     Column(
       modifier = Modifier.fillMaxWidth().padding(12.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+      val expandLabel =
+        if (expanded) {
+          "收起 MCP205 Agent 性能诊断"
+        } else {
+          "展开 MCP205 Agent 性能诊断"
+        }
       FilledTonalButton(
         onClick = { expanded = !expanded },
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+          Modifier.fillMaxWidth().clearAndSetSemantics {
+            role = Role.Button
+            contentDescription = expandLabel
+            stateDescription = if (expanded) "已展开" else "已收起"
+          },
       ) {
-        Text(if (expanded) "MCP204 性能诊断：点击收起" else "MCP204 性能诊断：点击展开")
+        Text(if (expanded) "MCP205 性能诊断：点击收起" else "MCP205 性能诊断：点击展开")
       }
 
       AnimatedVisibility(visible = expanded) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Text(
-            "下面整段内容可以直接复制发送，用于定位 Agent 各阶段性能。",
+            "下面显示当前用户任务的完整性能诊断。可复制本轮，也可复制当前聊天会话中所有用户轮次的诊断。",
             style = MaterialTheme.typography.bodyMedium,
           )
           SelectionContainer {
@@ -736,21 +890,65 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
               lineHeight = 17.sp,
             )
           }
+
+          val currentCopyLabel =
+            if (copiedCurrent) {
+              "本轮性能诊断已复制"
+            } else {
+              "复制本轮性能诊断"
+            }
           Button(
             onClick = {
               val clipboard =
                 context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
               clipboard.setPrimaryClip(
-                ClipData.newPlainText("MCP204 Agent Performance Diagnostics", reportText)
+                ClipData.newPlainText("MCP205 Agent Current Request Diagnostics", reportText)
               )
-              copied = true
+              copiedCurrent = true
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+              Modifier.fillMaxWidth().clearAndSetSemantics {
+                role = Role.Button
+                contentDescription = currentCopyLabel
+              },
           ) {
-            Text(if (copied) "已复制全部诊断数据" else "复制全部诊断数据")
+            Text(currentCopyLabel)
+          }
+
+          val sessionCopyLabel =
+            if (copiedSession) {
+              "本会话性能诊断已复制"
+            } else {
+              "复制本会话性能诊断"
+            }
+          Button(
+            onClick = {
+              val clipboard =
+                context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+              clipboard.setPrimaryClip(
+                ClipData.newPlainText("MCP205 Agent Session Diagnostics", sessionReportText)
+              )
+              copiedSession = true
+            },
+            modifier =
+              Modifier.fillMaxWidth().clearAndSetSemantics {
+                role = Role.Button
+                contentDescription = sessionCopyLabel
+              },
+          ) {
+            Text(sessionCopyLabel)
           }
         }
       }
     }
   }
+}
+
+private fun reportField(report: String, key: String): String {
+  val prefix = "$key="
+  return report.lineSequence()
+    .firstOrNull { it.startsWith(prefix) }
+    ?.removePrefix(prefix)
+    ?.trim()
+    .orEmpty()
 }
