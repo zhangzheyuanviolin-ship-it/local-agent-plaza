@@ -41,6 +41,13 @@ object AgentDiagnosticsLogger {
     message: String,
     detail: String = "",
   ) {
+    // MCP202 only forwards the category plus raw detail length. The performance trace never receives
+    // prompt/tool-result contents, paths, credentials, or other log payload text.
+    AgentPerformanceCoordinator.observeDiagnosticEvent(
+      category = category,
+      detailChars = detail.length,
+    )
+
     val line =
       buildString {
         append(timestampFormatter.format(Date()))
