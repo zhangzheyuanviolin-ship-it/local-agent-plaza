@@ -22,6 +22,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.os.Debug
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,6 +65,8 @@ import java.util.UUID
 private const val DIAGNOSTICS_SCHEMA = "mcp202.agent_perf.v1"
 private const val LITERT_LM_VERSION = "0.15.0"
 private const val LITERT_VERSION = "2.1.6"
+private const val FINALIZATION_DELAY_MS = 1200L
+private const val TOOL_EVENT_WINDOW_MS = 5000L
 
 private data class InferencePassTiming(
   val index: Int,
@@ -77,8 +82,9 @@ private data class ToolExecutionTiming(
   val index: Int,
   val toolName: String,
   val elapsedMs: Double,
-  val resultChars: Int,
+  val loggedDetailChars: Int,
   val success: Boolean,
+  val postGenerationGapMs: Double?,
 )
 
 private data class MemorySnapshot(
@@ -92,13 +98,15 @@ private data class MemorySnapshot(
  * Per-request MCP202 Agent performance trace.
  *
  * Privacy rule: this class stores lengths and timings only. It never stores user prompts, tool
- * arguments, tool results, workspace file contents, secrets, API keys, or access tokens.
+ * arguments, tool results, workspace file contents, paths, secrets, API keys, or access tokens.
  */
 class AgentPerformanceTrace(
   private val context: Context,
   private val model: Model,
   private val toolMode: String,
   private val originalInputChars: Int,
+  private val runtimeInputChars: Int,
+  private val compatAddedInputChars: Int?,
   private val activeSkillCount: Int,
   private val enabledMcpCount: Int,
 ) {
@@ -110,14 +118,12 @@ class AgentPerformanceTrace(
   private val passes = mutableListOf<InferencePassTiming>()
   private val tools = mutableListOf<ToolExecutionTiming>()
   private val memory = mutableListOf<MemorySnapshot>()
-  private var compatPrefaceChars: Int? = null
-  private var toolParseAttempts = 0
-  private var toolParseTotalMs = 0.0
   private var retryCount = 0
   private var finishedAtNanos: Long? = null
   private var finalStatus = "RUNNING"
   private var errorChars = 0
   private var finalRuntimeSnapshot: LlmRuntimePerformanceSnapshot? = null
+  private var finalMemoryCaptured = false
 
   private val configuredContextWindow = runCatching { model.getConfiguredContextWindow() }.getOrNull()
   private val maxOutputTokens =
@@ -156,25 +162,13 @@ class AgentPerformanceTrace(
   }
 
   @Synchronized
-  fun markInitialInferenceSubmitted(inputChars: Int, prefaceChars: Int?) {
-    compatPrefaceChars = prefaceChars
-    if (passes.isEmpty()) {
-      passes +=
-        InferencePassTiming(
-          index = 1,
-          kind = "initial",
-          inputChars = inputChars,
-          submitNanos = SystemClock.elapsedRealtimeNanos(),
-        )
-    }
-  }
-
-  @Synchronized
-  fun markContinuationSubmitted(inputChars: Int) {
+  fun markInferenceSubmitted(inputChars: Int) {
+    reopen()
+    val kind = if (passes.isEmpty()) "initial" else "continuation"
     passes +=
       InferencePassTiming(
         index = passes.size + 1,
-        kind = "continuation",
+        kind = kind,
         inputChars = inputChars,
         submitNanos = SystemClock.elapsedRealtimeNanos(),
       )
@@ -190,29 +184,35 @@ class AgentPerformanceTrace(
   }
 
   @Synchronized
-  fun markGenerationDone(outputChars: Int) {
+  fun markGenerationDone(outputChars: Int): Long {
     val pass = ensureOpenPass()
     if (pass.doneNanos == null) {
       pass.doneNanos = SystemClock.elapsedRealtimeNanos()
-      pass.outputChars = outputChars
+      pass.outputChars = outputChars.coerceAtLeast(0)
     }
+    return pass.doneNanos ?: SystemClock.elapsedRealtimeNanos()
   }
 
   @Synchronized
-  fun recordToolParse(elapsedMs: Double) {
-    toolParseAttempts += 1
-    toolParseTotalMs += elapsedMs.coerceAtLeast(0.0)
-  }
-
-  @Synchronized
-  fun recordToolExecution(toolName: String, elapsedMs: Double, resultChars: Int, success: Boolean) {
+  fun recordToolExecution(
+    toolName: String,
+    startNanos: Long,
+    endNanos: Long,
+    loggedDetailChars: Int,
+    success: Boolean,
+  ) {
+    reopen()
+    val previousGenerationDone = passes.lastOrNull()?.doneNanos
+    val postGenerationGapMs =
+      previousGenerationDone?.let { nanosToMs((startNanos - it).coerceAtLeast(0L)) }
     tools +=
       ToolExecutionTiming(
         index = tools.size + 1,
         toolName = sanitizeToolName(toolName),
-        elapsedMs = elapsedMs.coerceAtLeast(0.0),
-        resultChars = resultChars.coerceAtLeast(0),
+        elapsedMs = nanosToMs((endNanos - startNanos).coerceAtLeast(0L)),
+        loggedDetailChars = loggedDetailChars.coerceAtLeast(0),
         success = success,
+        postGenerationGapMs = postGenerationGapMs,
       )
     captureMemory("after_tool_${tools.size}")
   }
@@ -220,25 +220,38 @@ class AgentPerformanceTrace(
   @Synchronized fun recordRetry() { retryCount += 1 }
 
   @Synchronized
-  fun finish(status: String, errorLength: Int = 0) {
-    if (finishedAtNanos == null || finalStatus == "RUNNING") {
-      finishedAtNanos = SystemClock.elapsedRealtimeNanos()
-    }
+  fun reopen() {
+    finishedAtNanos = null
+    finalStatus = "RUNNING"
+    finalRuntimeSnapshot = null
+  }
+
+  @Synchronized
+  fun finish(
+    status: String,
+    errorLength: Int = 0,
+    atNanos: Long? = null,
+    captureFinalMemory: Boolean = true,
+  ) {
+    finishedAtNanos = atNanos ?: passes.lastOrNull()?.doneNanos ?: SystemClock.elapsedRealtimeNanos()
     finalStatus = status
     errorChars = errorLength.coerceAtLeast(0)
     finalRuntimeSnapshot = LlmChatPerformanceRegistry.snapshot(model.name)
-    captureMemory("final")
+    if (captureFinalMemory && !finalMemoryCaptured) {
+      captureMemory("final")
+      finalMemoryCaptured = true
+    }
   }
 
   @Synchronized
   fun buildReport(): String {
     val runtimeNow = finalRuntimeSnapshot ?: LlmChatPerformanceRegistry.snapshot(model.name)
     val finishNanos = finishedAtNanos ?: SystemClock.elapsedRealtimeNanos()
-    val totalMs = nanosToMs(finishNanos - startedAtNanos)
+    val totalMs = nanosToMs((finishNanos - startedAtNanos).coerceAtLeast(0L))
     val initialPass = passes.firstOrNull()
     val continuationPasses = passes.drop(1)
     val totalToolExecMs = tools.sumOf { it.elapsedMs }
-    val toolResultChars = tools.sumOf { it.resultChars }
+    val totalLoggedDetailChars = tools.sumOf { it.loggedDetailChars }
     val resetDelta =
       if (runtimeNow != null && runtimeAtStart != null) {
         (runtimeNow.conversationResetCount - runtimeAtStart.conversationResetCount).coerceAtLeast(0)
@@ -271,7 +284,8 @@ class AgentPerformanceTrace(
       appendLine("active_skill_count=$activeSkillCount")
       appendLine("enabled_mcp_count=$enabledMcpCount")
       appendLine("original_input_chars=$originalInputChars")
-      appendLine("compat_static_preface_chars=${valueOrUnavailable(compatPrefaceChars)}")
+      appendLine("runtime_input_chars=$runtimeInputChars")
+      appendLine("compat_added_input_chars=${valueOrUnavailable(compatAddedInputChars)}")
       appendLine("thinking_override=${if (toolMode == "COMPAT") "disabled" else "runtime_default"}")
       appendLine()
 
@@ -297,6 +311,7 @@ class AgentPerformanceTrace(
       appendLine("initial_ttft_ms=${passTtft(initialPass)}")
       appendLine("initial_decode_after_first_token_ms=${passDecode(initialPass)}")
       appendLine("initial_total_generation_ms=${passTotal(initialPass)}")
+      appendLine("initial_output_chars=${valueOrUnavailable(initialPass?.outputChars)}")
       for (pass in continuationPasses) {
         val continuationIndex = pass.index - 1
         appendLine("continuation_${continuationIndex}_input_chars=${pass.inputChars}")
@@ -316,18 +331,21 @@ class AgentPerformanceTrace(
       appendLine()
 
       appendLine("[tool_timing]")
-      appendLine("tool_parse_attempts=$toolParseAttempts")
-      appendLine("tool_parse_total_ms=${formatMs(toolParseTotalMs)}")
-      appendLine("tool_call_count=${tools.size}")
-      appendLine("tool_exec_total_ms=${formatMs(totalToolExecMs)}")
-      appendLine("tool_result_chars_total=$toolResultChars")
+      appendLine("compat_parser_exact_ms=unavailable")
+      appendLine("compat_parser_note=post_generation_to_tool_start_ms includes parser and orchestration overhead")
+      appendLine("observed_tool_event_count=${tools.size}")
+      appendLine("observed_tool_exec_total_ms=${formatMs(totalToolExecMs)}")
+      appendLine("observed_tool_logged_detail_chars_total=$totalLoggedDetailChars")
       if (tools.isEmpty()) {
-        appendLine("tool_detail=none_or_native_provider_not_observable")
+        appendLine("tool_detail=none_observed")
       } else {
         for (tool in tools) {
           appendLine("tool_${tool.index}_name=${tool.toolName}")
           appendLine("tool_${tool.index}_exec_ms=${formatMs(tool.elapsedMs)}")
-          appendLine("tool_${tool.index}_result_chars=${tool.resultChars}")
+          appendLine(
+            "tool_${tool.index}_post_generation_to_start_ms=${msOrUnavailable(tool.postGenerationGapMs)}"
+          )
+          appendLine("tool_${tool.index}_logged_detail_chars=${tool.loggedDetailChars}")
           appendLine("tool_${tool.index}_success=${tool.success}")
         }
       }
@@ -348,7 +366,9 @@ class AgentPerformanceTrace(
         }
       }
       appendLine()
-      appendLine("privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;secrets_not_logged")
+      appendLine(
+        "privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged"
+      )
       append("=== MCP202 Agent 性能诊断结束 ===")
     }
   }
@@ -357,7 +377,7 @@ class AgentPerformanceTrace(
     return passes.lastOrNull { it.doneNanos == null }
       ?: InferencePassTiming(
           index = passes.size + 1,
-          kind = if (passes.isEmpty()) "initial" else "continuation_unmarked",
+          kind = if (passes.isEmpty()) "initial_unmarked" else "continuation_unmarked",
           inputChars = 0,
           submitNanos = SystemClock.elapsedRealtimeNanos(),
         )
@@ -378,28 +398,28 @@ class AgentPerformanceTrace(
   private fun passTtft(pass: InferencePassTiming?): String {
     if (pass == null) return "unavailable"
     val first = pass.firstTokenNanos ?: return "unavailable"
-    return formatMs(nanosToMs(first - pass.submitNanos))
+    return formatMs(nanosToMs((first - pass.submitNanos).coerceAtLeast(0L)))
   }
 
   private fun passDecode(pass: InferencePassTiming?): String {
     if (pass == null) return "unavailable"
     val first = pass.firstTokenNanos ?: return "unavailable"
     val done = pass.doneNanos ?: return "unavailable"
-    return formatMs(nanosToMs(done - first))
+    return formatMs(nanosToMs((done - first).coerceAtLeast(0L)))
   }
 
   private fun passTotal(pass: InferencePassTiming?): String {
     if (pass == null) return "unavailable"
     val done = pass.doneNanos ?: return "unavailable"
-    return formatMs(nanosToMs(done - pass.submitNanos))
+    return formatMs(nanosToMs((done - pass.submitNanos).coerceAtLeast(0L)))
   }
 
   private fun interPassGap(previous: InferencePassTiming?, current: InferencePassTiming): String {
     val previousDone = previous?.doneNanos ?: return "unavailable"
-    return formatMs(nanosToMs(current.submitNanos - previousDone))
+    return formatMs(nanosToMs((current.submitNanos - previousDone).coerceAtLeast(0L)))
   }
 
-  private fun nanosToMs(nanos: Long): Double = nanos.coerceAtLeast(0L) / 1_000_000.0
+  private fun nanosToMs(nanos: Long): Double = nanos / 1_000_000.0
 
   private fun formatMs(value: Double): String = String.format(Locale.US, "%.2f", value)
 
@@ -420,6 +440,198 @@ class AgentPerformanceTrace(
 
   private fun sanitizeToolName(value: String): String =
     value.replace(Regex("[^A-Za-z0-9_.:-]"), "_").take(120)
+}
+
+private data class ActiveTraceState(
+  val context: Context,
+  val trace: AgentPerformanceTrace,
+  var activityGeneration: Long = 0,
+  var lastActivityNanos: Long = SystemClock.elapsedRealtimeNanos(),
+  var toolEventWindowUntilNanos: Long = Long.MAX_VALUE,
+)
+
+private data class ToolStartState(
+  val modelName: String,
+  val startNanos: Long,
+)
+
+/** Process-local MCP202 bridge between Agent UI, LiteRT-LM callbacks, and existing tool logs. */
+object AgentPerformanceCoordinator {
+  val reports = mutableStateMapOf<String, String>()
+  private val traces = mutableMapOf<String, ActiveTraceState>()
+  private val openTools = mutableMapOf<String, ToolStartState>()
+  private val handler = Handler(Looper.getMainLooper())
+  private var activeModelName: String? = null
+
+  @Synchronized
+  fun startRequest(
+    context: Context,
+    model: Model,
+    toolMode: String,
+    originalInputChars: Int,
+    runtimeInputChars: Int,
+    compatAddedInputChars: Int?,
+    activeSkillCount: Int,
+    enabledMcpCount: Int,
+  ) {
+    val trace =
+      AgentPerformanceTrace(
+        context = context.applicationContext,
+        model = model,
+        toolMode = toolMode,
+        originalInputChars = originalInputChars,
+        runtimeInputChars = runtimeInputChars,
+        compatAddedInputChars = compatAddedInputChars,
+        activeSkillCount = activeSkillCount,
+        enabledMcpCount = enabledMcpCount,
+      )
+    val state = ActiveTraceState(context = context.applicationContext, trace = trace)
+    traces[model.name] = state
+    activeModelName = model.name
+    reports[model.name] = trace.buildReport()
+  }
+
+  @Synchronized
+  fun onInferenceSubmitted(modelName: String, inputChars: Int) {
+    val state = traces[modelName] ?: return
+    state.activityGeneration += 1
+    state.lastActivityNanos = SystemClock.elapsedRealtimeNanos()
+    state.toolEventWindowUntilNanos = Long.MAX_VALUE
+    state.trace.markInferenceSubmitted(inputChars)
+    activeModelName = modelName
+    publish(modelName, state)
+  }
+
+  @Synchronized
+  fun onFirstToken(modelName: String) {
+    val state = traces[modelName] ?: return
+    state.trace.markFirstToken()
+    state.lastActivityNanos = SystemClock.elapsedRealtimeNanos()
+    publish(modelName, state)
+  }
+
+  @Synchronized
+  fun onInferenceDone(modelName: String, outputChars: Int) {
+    val state = traces[modelName] ?: return
+    val doneNanos = state.trace.markGenerationDone(outputChars)
+    state.activityGeneration += 1
+    state.lastActivityNanos = doneNanos
+    state.toolEventWindowUntilNanos = doneNanos + (TOOL_EVENT_WINDOW_MS * 1_000_000L)
+    state.trace.finish(status = "PASS_COMPLETE", atNanos = doneNanos, captureFinalMemory = false)
+    publish(modelName, state)
+    scheduleFinalization(modelName = modelName, generation = state.activityGeneration)
+  }
+
+  @Synchronized
+  fun finishWithError(modelName: String, errorChars: Int) {
+    val state = traces[modelName] ?: return
+    state.activityGeneration += 1
+    state.lastActivityNanos = SystemClock.elapsedRealtimeNanos()
+    state.trace.finish(
+      status = "ERROR",
+      errorLength = errorChars,
+      atNanos = state.lastActivityNanos,
+      captureFinalMemory = true,
+    )
+    publish(modelName, state)
+    persistFinalSummary(modelName, state)
+  }
+
+  @Synchronized
+  fun finishStopped(modelName: String) {
+    val state = traces[modelName] ?: return
+    state.activityGeneration += 1
+    state.lastActivityNanos = SystemClock.elapsedRealtimeNanos()
+    state.trace.finish(status = "STOPPED", atNanos = state.lastActivityNanos, captureFinalMemory = true)
+    publish(modelName, state)
+    persistFinalSummary(modelName, state)
+  }
+
+  @Synchronized
+  fun finishReset(modelName: String) {
+    val state = traces[modelName] ?: return
+    state.activityGeneration += 1
+    state.lastActivityNanos = SystemClock.elapsedRealtimeNanos()
+    state.trace.finish(status = "RESET", atNanos = state.lastActivityNanos, captureFinalMemory = true)
+    publish(modelName, state)
+    persistFinalSummary(modelName, state)
+  }
+
+  /** Observes existing tool log events without reading their content. */
+  @Synchronized
+  fun observeDiagnosticEvent(category: String, detailChars: Int) {
+    if (!category.startsWith("tool.")) return
+    val now = SystemClock.elapsedRealtimeNanos()
+    val modelName = activeModelName ?: return
+    val state = traces[modelName] ?: return
+    if (now > state.toolEventWindowUntilNanos && state.toolEventWindowUntilNanos != Long.MAX_VALUE) return
+    val suffix = category.substringAfterLast('.')
+    val base = category.substringBeforeLast('.', missingDelimiterValue = category)
+    when (suffix) {
+      "start" -> {
+        state.activityGeneration += 1
+        state.lastActivityNanos = now
+        state.toolEventWindowUntilNanos = Long.MAX_VALUE
+        state.trace.reopen()
+        openTools[base] = ToolStartState(modelName = modelName, startNanos = now)
+        publish(modelName, state)
+      }
+      "done", "success", "failed", "error" -> {
+        val start = openTools.remove(base) ?: return
+        if (start.modelName != modelName) return
+        state.activityGeneration += 1
+        state.lastActivityNanos = now
+        state.toolEventWindowUntilNanos = now + (TOOL_EVENT_WINDOW_MS * 1_000_000L)
+        state.trace.recordToolExecution(
+          toolName = base,
+          startNanos = start.startNanos,
+          endNanos = now,
+          loggedDetailChars = detailChars,
+          success = suffix == "done" || suffix == "success",
+        )
+        state.trace.finish(status = "TOOL_COMPLETE", atNanos = now, captureFinalMemory = false)
+        publish(modelName, state)
+        scheduleFinalization(modelName = modelName, generation = state.activityGeneration)
+      }
+    }
+  }
+
+  @Synchronized
+  fun reportFor(modelName: String): String? = reports[modelName]
+
+  private fun scheduleFinalization(modelName: String, generation: Long) {
+    handler.postDelayed(
+      {
+        synchronized(this) {
+          val state = traces[modelName] ?: return@synchronized
+          if (state.activityGeneration != generation) return@synchronized
+          state.trace.finish(
+            status = "COMPLETED",
+            atNanos = state.lastActivityNanos,
+            captureFinalMemory = true,
+          )
+          publish(modelName, state)
+          persistFinalSummary(modelName, state)
+        }
+      },
+      FINALIZATION_DELAY_MS,
+    )
+  }
+
+  private fun publish(modelName: String, state: ActiveTraceState) {
+    reports[modelName] = state.trace.buildReport()
+  }
+
+  private fun persistFinalSummary(modelName: String, state: ActiveTraceState) {
+    val report = state.trace.buildReport()
+    reports[modelName] = report
+    AgentDiagnosticsLogger.log(
+      context = state.context,
+      category = "agent.performance.summary",
+      message = "MCP202 performance trace completed for $modelName",
+      detail = report,
+    )
+  }
 }
 
 @Composable
