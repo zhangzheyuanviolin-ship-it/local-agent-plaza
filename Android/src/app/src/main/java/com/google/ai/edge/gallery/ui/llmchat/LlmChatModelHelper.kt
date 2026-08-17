@@ -18,6 +18,7 @@ package com.google.ai.edge.gallery.ui.llmchat
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import com.google.ai.edge.gallery.common.cleanUpMediapipeTaskErrorMessage
 import com.google.ai.edge.gallery.data.Accelerator
@@ -76,8 +77,7 @@ object LlmChatModelHelper : LlmModelHelper {
       model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = DEFAULT_MAX_TOKEN).let {
         if (configuredContextWindow > 0) it.coerceAtMost(configuredContextWindow) else it
       }
-    val engineMaxNumTokens =
-      configuredContextWindow.takeIf { it > 0 } ?: maxOutputTokens
+    val engineMaxNumTokens = configuredContextWindow.takeIf { it > 0 } ?: maxOutputTokens
     val topK = model.getIntConfigValue(key = ConfigKeys.TOPK, defaultValue = DEFAULT_TOPK)
     val topP = model.getFloatConfigValue(key = ConfigKeys.TOPP, defaultValue = DEFAULT_TOPP)
     val temperature =
@@ -133,7 +133,6 @@ object LlmChatModelHelper : LlmModelHelper {
 
     // Check if the model file supports speculative decoding.
     var supportsSpeculativeDecoding = false
-    // Check if the model file supports speculative decoding.
     try {
       com.google.ai.edge.litertlm.Capabilities(modelPath).use {
         supportsSpeculativeDecoding = it.hasSpeculativeDecodingSupport()
@@ -148,8 +147,7 @@ object LlmChatModelHelper : LlmModelHelper {
       // speculative decoding is enabled in the settings.
       if (
         supportsSpeculativeDecoding &&
-          model.capabilityToTaskTypes[ModelCapability.SPECULATIVE_DECODING]?.contains(taskId) ==
-            true
+          model.capabilityToTaskTypes[ModelCapability.SPECULATIVE_DECODING]?.contains(taskId) == true
       ) {
         speculativeDecoding =
           model.getBooleanConfigValue(
@@ -159,12 +157,16 @@ object LlmChatModelHelper : LlmModelHelper {
       }
       ExperimentalFlags.enableSpeculativeDecoding = speculativeDecoding
       Log.d(TAG, "Speculative decoding enabled: $speculativeDecoding")
+
+      val engineInitStartNanos = SystemClock.elapsedRealtimeNanos()
       val engine = Engine(engineConfig)
       engine.initialize()
+      val engineInitMs = elapsedMsSince(engineInitStartNanos)
       ExperimentalFlags.enableSpeculativeDecoding = false
 
       ExperimentalFlags.enableConversationConstrainedDecoding =
         enableConversationConstrainedDecoding
+      val conversationInitStartNanos = SystemClock.elapsedRealtimeNanos()
       val conversation =
         engine.createConversation(
           ConversationConfig(
@@ -182,8 +184,24 @@ object LlmChatModelHelper : LlmModelHelper {
             tools = tools,
           )
         )
+      val conversationInitMs = elapsedMsSince(conversationInitStartNanos)
       ExperimentalFlags.enableConversationConstrainedDecoding = false
       model.instance = LlmModelInstance(engine = engine, conversation = conversation)
+
+      LlmChatPerformanceRegistry.recordInitialization(
+        modelName = model.name,
+        engineInitMs = engineInitMs,
+        conversationInitMs = conversationInitMs,
+        configuredContextWindow = configuredContextWindow,
+        engineMaxNumTokens = engineMaxNumTokens,
+        maxOutputTokens = maxOutputTokens,
+        accelerator = accelerator,
+        speculativeDecodingEnabled = speculativeDecoding,
+      )
+      Log.d(
+        TAG,
+        "MCP202 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
+      )
     } catch (e: Exception) {
       ExperimentalFlags.enableSpeculativeDecoding = false
       ExperimentalFlags.enableConversationConstrainedDecoding = false
@@ -203,6 +221,7 @@ object LlmChatModelHelper : LlmModelHelper {
     enableConversationConstrainedDecoding: Boolean,
     initialMessages: List<Message>,
   ) {
+    val resetStartNanos = SystemClock.elapsedRealtimeNanos()
     try {
       Log.d(TAG, "Resetting conversation for model '${model.name}'")
 
@@ -223,8 +242,7 @@ object LlmChatModelHelper : LlmModelHelper {
           key = ConfigKeys.ACCELERATOR,
           defaultValue = Accelerator.GPU.label,
         )
-      ExperimentalFlags.enableConversationConstrainedDecoding =
-        enableConversationConstrainedDecoding
+      ExperimentalFlags.enableConversationConstrainedDecoding = enableConversationConstrainedDecoding
       val newConversation =
         engine.createConversation(
           ConversationConfig(
@@ -246,7 +264,9 @@ object LlmChatModelHelper : LlmModelHelper {
       ExperimentalFlags.enableConversationConstrainedDecoding = false
       instance.conversation = newConversation
 
-      Log.d(TAG, "Resetting done")
+      val resetMs = elapsedMsSince(resetStartNanos)
+      LlmChatPerformanceRegistry.recordConversationReset(modelName = model.name, elapsedMs = resetMs)
+      Log.d(TAG, "Resetting done in ${"%.2f".format(resetMs)}ms")
     } catch (e: Exception) {
       ExperimentalFlags.enableConversationConstrainedDecoding = false
       Log.d(TAG, "Failed to reset conversation", e)
@@ -277,6 +297,7 @@ object LlmChatModelHelper : LlmModelHelper {
       onCleanUp()
     }
     model.instance = null
+    LlmChatPerformanceRegistry.clear(model.name)
 
     onDone()
     Log.d(TAG, "Clean up done.")
