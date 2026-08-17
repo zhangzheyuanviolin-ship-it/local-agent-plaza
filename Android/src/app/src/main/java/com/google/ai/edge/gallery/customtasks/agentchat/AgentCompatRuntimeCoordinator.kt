@@ -126,6 +126,9 @@ object AgentCompatRuntimeCoordinator {
     }
 
     val state = states[modelName]
+    if (state != null) {
+      pendingPreSubmitWaitMs.remove(modelName)?.let { state.preSubmitWaitMsTotal += it }
+    }
     if (
       state == null ||
         !state.awaitingToolResult ||
@@ -223,12 +226,7 @@ object AgentCompatRuntimeCoordinator {
   @Synchronized
   internal fun recordPreSubmitWait(modelName: String, elapsedMs: Double) {
     val safeMs = elapsedMs.coerceAtLeast(0.0)
-    val state = states[modelName]
-    if (state != null) {
-      state.preSubmitWaitMsTotal += safeMs
-    } else {
-      pendingPreSubmitWaitMs.merge(modelName, safeMs, Double::plus)
-    }
+    pendingPreSubmitWaitMs.merge(modelName, safeMs) { current, added -> current + added }
   }
 
   @Synchronized
@@ -249,13 +247,13 @@ object AgentCompatRuntimeCoordinator {
     state.continuationRawInputChars = rawInputChars.coerceAtLeast(0)
     state.continuationEffectiveInputChars = effectiveInputChars.coerceAtLeast(0)
     state.historyChars = historyChars.coerceAtLeast(0)
-    while (state.history.size > historyStepCount.coerceAtLeast(0)) {
-      state.history.removeAt(state.history.lastIndex)
+    if (historyStepCount != state.history.size) {
+      state.historyChars = historyChars.coerceAtLeast(0)
     }
   }
 
   @Synchronized
-  fun snapshot(modelName: String): CompatRuntimeMetricsSnapshot? {
+  internal fun snapshot(modelName: String): CompatRuntimeMetricsSnapshot? {
     val state = states[modelName] ?: return null
     return CompatRuntimeMetricsSnapshot(
       preSubmitWaitMsTotal = state.preSubmitWaitMsTotal,
@@ -333,7 +331,7 @@ object AgentCompatRuntimeCoordinator {
       }
     if (entries.isEmpty()) return header.trimEnd()
 
-    val footerReserve = 80
+    val footerReserve = 160
     val available = (safeBudget - header.length - footerReserve).coerceAtLeast(MIN_HISTORY_ENTRY_CHARS)
     val allocations = allocateHistoryChars(entries.size, available)
     val body = StringBuilder()
