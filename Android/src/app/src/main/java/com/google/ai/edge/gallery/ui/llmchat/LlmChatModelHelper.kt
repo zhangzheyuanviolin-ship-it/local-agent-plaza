@@ -398,7 +398,7 @@ object LlmChatModelHelper : LlmModelHelper {
               visibleChars = text.length,
               thoughtChars = thought.length,
             )
-            resultListener(text, false, thought.ifBlank { null })
+            resultListener(text, false, thought.takeIf { it.isNotBlank() })
           }
 
           override fun onDone() {
