@@ -21,6 +21,7 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.Log
 import com.google.ai.edge.gallery.common.cleanUpMediapipeTaskErrorMessage
+import com.google.ai.edge.gallery.customtasks.agentchat.AgentPerformanceCoordinator
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.DEFAULT_MAX_TOKEN
@@ -322,17 +323,16 @@ object LlmChatModelHelper : LlmModelHelper {
   ) {
     val instance = model.instance as? LlmModelInstance
     if (instance == null) {
+      AgentPerformanceCoordinator.finishWithError(model.name, "LlmModelInstance is not initialized.".length)
       onError("LlmModelInstance is not initialized.")
       return
     }
 
-    // Set listener.
     if (!cleanUpListeners.containsKey(model.name)) {
       cleanUpListeners[model.name] = cleanUpListener
     }
 
     val conversation = instance.conversation
-
     val messageToSend =
       message
         ?: run {
@@ -343,21 +343,27 @@ object LlmChatModelHelper : LlmModelHelper {
           for (audioClip in audioClips) {
             contents.add(Content.AudioBytes(audioClip))
           }
-          // add the text after image and audio for the accurate last token
           if (input.trim().isNotEmpty()) {
             contents.add(Content.Text(input))
           }
           Message.user(Contents.of(contents))
         }
 
+    AgentPerformanceCoordinator.onInferenceSubmitted(modelName = model.name, inputChars = input.length)
+    var generatedChars = 0
+
     conversation.sendMessageAsync(
       messageToSend,
       object : MessageCallback {
         override fun onMessage(message: Message) {
-          resultListener(message.toString(), false, message.channels["thought"])
+          val text = message.toString()
+          generatedChars += text.length
+          AgentPerformanceCoordinator.onFirstToken(model.name)
+          resultListener(text, false, message.channels["thought"])
         }
 
         override fun onDone() {
+          AgentPerformanceCoordinator.onInferenceDone(model.name, generatedChars)
           resultListener("", true, null)
         }
 
@@ -367,7 +373,9 @@ object LlmChatModelHelper : LlmModelHelper {
             resultListener("", true, null)
           } else {
             Log.e(TAG, "onError", throwable)
-            onError("Error: ${throwable.message}")
+            val errorMessage = "Error: ${throwable.message}"
+            AgentPerformanceCoordinator.finishWithError(model.name, errorMessage.length)
+            onError(errorMessage)
           }
         }
       },
