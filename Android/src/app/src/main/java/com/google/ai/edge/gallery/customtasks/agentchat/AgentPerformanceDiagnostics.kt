@@ -61,11 +61,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.Executors
 
-private const val DIAGNOSTICS_SCHEMA = "mcp202.agent_perf.v1"
+private const val DIAGNOSTICS_SCHEMA = "mcp204.agent_perf.v2"
 private const val LITERT_LM_VERSION = "0.15.0"
 private const val LITERT_VERSION = "2.1.6"
 private const val FINALIZATION_DELAY_MS = 1200L
+private const val FINAL_MEMORY_REFRESH_DELAY_MS = 500L
 private const val TOOL_EVENT_WINDOW_MS = 5000L
 
 private data class InferencePassTiming(
@@ -92,10 +94,11 @@ private data class MemorySnapshot(
   val pssKb: Long,
   val javaHeapUsedBytes: Long,
   val nativeHeapAllocatedBytes: Long,
+  val sampleDelayMs: Double,
 )
 
 /**
- * Per-request MCP202 Agent performance trace.
+ * Per-request MCP204 Agent performance trace.
  *
  * Privacy rule: this class stores lengths and timings only. It never stores user prompts, tool
  * arguments, tool results, workspace file contents, paths, secrets, API keys, or access tokens.
@@ -110,6 +113,13 @@ class AgentPerformanceTrace(
   private val activeSkillCount: Int,
   private val enabledMcpCount: Int,
 ) {
+  companion object {
+    private val memorySampler =
+      Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "AgentPerfMemorySampler").apply { isDaemon = true }
+      }
+  }
+
   private val requestId = UUID.randomUUID().toString().substring(0, 8)
   private val startedAtWallMillis = System.currentTimeMillis()
   private val startedAtNanos = SystemClock.elapsedRealtimeNanos()
@@ -123,7 +133,7 @@ class AgentPerformanceTrace(
   private var finalStatus = "RUNNING"
   private var errorChars = 0
   private var finalRuntimeSnapshot: LlmRuntimePerformanceSnapshot? = null
-  private var finalMemoryCaptured = false
+  private var finalMemoryCaptureScheduled = false
 
   private val configuredContextWindow = runCatching { model.getConfiguredContextWindow() }.getOrNull()
   private val maxOutputTokens =
@@ -158,7 +168,7 @@ class AgentPerformanceTrace(
       ?.memoryClass
 
   init {
-    captureMemory("request_start")
+    captureMemoryAsync("request_start")
   }
 
   @Synchronized
@@ -175,12 +185,12 @@ class AgentPerformanceTrace(
   }
 
   @Synchronized
-  fun markFirstToken() {
+  fun markFirstToken(): Boolean {
     val pass = ensureOpenPass()
-    if (pass.firstTokenNanos == null) {
-      pass.firstTokenNanos = SystemClock.elapsedRealtimeNanos()
-      captureMemory("first_token_${pass.index}")
-    }
+    if (pass.firstTokenNanos != null) return false
+    pass.firstTokenNanos = SystemClock.elapsedRealtimeNanos()
+    captureMemoryAsync("first_token_${pass.index}")
+    return true
   }
 
   @Synchronized
@@ -214,7 +224,7 @@ class AgentPerformanceTrace(
         success = success,
         postGenerationGapMs = postGenerationGapMs,
       )
-    captureMemory("after_tool_${tools.size}")
+    captureMemoryAsync("after_tool_${tools.size}")
   }
 
   @Synchronized fun recordRetry() { retryCount += 1 }
@@ -237,15 +247,16 @@ class AgentPerformanceTrace(
     finalStatus = status
     errorChars = errorLength.coerceAtLeast(0)
     finalRuntimeSnapshot = LlmChatPerformanceRegistry.snapshot(model.name)
-    if (captureFinalMemory && !finalMemoryCaptured) {
-      captureMemory("final")
-      finalMemoryCaptured = true
+    if (captureFinalMemory && !finalMemoryCaptureScheduled) {
+      finalMemoryCaptureScheduled = true
+      captureMemoryAsync("final")
     }
   }
 
   @Synchronized
   fun buildReport(): String {
     val runtimeNow = finalRuntimeSnapshot ?: LlmChatPerformanceRegistry.snapshot(model.name)
+    val compatRuntime = AgentCompatRuntimeCoordinator.snapshot(model.name)
     val finishNanos = finishedAtNanos ?: SystemClock.elapsedRealtimeNanos()
     val totalMs = nanosToMs((finishNanos - startedAtNanos).coerceAtLeast(0L))
     val initialPass = passes.firstOrNull()
@@ -260,7 +271,7 @@ class AgentPerformanceTrace(
       }
 
     return buildString {
-      appendLine("=== MCP202 Agent 性能诊断 ===")
+      appendLine("=== MCP204 Agent 性能诊断 ===")
       appendLine("schema=$DIAGNOSTICS_SCHEMA")
       appendLine("request_id=$requestId")
       appendLine("status=$finalStatus")
@@ -277,6 +288,7 @@ class AgentPerformanceTrace(
       appendLine("model_file_bytes=${valueOrUnavailable(modelFileBytes)}")
       appendLine("configured_context_window=${valueOrUnavailable(configuredContextWindow)}")
       appendLine("max_output_tokens=${valueOrUnavailable(maxOutputTokens)}")
+      appendLine("conversation_max_output_override=none")
       appendLine("top_k=${valueOrUnavailable(topK)}")
       appendLine("top_p=${floatOrUnavailable(topP)}")
       appendLine("temperature=${floatOrUnavailable(temperature)}")
@@ -301,6 +313,33 @@ class AgentPerformanceTrace(
       appendLine(
         "speculative_decoding=${runtimeNow?.speculativeDecodingEnabled?.toString() ?: "unavailable"}"
       )
+      appendLine()
+
+      appendLine("[mcp204_runtime]")
+      appendLine("pre_submit_wait_ms_total=${msOrUnavailable(compatRuntime?.preSubmitWaitMsTotal)}")
+      appendLine(
+        "continuation_prepare_ms_total=${msOrUnavailable(compatRuntime?.continuationPrepareMsTotal)}"
+      )
+      appendLine(
+        "last_continuation_prepare_ms=${msOrUnavailable(compatRuntime?.lastContinuationPrepareMs)}"
+      )
+      appendLine(
+        "last_continuation_reset_ms=${msOrUnavailable(compatRuntime?.lastContinuationResetMs)}"
+      )
+      appendLine(
+        "continuation_raw_input_chars=${valueOrUnavailable(compatRuntime?.continuationRawInputChars)}"
+      )
+      appendLine(
+        "continuation_effective_input_chars=${valueOrUnavailable(compatRuntime?.continuationEffectiveInputChars)}"
+      )
+      appendLine("compat_history_step_count=${valueOrUnavailable(compatRuntime?.historyStepCount)}")
+      appendLine("compat_history_chars=${valueOrUnavailable(compatRuntime?.historyChars)}")
+      appendLine(
+        "repeated_tool_call_count=${valueOrUnavailable(compatRuntime?.repeatedToolCallCount)}"
+      )
+      appendLine("tool_result_prompt_build_ms=unavailable")
+      appendLine("audit_write_ms=unavailable")
+      appendLine("diagnostic_memory_async=true")
       appendLine()
 
       appendLine("[request_timing]")
@@ -363,36 +402,49 @@ class AgentPerformanceTrace(
           appendLine(
             "${snapshot.stage}.native_heap_allocated_mb=${bytesToMb(snapshot.nativeHeapAllocatedBytes)}"
           )
+          appendLine("${snapshot.stage}.sample_delay_ms=${formatMs(snapshot.sampleDelayMs)}")
         }
       }
       appendLine()
       appendLine(
         "privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged"
       )
-      append("=== MCP202 Agent 性能诊断结束 ===")
+      append("=== MCP204 Agent 性能诊断结束 ===")
     }
   }
 
   private fun ensureOpenPass(): InferencePassTiming {
     return passes.lastOrNull { it.doneNanos == null }
       ?: InferencePassTiming(
-          index = passes.size + 1,
-          kind = if (passes.isEmpty()) "initial_unmarked" else "continuation_unmarked",
-          inputChars = 0,
-          submitNanos = SystemClock.elapsedRealtimeNanos(),
-        )
+        index = passes.size + 1,
+        kind = if (passes.isEmpty()) "initial_unmarked" else "continuation_unmarked",
+        inputChars = 0,
+        submitNanos = SystemClock.elapsedRealtimeNanos(),
+      )
         .also { passes += it }
   }
 
-  private fun captureMemory(stage: String) {
-    val runtime = Runtime.getRuntime()
-    memory +=
-      MemorySnapshot(
-        stage = stage,
-        pssKb = Debug.getPss().toLong(),
-        javaHeapUsedBytes = runtime.totalMemory() - runtime.freeMemory(),
-        nativeHeapAllocatedBytes = Debug.getNativeHeapAllocatedSize(),
-      )
+  private fun captureMemoryAsync(stage: String) {
+    val eventNanos = SystemClock.elapsedRealtimeNanos()
+    memorySampler.execute {
+      val runtime = Runtime.getRuntime()
+      val pssKb = Debug.getPss().toLong()
+      val javaHeapUsed = runtime.totalMemory() - runtime.freeMemory()
+      val nativeHeapAllocated = Debug.getNativeHeapAllocatedSize()
+      val sampleDelayMs = nanosToMs((SystemClock.elapsedRealtimeNanos() - eventNanos).coerceAtLeast(0L))
+      synchronized(this) {
+        if (memory.none { it.stage == stage }) {
+          memory +=
+            MemorySnapshot(
+              stage = stage,
+              pssKb = pssKb,
+              javaHeapUsedBytes = javaHeapUsed,
+              nativeHeapAllocatedBytes = nativeHeapAllocated,
+              sampleDelayMs = sampleDelayMs,
+            )
+        }
+      }
+    }
   }
 
   private fun passTtft(pass: InferencePassTiming?): String {
@@ -455,7 +507,7 @@ private data class ToolStartState(
   val startNanos: Long,
 )
 
-/** Process-local MCP202 bridge between Agent UI, LiteRT-LM callbacks, and existing tool logs. */
+/** Process-local MCP204 bridge between Agent UI, LiteRT-LM callbacks, and existing tool logs. */
 object AgentPerformanceCoordinator {
   val reports = mutableStateMapOf<String, String>()
   private val traces = mutableMapOf<String, ActiveTraceState>()
@@ -505,7 +557,7 @@ object AgentPerformanceCoordinator {
   @Synchronized
   fun onFirstToken(modelName: String) {
     val state = traces[modelName] ?: return
-    state.trace.markFirstToken()
+    if (!state.trace.markFirstToken()) return
     state.lastActivityNanos = SystemClock.elapsedRealtimeNanos()
     publish(modelName, state)
   }
@@ -535,6 +587,7 @@ object AgentPerformanceCoordinator {
     )
     publish(modelName, state)
     persistFinalSummary(modelName, state)
+    scheduleFinalMemoryRefresh(modelName = modelName, generation = state.activityGeneration)
   }
 
   @Synchronized
@@ -545,6 +598,7 @@ object AgentPerformanceCoordinator {
     state.trace.finish(status = "STOPPED", atNanos = state.lastActivityNanos, captureFinalMemory = true)
     publish(modelName, state)
     persistFinalSummary(modelName, state)
+    scheduleFinalMemoryRefresh(modelName = modelName, generation = state.activityGeneration)
   }
 
   @Synchronized
@@ -555,6 +609,7 @@ object AgentPerformanceCoordinator {
     state.trace.finish(status = "RESET", atNanos = state.lastActivityNanos, captureFinalMemory = true)
     publish(modelName, state)
     persistFinalSummary(modelName, state)
+    scheduleFinalMemoryRefresh(modelName = modelName, generation = state.activityGeneration)
   }
 
   /** Observes existing tool log events without reading their content. */
@@ -612,9 +667,23 @@ object AgentPerformanceCoordinator {
           )
           publish(modelName, state)
           persistFinalSummary(modelName, state)
+          scheduleFinalMemoryRefresh(modelName = modelName, generation = state.activityGeneration)
         }
       },
       FINALIZATION_DELAY_MS,
+    )
+  }
+
+  private fun scheduleFinalMemoryRefresh(modelName: String, generation: Long) {
+    handler.postDelayed(
+      {
+        synchronized(this) {
+          val state = traces[modelName] ?: return@synchronized
+          if (state.activityGeneration != generation) return@synchronized
+          publish(modelName, state)
+        }
+      },
+      FINAL_MEMORY_REFRESH_DELAY_MS,
     )
   }
 
@@ -628,7 +697,7 @@ object AgentPerformanceCoordinator {
     AgentDiagnosticsLogger.log(
       context = state.context,
       category = "agent.performance.summary",
-      message = "MCP202 performance trace completed for $modelName",
+      message = "MCP204 performance trace completed for $modelName",
       detail = report,
     )
   }
@@ -650,7 +719,7 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
         onClick = { expanded = !expanded },
         modifier = Modifier.fillMaxWidth(),
       ) {
-        Text(if (expanded) "MCP202 性能诊断：点击收起" else "MCP202 性能诊断：点击展开")
+        Text(if (expanded) "MCP204 性能诊断：点击收起" else "MCP204 性能诊断：点击展开")
       }
 
       AnimatedVisibility(visible = expanded) {
@@ -672,7 +741,7 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
               val clipboard =
                 context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
               clipboard.setPrimaryClip(
-                ClipData.newPlainText("MCP202 Agent Performance Diagnostics", reportText)
+                ClipData.newPlainText("MCP204 Agent Performance Diagnostics", reportText)
               )
               copied = true
             },
