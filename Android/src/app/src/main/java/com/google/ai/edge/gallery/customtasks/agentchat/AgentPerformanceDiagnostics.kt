@@ -44,9 +44,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -68,7 +68,7 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
 
-private const val DIAGNOSTICS_SCHEMA = "mcp205.agent_perf.v3"
+private const val DIAGNOSTICS_SCHEMA = "mcp206.agent_perf.v4"
 private const val LITERT_LM_VERSION = "0.15.0"
 private const val LITERT_VERSION = "2.1.6"
 private const val FINALIZATION_DELAY_MS = 1200L
@@ -103,7 +103,7 @@ private data class MemorySnapshot(
 )
 
 /**
- * Per-request MCP205 Agent performance trace.
+ * Per-request MCP206 Agent performance trace.
  *
  * Privacy rule: this class stores lengths and timings only. It never stores user prompts, tool
  * arguments, tool results, workspace file contents, paths, secrets, API keys, or access tokens.
@@ -280,7 +280,7 @@ class AgentPerformanceTrace(
       }
 
     return buildString {
-      appendLine("=== MCP205 Agent 性能诊断 ===")
+      appendLine("=== MCP206 Agent 性能诊断 ===")
       appendLine("schema=$DIAGNOSTICS_SCHEMA")
       appendLine("request_id=$requestId")
       appendLine("status=$finalStatus")
@@ -324,7 +324,7 @@ class AgentPerformanceTrace(
       )
       appendLine()
 
-      appendLine("[mcp205_runtime]")
+      appendLine("[mcp206_runtime]")
       appendLine("session_id=${compatRuntime?.sessionId ?: "unavailable"}")
       appendLine("user_turn_index=${valueOrUnavailable(compatRuntime?.userTurnIndex)}")
       appendLine(
@@ -370,6 +370,7 @@ class AgentPerformanceTrace(
       appendLine(
         "continuation_effective_input_chars=${valueOrUnavailable(compatRuntime?.continuationEffectiveInputChars)}"
       )
+      appendLine("continuation_session_history_included=false")
       appendLine("compat_history_step_count=${valueOrUnavailable(compatRuntime?.historyStepCount)}")
       appendLine("compat_history_chars=${valueOrUnavailable(compatRuntime?.historyChars)}")
       appendLine(
@@ -449,7 +450,7 @@ class AgentPerformanceTrace(
       appendLine(
         "privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged"
       )
-      append("=== MCP205 Agent 性能诊断结束 ===")
+      append("=== MCP206 Agent 性能诊断结束 ===")
     }
   }
 
@@ -549,7 +550,7 @@ private data class ToolStartState(
   val startNanos: Long,
 )
 
-/** Process-local MCP205 bridge between Agent UI, LiteRT-LM callbacks, and existing tool logs. */
+/** Process-local MCP206 bridge between Agent UI, LiteRT-LM callbacks, and existing tool logs. */
 object AgentPerformanceCoordinator {
   val reports = mutableStateMapOf<String, String>()
   val sessionReports = mutableStateMapOf<String, String>()
@@ -773,7 +774,7 @@ object AgentPerformanceCoordinator {
     AgentDiagnosticsLogger.log(
       context = state.context,
       category = "agent.performance.summary",
-      message = "MCP205 performance trace completed for $modelName",
+      message = "MCP206 performance trace completed for $modelName",
       detail = report,
     )
   }
@@ -801,8 +802,8 @@ object AgentPerformanceCoordinator {
     val currentTurn = runtimeSnapshot?.userTurnIndex ?: allReports.size
     sessionReports[modelName] =
       buildString {
-        appendLine("=== MCP205 Agent 会话性能诊断 ===")
-        appendLine("schema=mcp205.agent_session_perf.v1")
+        appendLine("=== MCP206 Agent 会话性能诊断 ===")
+        appendLine("schema=mcp206.agent_session_perf.v2")
         appendLine("model_name=$modelName")
         appendLine("session_id=$sessionId")
         appendLine("current_user_turn_index=$currentTurn")
@@ -815,7 +816,7 @@ object AgentPerformanceCoordinator {
           appendLine("--- USER_TURN_${index + 1} ---")
           appendLine(report)
         }
-        append("=== MCP205 Agent 会话性能诊断结束 ===")
+        append("=== MCP206 Agent 会话性能诊断结束 ===")
       }
   }
 
@@ -849,9 +850,9 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
       reportText
     }
 
-  var expanded by remember(reportText) { mutableStateOf(false) }
-  var copiedCurrent by remember(reportText) { mutableStateOf(false) }
-  var copiedSession by remember(sessionReportText) { mutableStateOf(false) }
+  var expanded by remember { mutableStateOf(false) }
+  var copiedCurrent by remember { mutableStateOf(false) }
+  var copiedSession by remember { mutableStateOf(false) }
 
   Card(modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
     Column(
@@ -860,26 +861,74 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
     ) {
       val expandLabel =
         if (expanded) {
-          "收起 MCP205 Agent 性能诊断"
+          "收起 MCP206 Agent 性能诊断"
         } else {
-          "展开 MCP205 Agent 性能诊断"
+          "展开 MCP206 Agent 性能诊断"
         }
       FilledTonalButton(
         onClick = { expanded = !expanded },
         modifier =
-          Modifier.fillMaxWidth().clearAndSetSemantics {
+          Modifier.fillMaxWidth().semantics {
             role = Role.Button
             contentDescription = expandLabel
             stateDescription = if (expanded) "已展开" else "已收起"
           },
       ) {
-        Text(if (expanded) "MCP205 性能诊断：点击收起" else "MCP205 性能诊断：点击展开")
+        Text(if (expanded) "MCP206 性能诊断：点击收起" else "MCP206 性能诊断：点击展开")
+      }
+
+      val currentCopyLabel =
+        if (copiedCurrent) {
+          "本轮性能诊断已复制"
+        } else {
+          "复制本轮性能诊断"
+        }
+      Button(
+        onClick = {
+          val clipboard =
+            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+          clipboard.setPrimaryClip(
+            ClipData.newPlainText("MCP206 Agent Current Request Diagnostics", reportText)
+          )
+          copiedCurrent = true
+        },
+        modifier =
+          Modifier.fillMaxWidth().semantics {
+            role = Role.Button
+            contentDescription = currentCopyLabel
+          },
+      ) {
+        Text(currentCopyLabel)
+      }
+
+      val sessionCopyLabel =
+        if (copiedSession) {
+          "本会话性能诊断已复制"
+        } else {
+          "复制本会话性能诊断"
+        }
+      Button(
+        onClick = {
+          val clipboard =
+            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+          clipboard.setPrimaryClip(
+            ClipData.newPlainText("MCP206 Agent Session Diagnostics", sessionReportText)
+          )
+          copiedSession = true
+        },
+        modifier =
+          Modifier.fillMaxWidth().semantics {
+            role = Role.Button
+            contentDescription = sessionCopyLabel
+          },
+      ) {
+        Text(sessionCopyLabel)
       }
 
       AnimatedVisibility(visible = expanded) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Text(
-            "下面显示当前用户任务的完整性能诊断。可复制本轮，也可复制当前聊天会话中所有用户轮次的诊断。",
+            "下面显示当前用户任务的完整性能诊断。复制按钮常驻在上方，不依赖展开状态。",
             style = MaterialTheme.typography.bodyMedium,
           )
           SelectionContainer {
@@ -889,54 +938,6 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
               fontSize = 12.sp,
               lineHeight = 17.sp,
             )
-          }
-
-          val currentCopyLabel =
-            if (copiedCurrent) {
-              "本轮性能诊断已复制"
-            } else {
-              "复制本轮性能诊断"
-            }
-          Button(
-            onClick = {
-              val clipboard =
-                context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-              clipboard.setPrimaryClip(
-                ClipData.newPlainText("MCP205 Agent Current Request Diagnostics", reportText)
-              )
-              copiedCurrent = true
-            },
-            modifier =
-              Modifier.fillMaxWidth().clearAndSetSemantics {
-                role = Role.Button
-                contentDescription = currentCopyLabel
-              },
-          ) {
-            Text(currentCopyLabel)
-          }
-
-          val sessionCopyLabel =
-            if (copiedSession) {
-              "本会话性能诊断已复制"
-            } else {
-              "复制本会话性能诊断"
-            }
-          Button(
-            onClick = {
-              val clipboard =
-                context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-              clipboard.setPrimaryClip(
-                ClipData.newPlainText("MCP205 Agent Session Diagnostics", sessionReportText)
-              )
-              copiedSession = true
-            },
-            modifier =
-              Modifier.fillMaxWidth().clearAndSetSemantics {
-                role = Role.Button
-                contentDescription = sessionCopyLabel
-              },
-          ) {
-            Text(sessionCopyLabel)
           }
         }
       }
