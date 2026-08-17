@@ -208,7 +208,7 @@ object LlmChatModelHelper : LlmModelHelper {
       )
       Log.d(
         TAG,
-        "MCP207 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
+        "MCP208 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
       )
     } catch (e: Exception) {
       ExperimentalFlags.enableSpeculativeDecoding = false
@@ -319,6 +319,7 @@ object LlmChatModelHelper : LlmModelHelper {
     instance.conversation.cancelProcess()
   }
 
+  @OptIn(ExperimentalApi::class)
   override fun runInference(
     model: Model,
     input: String,
@@ -356,8 +357,19 @@ object LlmChatModelHelper : LlmModelHelper {
     val compatRuntime = AgentCompatRuntimeCoordinator.snapshot(model.name)
     val forceContinuationThinkingOff =
       compatRuntime?.lastFreshConversationReason == COMPAT_FRESH_REASON_TOOL_CONTINUATION
-    val thinkingOverrideLabel =
-      if (forceContinuationThinkingOff) "disabled_explicit_continuation" else "runtime_default"
+
+    val effectiveExtraContext =
+      mutableMapOf<String, Any>().apply {
+        extraContext?.forEach { (key, value) -> put(key, value) }
+        if (forceContinuationThinkingOff) {
+          // Gemma 4 uses enable_thinking in its Jinja chat template. Keep the template and the
+          // native decoding configuration aligned; either layer alone proved insufficient on
+          // MCP207 after a COMPAT tool result.
+          put("enable_thinking", false)
+          put("preserve_thinking", false)
+          put("thinking_token_budget", 0)
+        }
+      }
 
     val conversation = instance.conversation
     val messageToSend =
@@ -375,6 +387,27 @@ object LlmChatModelHelper : LlmModelHelper {
           }
           Message.user(Contents.of(contents))
         }
+
+    val thinkingOverrideLabel =
+      if (forceContinuationThinkingOff) {
+        val renderAudit =
+          runCatching {
+              val rendered =
+                conversation.renderMessageIntoString(
+                  message = messageToSend,
+                  extraContext = effectiveExtraContext,
+                )
+              val lastThoughtOpen = rendered.lastIndexOf("<|channel>thought\n")
+              val lastChannelClose = rendered.lastIndexOf("<channel|>")
+              val openThoughtAtTail = lastThoughtOpen >= 0 && lastThoughtOpen > lastChannelClose
+              val closedThoughtCue = rendered.contains("<|channel>thought\n<channel|>")
+              "render_chars=${rendered.length};render_open_thought=$openThoughtAtTail;render_closed_thought_cue=$closedThoughtCue"
+            }
+            .getOrElse { "render_audit_error=${it.javaClass.simpleName}" }
+        "disabled_template_native_budget0_continuation;$renderAudit"
+      } else {
+        "runtime_default"
+      }
 
     AgentPerformanceCoordinator.onInferenceSubmitted(
       modelName = model.name,
@@ -411,7 +444,7 @@ object LlmChatModelHelper : LlmModelHelper {
             if (decision.blockedRepeatedToolCall) {
               val errorMessage =
                 "兼容工具调用已停止：检测到连续三次完全相同的工具调用，已在再次执行前拦截，避免重复操作。"
-              Log.w(TAG, "MCP207 blocked repeated COMPAT tool call for '${model.name}'.")
+              Log.w(TAG, "MCP208 blocked repeated COMPAT tool call for '${model.name}'.")
               onError(errorMessage)
               return
             }
@@ -431,10 +464,10 @@ object LlmChatModelHelper : LlmModelHelper {
             }
           }
         },
-      extraContext = extraContext ?: emptyMap(),
+      extraContext = effectiveExtraContext,
       thinkingConfig =
         if (forceContinuationThinkingOff) {
-          ThinkingConfig(enableThinking = false)
+          ThinkingConfig(enableThinking = false, thinkingTokenBudget = 0)
         } else {
           null
         },
@@ -476,7 +509,7 @@ object LlmChatModelHelper : LlmModelHelper {
     )
     Log.d(
       TAG,
-      "MCP207 explicit COMPAT fresh conversation for '${model.name}': reason=${prepared.freshConversationReason} reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms rawChars=${prepared.rawInputChars} effectiveChars=${prepared.effectiveInputChars} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
+      "MCP208 explicit COMPAT fresh conversation for '${model.name}': reason=${prepared.freshConversationReason} reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms rawChars=${prepared.rawInputChars} effectiveChars=${prepared.effectiveInputChars} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
     )
     return prepared.input
   }
