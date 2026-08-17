@@ -24,6 +24,7 @@ import com.google.ai.edge.gallery.common.cleanUpMediapipeTaskErrorMessage
 import com.google.ai.edge.gallery.customtasks.agentchat.AgentCompatRuntimeCoordinator
 import com.google.ai.edge.gallery.customtasks.agentchat.AgentPerformanceCoordinator
 import com.google.ai.edge.gallery.customtasks.agentchat.COMPAT_FRESH_REASON_TOOL_CONTINUATION
+import com.google.ai.edge.gallery.customtasks.agentchat.COMPAT_FRESH_REASON_TOP_LEVEL
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.DEFAULT_MAX_TOKEN
@@ -59,6 +60,11 @@ private const val COMPAT_RUNTIME_PROMPT_OVERHEAD_TOKENS = 1600
 private const val DEFAULT_COMPAT_HISTORY_BUDGET_CHARS = 3600
 private const val MIN_COMPAT_HISTORY_BUDGET_CHARS = 1600
 private const val MAX_COMPAT_HISTORY_BUDGET_CHARS = 8000
+private const val COMPAT_INSTRUCTIONS_MARKER = "COMPAT_AGENT_INSTRUCTIONS"
+private const val COMPAT_USER_REQUEST_SEPARATOR = "\n\nUSER_REQUEST\n"
+private const val COMPAT_AVAILABLE_TOOLS_MARKER = "Available compatibility tools:"
+private const val COMPAT_ENABLED_SKILLS_MARKER = "Enabled skills for this session:"
+private const val COMPAT_NEXT_ACTION_MARKER = "\n\nNEXT_ACTION\n"
 
 data class LlmModelInstance(val engine: Engine, var conversation: Conversation)
 
@@ -79,7 +85,6 @@ object LlmChatModelHelper : LlmModelHelper {
     enableConversationConstrainedDecoding: Boolean,
     coroutineScope: CoroutineScope?,
   ) {
-    // Prepare options.
     val configuredContextWindow = model.getConfiguredContextWindow()
     val maxOutputTokens =
       model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = DEFAULT_MAX_TOKEN).let {
@@ -130,8 +135,8 @@ object LlmChatModelHelper : LlmModelHelper {
       EngineConfig(
         modelPath = modelPath,
         backend = preferredBackend,
-        visionBackend = if (shouldEnableImage) visionBackend else null, // must be GPU for Gemma 3n
-        audioBackend = if (shouldEnableAudio) Backend.CPU() else null, // must be CPU for Gemma 3n
+        visionBackend = if (shouldEnableImage) visionBackend else null,
+        audioBackend = if (shouldEnableAudio) Backend.CPU() else null,
         maxNumTokens = engineMaxNumTokens,
         cacheDir =
           if (modelPath.startsWith("/data/local/tmp"))
@@ -139,7 +144,6 @@ object LlmChatModelHelper : LlmModelHelper {
           else null,
       )
 
-    // Check if the model file supports speculative decoding.
     var supportsSpeculativeDecoding = false
     try {
       com.google.ai.edge.litertlm.Capabilities(modelPath).use {
@@ -148,11 +152,9 @@ object LlmChatModelHelper : LlmModelHelper {
     } catch (e: Exception) {
       // Ignore exceptions and assume not supported.
     }
-    // Create an instance of LiteRT LM engine and conversation.
+
     try {
       var speculativeDecoding = false
-      // Check if the model supports speculative decoding for the given task type and if the
-      // speculative decoding is enabled in the settings.
       if (
         supportsSpeculativeDecoding &&
           model.capabilityToTaskTypes[ModelCapability.SPECULATIVE_DECODING]?.contains(taskId) == true
@@ -208,7 +210,7 @@ object LlmChatModelHelper : LlmModelHelper {
       )
       Log.d(
         TAG,
-        "MCP208 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
+        "MCP209 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
       )
     } catch (e: Exception) {
       ExperimentalFlags.enableSpeculativeDecoding = false
@@ -219,7 +221,7 @@ object LlmChatModelHelper : LlmModelHelper {
     onDone("")
   }
 
-  @OptIn(ExperimentalApi::class) // opt-in experimental flags
+  @OptIn(ExperimentalApi::class)
   override fun resetConversation(
     model: Model,
     supportImage: Boolean,
@@ -241,9 +243,7 @@ object LlmChatModelHelper : LlmModelHelper {
       val topP = model.getFloatConfigValue(key = ConfigKeys.TOPP, defaultValue = DEFAULT_TOPP)
       val temperature =
         model.getFloatConfigValue(key = ConfigKeys.TEMPERATURE, defaultValue = DEFAULT_TEMPERATURE)
-      val shouldEnableImage = supportImage
-      val shouldEnableAudio = supportAudio
-      Log.d(TAG, "Enable image: $shouldEnableImage, enable audio: $shouldEnableAudio")
+      Log.d(TAG, "Enable image: $supportImage, enable audio: $supportAudio")
 
       val accelerator =
         model.getStringConfigValue(
@@ -289,13 +289,11 @@ object LlmChatModelHelper : LlmModelHelper {
     }
 
     val instance = model.instance as LlmModelInstance
-
     try {
       instance.conversation.close()
     } catch (e: Exception) {
       Log.e(TAG, "Failed to close the conversation: ${e.message}")
     }
-
     try {
       instance.engine.close()
     } catch (e: Exception) {
@@ -303,9 +301,7 @@ object LlmChatModelHelper : LlmModelHelper {
     }
 
     val onCleanUp = cleanUpListeners.remove(model.name)
-    if (onCleanUp != null) {
-      onCleanUp()
-    }
+    if (onCleanUp != null) onCleanUp()
     AgentCompatRuntimeCoordinator.clear(model.name)
     model.instance = null
     LlmChatPerformanceRegistry.clear(model.name)
@@ -348,23 +344,30 @@ object LlmChatModelHelper : LlmModelHelper {
         prepareCompatAgentInput(model = model, input = input)
       } catch (e: Exception) {
         AgentCompatRuntimeCoordinator.onGenerationFailed(model.name)
-        val errorMessage = "Failed to prepare COMPAT continuation: ${e.message ?: "Unknown error"}"
+        val errorMessage = "Failed to prepare COMPAT input: ${e.message ?: "Unknown error"}"
         AgentPerformanceCoordinator.finishWithError(model.name, errorMessage.length)
         onError(errorMessage)
         return
       }
 
     val compatRuntime = AgentCompatRuntimeCoordinator.snapshot(model.name)
-    val forceContinuationThinkingOff =
-      compatRuntime?.lastFreshConversationReason == COMPAT_FRESH_REASON_TOOL_CONTINUATION
+    val compatReason = compatRuntime?.lastFreshConversationReason
+    val isCompatPass =
+      compatReason == COMPAT_FRESH_REASON_TOP_LEVEL ||
+        compatReason == COMPAT_FRESH_REASON_TOOL_CONTINUATION
+    val compatPassKind =
+      when (compatReason) {
+        COMPAT_FRESH_REASON_TOP_LEVEL -> "top_level"
+        COMPAT_FRESH_REASON_TOOL_CONTINUATION -> "continuation"
+        else -> "none"
+      }
 
     val effectiveExtraContext =
       mutableMapOf<String, Any>().apply {
         extraContext?.forEach { (key, value) -> put(key, value) }
-        if (forceContinuationThinkingOff) {
-          // Gemma 4 uses enable_thinking in its Jinja chat template. Keep the template and the
-          // native decoding configuration aligned; either layer alone proved insufficient on
-          // MCP207 after a COMPAT tool result.
+        if (isCompatPass) {
+          // MCP209: COMPAT is a latency-first mode. Hard-disable Gemma 4 thinking at both the Jinja
+          // template and native decoding layers for every COMPAT pass, including the first pass.
           put("enable_thinking", false)
           put("preserve_thinking", false)
           put("thinking_token_budget", 0)
@@ -376,20 +379,14 @@ object LlmChatModelHelper : LlmModelHelper {
       message
         ?: run {
           val contents = mutableListOf<Content>()
-          for (image in images) {
-            contents.add(Content.ImageBytes(image.toPngByteArray()))
-          }
-          for (audioClip in audioClips) {
-            contents.add(Content.AudioBytes(audioClip))
-          }
-          if (effectiveInput.trim().isNotEmpty()) {
-            contents.add(Content.Text(effectiveInput))
-          }
+          for (image in images) contents.add(Content.ImageBytes(image.toPngByteArray()))
+          for (audioClip in audioClips) contents.add(Content.AudioBytes(audioClip))
+          if (effectiveInput.trim().isNotEmpty()) contents.add(Content.Text(effectiveInput))
           Message.user(Contents.of(contents))
         }
 
     val thinkingOverrideLabel =
-      if (forceContinuationThinkingOff) {
+      if (isCompatPass) {
         val renderAudit =
           runCatching {
               val rendered =
@@ -404,7 +401,7 @@ object LlmChatModelHelper : LlmModelHelper {
               "render_chars=${rendered.length};render_open_thought=$openThoughtAtTail;render_closed_thought_cue=$closedThoughtCue"
             }
             .getOrElse { "render_audit_error=${it.javaClass.simpleName}" }
-        "disabled_template_native_budget0_continuation;$renderAudit"
+        "disabled_compat_global_template_native_budget0_$compatPassKind;$renderAudit"
       } else {
         "runtime_default"
       }
@@ -444,7 +441,7 @@ object LlmChatModelHelper : LlmModelHelper {
             if (decision.blockedRepeatedToolCall) {
               val errorMessage =
                 "兼容工具调用已停止：检测到连续三次完全相同的工具调用，已在再次执行前拦截，避免重复操作。"
-              Log.w(TAG, "MCP208 blocked repeated COMPAT tool call for '${model.name}'.")
+              Log.w(TAG, "MCP209 blocked repeated COMPAT tool call for '${model.name}'.")
               onError(errorMessage)
               return
             }
@@ -466,7 +463,7 @@ object LlmChatModelHelper : LlmModelHelper {
         },
       extraContext = effectiveExtraContext,
       thinkingConfig =
-        if (forceContinuationThinkingOff) {
+        if (isCompatPass) {
           ThinkingConfig(enableThinking = false, thinkingTokenBudget = 0)
         } else {
           null
@@ -476,14 +473,16 @@ object LlmChatModelHelper : LlmModelHelper {
 
   private fun prepareCompatAgentInput(model: Model, input: String): String {
     val prepareStartedNanos = SystemClock.elapsedRealtimeNanos()
+    val compactedRawInput = compactCompatEnvelope(input)
     val prepared =
       AgentCompatRuntimeCoordinator.prepareInput(
         modelName = model.name,
-        rawInput = input,
+        rawInput = compactedRawInput,
         historyBudgetChars = resolveCompatRuntimeHistoryBudget(model),
       )
+    val finalInput = compactPreparedCompatInput(prepared.input)
     if (!prepared.requiresFreshConversation) {
-      return prepared.input
+      return finalInput
     }
 
     val resetStartedNanos = SystemClock.elapsedRealtimeNanos()
@@ -502,16 +501,120 @@ object LlmChatModelHelper : LlmModelHelper {
       modelName = model.name,
       prepareMs = prepareMs,
       resetMs = resetMs,
-      rawInputChars = prepared.rawInputChars,
-      effectiveInputChars = prepared.effectiveInputChars,
+      rawInputChars = compactedRawInput.length,
+      effectiveInputChars = finalInput.length,
       historyStepCount = prepared.historyStepCount,
       historyChars = prepared.historyChars,
     )
     Log.d(
       TAG,
-      "MCP208 explicit COMPAT fresh conversation for '${model.name}': reason=${prepared.freshConversationReason} reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms rawChars=${prepared.rawInputChars} effectiveChars=${prepared.effectiveInputChars} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
+      "MCP209 COMPAT fresh conversation for '${model.name}': reason=${prepared.freshConversationReason} reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms originalRawChars=${input.length} compactRawChars=${compactedRawInput.length} finalChars=${finalInput.length} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
     )
-    return prepared.input
+    return finalInput
+  }
+
+  /**
+   * MCP209 latency optimization: compact only the fixed COMPAT protocol envelope before the
+   * coordinator captures it as instructionPrefix. Tool names and JSON argument schemas are kept
+   * verbatim; descriptive prose and full skill descriptions are shortened. This directly reduces
+   * every top-level and tool-continuation prefill without changing LiteRT-LM or model versions.
+   */
+  private fun compactCompatEnvelope(input: String): String {
+    val trimmed = input.trimStart()
+    if (!trimmed.startsWith(COMPAT_INSTRUCTIONS_MARKER)) return input
+    val separatorIndex = input.indexOf(COMPAT_USER_REQUEST_SEPARATOR)
+    if (separatorIndex < 0) return input
+    val markerIndex = input.indexOf(COMPAT_INSTRUCTIONS_MARKER)
+    if (markerIndex < 0 || markerIndex >= separatorIndex) return input
+
+    val payloadStart = markerIndex + COMPAT_INSTRUCTIONS_MARKER.length
+    val payload = input.substring(payloadStart, separatorIndex).trim()
+    val compactPayload = compactCompatInstructionPayload(payload)
+    if (compactPayload == payload) return input
+    val userRequest = input.substring(separatorIndex + COMPAT_USER_REQUEST_SEPARATOR.length)
+    return buildString {
+      append(COMPAT_INSTRUCTIONS_MARKER)
+      append('\n')
+      append(compactPayload)
+      append(COMPAT_USER_REQUEST_SEPARATOR)
+      append(userRequest)
+    }
+  }
+
+  private fun compactCompatInstructionPayload(payload: String): String {
+    val toolsMarkerIndex = payload.indexOf(COMPAT_AVAILABLE_TOOLS_MARKER)
+    val skillsMarkerIndex = payload.indexOf(COMPAT_ENABLED_SKILLS_MARKER)
+    if (toolsMarkerIndex < 0 || skillsMarkerIndex <= toolsMarkerIndex) return payload
+
+    val toolsStart = toolsMarkerIndex + COMPAT_AVAILABLE_TOOLS_MARKER.length
+    val toolsSection = payload.substring(toolsStart, skillsMarkerIndex).trim()
+    val skillsStart = skillsMarkerIndex + COMPAT_ENABLED_SKILLS_MARKER.length
+    val skillsSection = payload.substring(skillsStart).trim()
+    val compactTools = compactCompatToolLines(toolsSection)
+    val compactSkills =
+      skillsSection.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .map { line ->
+          if (line.startsWith("- ") && line.contains(':')) {
+            line.substringBefore(':').trim()
+          } else {
+            line
+          }
+        }
+        .joinToString("\n")
+        .ifBlank { "- none" }
+
+    return """
+Qwen-compatible tool mode. Reply in the user's language. Thinking is off.
+If a tool is needed, output ONLY <tool_call>{"tool":"NAME","arguments":{...}}</tool_call>. One tool per turn; never mix prose with a tool call. Use enabled tools only. After TOOL_RESULT, either make one next tool call or give the final answer. Do not repeat an identical call without new information. For web search use search_web. Stop after the final answer.
+
+Available compatibility tools:
+$compactTools
+
+Enabled skills for this session:
+$compactSkills
+"""
+      .trimIndent()
+  }
+
+  private fun compactCompatToolLines(toolsSection: String): String {
+    return toolsSection.lineSequence()
+      .map { it.trim() }
+      .filter { it.isNotBlank() }
+      .map { line ->
+        when {
+          line.startsWith("- Media Toolbox routing rule:") -> line
+          line.contains("MUST") -> line
+          line.startsWith("- ") && line.contains(" arguments: ") ->
+            line.substringBefore(" . ").replace(" arguments: ", " ")
+          else -> line
+        }
+      }
+      .joinToString("\n")
+      .ifBlank { "- No compatibility tools enabled." }
+  }
+
+  /** Shrink the per-continuation control tail after the coordinator has assembled TOOL_HISTORY. */
+  private fun compactPreparedCompatInput(input: String): String {
+    val markerIndex = input.indexOf(COMPAT_NEXT_ACTION_MARKER)
+    if (markerIndex < 0) return input
+    val prefix = input.substring(0, markerIndex).trimEnd()
+    return buildString {
+      append(prefix)
+      append("\n\nNEXT_ACTION\n")
+      append(
+        "Continue the current task. If complete, answer directly in the user's language and stop. "
+      )
+      append(
+        "If another enabled tool is required, output exactly one <tool_call> JSON block and no prose. "
+      )
+      append("Do not repeat an identical call without new information. ")
+      append("Preserve every XLSX 行事实 metric, unit, year, and value exactly. ")
+      append(
+        "If context_safety_note says truncated, use visible history only and mention the saved audit."
+      )
+    }
   }
 
   private fun resolveCompatRuntimeHistoryBudget(model: Model): Int {
