@@ -23,6 +23,7 @@ import android.util.Log
 import com.google.ai.edge.gallery.common.cleanUpMediapipeTaskErrorMessage
 import com.google.ai.edge.gallery.customtasks.agentchat.AgentCompatRuntimeCoordinator
 import com.google.ai.edge.gallery.customtasks.agentchat.AgentPerformanceCoordinator
+import com.google.ai.edge.gallery.customtasks.agentchat.COMPAT_FRESH_REASON_TOOL_CONTINUATION
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.DEFAULT_MAX_TOKEN
@@ -47,10 +48,10 @@ import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.ThinkingConfig
 import com.google.ai.edge.litertlm.ToolProvider
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 
 private const val TAG = "AGLlmChatModelHelper"
@@ -207,7 +208,7 @@ object LlmChatModelHelper : LlmModelHelper {
       )
       Log.d(
         TAG,
-        "MCP204 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
+        "MCP207 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
       )
     } catch (e: Exception) {
       ExperimentalFlags.enableSpeculativeDecoding = false
@@ -352,6 +353,12 @@ object LlmChatModelHelper : LlmModelHelper {
         return
       }
 
+    val compatRuntime = AgentCompatRuntimeCoordinator.snapshot(model.name)
+    val forceContinuationThinkingOff =
+      compatRuntime?.lastFreshConversationReason == COMPAT_FRESH_REASON_TOOL_CONTINUATION
+    val thinkingOverrideLabel =
+      if (forceContinuationThinkingOff) "disabled_explicit_continuation" else "runtime_default"
+
     val conversation = instance.conversation
     val messageToSend =
       message
@@ -372,55 +379,65 @@ object LlmChatModelHelper : LlmModelHelper {
     AgentPerformanceCoordinator.onInferenceSubmitted(
       modelName = model.name,
       inputChars = effectiveInput.length,
+      thinkingOverride = thinkingOverrideLabel,
     )
     var generatedChars = 0
     val generatedText = StringBuilder()
-    val firstTokenReported = AtomicBoolean(false)
 
     conversation.sendMessageAsync(
-      messageToSend,
-      object : MessageCallback {
-        override fun onMessage(message: Message) {
-          val text = message.toString()
-          generatedChars += text.length
-          generatedText.append(text)
-          if (firstTokenReported.compareAndSet(false, true)) {
-            AgentPerformanceCoordinator.onFirstToken(model.name)
-          }
-          resultListener(text, false, message.channels["thought"])
-        }
-
-        override fun onDone() {
-          val decision =
-            AgentCompatRuntimeCoordinator.onGenerationCompleted(
+      message = messageToSend,
+      callback =
+        object : MessageCallback {
+          override fun onMessage(message: Message) {
+            val text = message.toString()
+            val thought = message.channels["thought"].orEmpty()
+            generatedChars += text.length
+            generatedText.append(text)
+            AgentPerformanceCoordinator.onStreamChunk(
               modelName = model.name,
-              generatedText = generatedText.toString(),
+              visibleChars = text.length,
+              thoughtChars = thought.length,
             )
-          AgentPerformanceCoordinator.onInferenceDone(model.name, generatedChars)
-          if (decision.blockedRepeatedToolCall) {
-            val errorMessage =
-              "兼容工具调用已停止：检测到连续三次完全相同的工具调用，已在再次执行前拦截，避免重复操作。"
-            Log.w(TAG, "MCP204 blocked repeated COMPAT tool call for '${model.name}'.")
-            onError(errorMessage)
-            return
+            resultListener(text, false, thought.ifBlank { null })
           }
-          resultListener("", true, null)
-        }
 
-        override fun onError(throwable: Throwable) {
-          AgentCompatRuntimeCoordinator.onGenerationFailed(model.name)
-          if (throwable is CancellationException) {
-            Log.i(TAG, "The inference is cancelled.")
+          override fun onDone() {
+            val decision =
+              AgentCompatRuntimeCoordinator.onGenerationCompleted(
+                modelName = model.name,
+                generatedText = generatedText.toString(),
+              )
+            AgentPerformanceCoordinator.onInferenceDone(model.name, generatedChars)
+            if (decision.blockedRepeatedToolCall) {
+              val errorMessage =
+                "兼容工具调用已停止：检测到连续三次完全相同的工具调用，已在再次执行前拦截，避免重复操作。"
+              Log.w(TAG, "MCP207 blocked repeated COMPAT tool call for '${model.name}'.")
+              onError(errorMessage)
+              return
+            }
             resultListener("", true, null)
-          } else {
-            Log.e(TAG, "onError", throwable)
-            val errorMessage = "Error: ${throwable.message}"
-            AgentPerformanceCoordinator.finishWithError(model.name, errorMessage.length)
-            onError(errorMessage)
           }
-        }
-      },
-      extraContext ?: emptyMap(),
+
+          override fun onError(throwable: Throwable) {
+            AgentCompatRuntimeCoordinator.onGenerationFailed(model.name)
+            if (throwable is CancellationException) {
+              Log.i(TAG, "The inference is cancelled.")
+              resultListener("", true, null)
+            } else {
+              Log.e(TAG, "onError", throwable)
+              val errorMessage = "Error: ${throwable.message}"
+              AgentPerformanceCoordinator.finishWithError(model.name, errorMessage.length)
+              onError(errorMessage)
+            }
+          }
+        },
+      extraContext = extraContext ?: emptyMap(),
+      thinkingConfig =
+        if (forceContinuationThinkingOff) {
+          ThinkingConfig(enableThinking = false)
+        } else {
+          null
+        },
     )
   }
 
@@ -459,7 +476,7 @@ object LlmChatModelHelper : LlmModelHelper {
     )
     Log.d(
       TAG,
-      "MCP204 explicit COMPAT continuation for '${model.name}': reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms rawChars=${prepared.rawInputChars} effectiveChars=${prepared.effectiveInputChars} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
+      "MCP207 explicit COMPAT fresh conversation for '${model.name}': reason=${prepared.freshConversationReason} reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms rawChars=${prepared.rawInputChars} effectiveChars=${prepared.effectiveInputChars} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
     )
     return prepared.input
   }
