@@ -269,7 +269,7 @@ object AgentCompatRuntimeCoordinator {
   }
 
   @Synchronized
-  fun clear(modelName: String) {
+  internal fun clear(modelName: String) {
     states.remove(modelName)
     pendingPreSubmitWaitMs.remove(modelName)
   }
@@ -302,7 +302,11 @@ object AgentCompatRuntimeCoordinator {
           rawInput.substring(payloadStart + "payload:".length, instructionStart).trim()
         else -> rawInput.substring(payloadStart + "payload:".length).trim()
       }
-    return CompatToolHistoryEntry(toolName = toolName, status = status, payload = payload)
+    return CompatToolHistoryEntry(
+      toolName = toolName,
+      status = status,
+      payload = prioritizePayloadForHistory(payload),
+    )
   }
 
   private fun lineValue(text: String, prefix: String): String {
@@ -312,6 +316,29 @@ object AgentCompatRuntimeCoordinator {
       ?.removePrefix(prefix)
       ?.trim()
       .orEmpty()
+  }
+
+  private fun prioritizePayloadForHistory(payload: String): String {
+    if (!payload.contains("行事实")) return payload
+    val lines = payload.lines().map { it.trim() }.filter { it.isNotBlank() }
+    val factLines = lines.filter { it.contains("行事实") }
+    if (factLines.isEmpty()) return payload
+    val metadataLines =
+      lines.filter { line ->
+        !line.contains("行事实") &&
+          (
+            line.startsWith("Read ") ||
+              line.contains("工作表") ||
+              line.contains("表格") ||
+              line.contains("列") ||
+              line.contains("字段") ||
+              line.contains("单位") ||
+              line.contains("年份") ||
+              line.contains("指标") ||
+              line.contains("context_safety_note")
+          )
+      }
+    return (factLines + metadataLines).distinct().joinToString("\n").ifBlank { payload }
   }
 
   private fun buildHistorySection(
