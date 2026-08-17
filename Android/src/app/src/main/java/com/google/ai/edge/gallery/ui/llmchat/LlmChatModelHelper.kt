@@ -49,15 +49,23 @@ import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ToolProvider
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 
 private const val TAG = "AGLlmChatModelHelper"
+private const val COMPAT_INSTRUCTIONS_MARKER = "COMPAT_AGENT_INSTRUCTIONS"
+private const val COMPAT_USER_REQUEST_SEPARATOR = "\n\nUSER_REQUEST\n"
+private const val COMPAT_TOOL_RESULT_MARKER = "TOOL_RESULT"
 
 data class LlmModelInstance(val engine: Engine, var conversation: Conversation)
 
 object LlmChatModelHelper : LlmModelHelper {
   // Indexed by model name.
   private val cleanUpListeners: MutableMap<String, CleanUpListener> = mutableMapOf()
+
+  // MCP203: COMPAT tool continuations are made self-contained and run in a fresh Conversation.
+  // This avoids the pathological second-turn prefill/KV-cache path seen on large LiteRT-LM models.
+  private val compatInstructionPrefixes: MutableMap<String, String> = ConcurrentHashMap()
 
   @OptIn(ExperimentalApi::class) // opt-in experimental flags
   override fun initialize(
@@ -271,6 +279,7 @@ object LlmChatModelHelper : LlmModelHelper {
     } catch (e: Exception) {
       ExperimentalFlags.enableConversationConstrainedDecoding = false
       Log.d(TAG, "Failed to reset conversation", e)
+      throw e
     }
   }
 
@@ -297,6 +306,7 @@ object LlmChatModelHelper : LlmModelHelper {
     if (onCleanUp != null) {
       onCleanUp()
     }
+    compatInstructionPrefixes.remove(model.name)
     model.instance = null
     LlmChatPerformanceRegistry.clear(model.name)
 
@@ -332,6 +342,16 @@ object LlmChatModelHelper : LlmModelHelper {
       cleanUpListeners[model.name] = cleanUpListener
     }
 
+    val effectiveInput =
+      try {
+        prepareCompatAgentInput(model = model, input = input)
+      } catch (e: Exception) {
+        val errorMessage = "Failed to prepare COMPAT continuation: ${e.message ?: "Unknown error"}"
+        AgentPerformanceCoordinator.finishWithError(model.name, errorMessage.length)
+        onError(errorMessage)
+        return
+      }
+
     val conversation = instance.conversation
     val messageToSend =
       message
@@ -343,13 +363,16 @@ object LlmChatModelHelper : LlmModelHelper {
           for (audioClip in audioClips) {
             contents.add(Content.AudioBytes(audioClip))
           }
-          if (input.trim().isNotEmpty()) {
-            contents.add(Content.Text(input))
+          if (effectiveInput.trim().isNotEmpty()) {
+            contents.add(Content.Text(effectiveInput))
           }
           Message.user(Contents.of(contents))
         }
 
-    AgentPerformanceCoordinator.onInferenceSubmitted(modelName = model.name, inputChars = input.length)
+    AgentPerformanceCoordinator.onInferenceSubmitted(
+      modelName = model.name,
+      inputChars = effectiveInput.length,
+    )
     var generatedChars = 0
 
     conversation.sendMessageAsync(
@@ -381,6 +404,43 @@ object LlmChatModelHelper : LlmModelHelper {
       },
       extraContext ?: emptyMap(),
     )
+  }
+
+  private fun prepareCompatAgentInput(model: Model, input: String): String {
+    val trimmedInput = input.trimStart()
+    if (trimmedInput.startsWith(COMPAT_INSTRUCTIONS_MARKER)) {
+      val separatorIndex = input.indexOf(COMPAT_USER_REQUEST_SEPARATOR)
+      if (separatorIndex > 0) {
+        compatInstructionPrefixes[model.name] = input.substring(0, separatorIndex).trimEnd()
+      }
+      return input
+    }
+
+    val instructionPrefix = compatInstructionPrefixes[model.name]
+    if (
+      !instructionPrefix.isNullOrBlank() &&
+        trimmedInput.startsWith(COMPAT_TOOL_RESULT_MARKER)
+    ) {
+      val resetStartedNanos = SystemClock.elapsedRealtimeNanos()
+      resetConversation(
+        model = model,
+        supportImage = false,
+        supportAudio = false,
+        systemInstruction = null,
+        tools = listOf(),
+        enableConversationConstrainedDecoding = false,
+        initialMessages = listOf(),
+      )
+      val resetMs = elapsedMsSince(resetStartedNanos)
+      val isolatedInput = "$instructionPrefix\n\n$input"
+      Log.d(
+        TAG,
+        "MCP203 isolated COMPAT continuation for '${model.name}': reset=${"%.2f".format(resetMs)}ms rawChars=${input.length} effectiveChars=${isolatedInput.length}",
+      )
+      return isolatedInput
+    }
+
+    return input
   }
 
   private fun Bitmap.toPngByteArray(): ByteArray {
