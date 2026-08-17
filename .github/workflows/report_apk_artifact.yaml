@@ -15,20 +15,15 @@ jobs:
   report:
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve parent APK artifact and publish commit status
+      - name: Resolve target APK artifact and publish commit status
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_SHA: ${{ github.event.before }}
+          TARGET_SHA: bd2ab829b6a08d98df5ba2abc53056457a8f864a
           REPO: ${{ github.repository }}
           API: ${{ github.api_url }}
           SERVER: ${{ github.server_url }}
         run: |
           set -euo pipefail
-          if [ -z "$TARGET_SHA" ] || printf '%s' "$TARGET_SHA" | grep -Eq '^0+$'; then
-            echo "No parent SHA available for artifact lookup."
-            exit 1
-          fi
-
           RUN_ID=""
           RUN_NUMBER=""
           ARTIFACT_ID=""
@@ -42,10 +37,11 @@ jobs:
               "$API/repos/$REPO/actions/runs?head_sha=$TARGET_SHA&event=push&per_page=20")"
 
             read -r RUN_ID RUN_NUMBER < <(python3 -c '
-import json,sys
-j=json.load(sys.stdin)
+import json, os, sys
+j = json.load(sys.stdin)
+target = os.environ["TARGET_SHA"]
 for r in j.get("workflow_runs", []):
-    if r.get("name") == "Build Android APK" and r.get("head_sha") == "'"$TARGET_SHA"'":
+    if r.get("name") == "Build Android APK" and r.get("head_sha") == target:
         print(r.get("id", ""), r.get("run_number", ""))
         break
 ' <<< "$RUNS_JSON")
@@ -58,11 +54,12 @@ for r in j.get("workflow_runs", []):
                 "$API/repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100")"
 
               read -r ARTIFACT_ID ARTIFACT_NAME < <(python3 -c '
-import json,sys
-j=json.load(sys.stdin)
+import json, sys
+j = json.load(sys.stdin)
 for a in j.get("artifacts", []):
-    if a.get("name", "").startswith("local-agent-plaza-mcp-") and not a.get("expired", False):
-        print(a.get("id", ""), a.get("name", ""))
+    name = a.get("name", "")
+    if name.startswith("local-agent-plaza-mcp-") and not a.get("expired", False):
+        print(a.get("id", ""), name)
         break
 ' <<< "$ARTIFACTS_JSON")
             fi
@@ -81,12 +78,12 @@ for a in j.get("artifacts", []):
           DESCRIPTION="${DESCRIPTION:0:140}"
 
           python3 - "$TARGET_URL" "$DESCRIPTION" > /tmp/status.json <<'PY'
-import json,sys
+import json, sys
 print(json.dumps({
-  "state": "success",
-  "target_url": sys.argv[1],
-  "description": sys.argv[2],
-  "context": "mcp-apk-artifact"
+    "state": "success",
+    "target_url": sys.argv[1],
+    "description": sys.argv[2],
+    "context": "mcp-apk-artifact",
 }))
 PY
 
