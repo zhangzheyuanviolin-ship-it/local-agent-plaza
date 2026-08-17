@@ -21,6 +21,7 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.Log
 import com.google.ai.edge.gallery.common.cleanUpMediapipeTaskErrorMessage
+import com.google.ai.edge.gallery.customtasks.agentchat.AgentCompatRuntimeCoordinator
 import com.google.ai.edge.gallery.customtasks.agentchat.AgentPerformanceCoordinator
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.ConfigKeys
@@ -49,23 +50,20 @@ import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ToolProvider
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 
 private const val TAG = "AGLlmChatModelHelper"
-private const val COMPAT_INSTRUCTIONS_MARKER = "COMPAT_AGENT_INSTRUCTIONS"
-private const val COMPAT_USER_REQUEST_SEPARATOR = "\n\nUSER_REQUEST\n"
-private const val COMPAT_TOOL_RESULT_MARKER = "TOOL_RESULT"
+private const val COMPAT_RUNTIME_PROMPT_OVERHEAD_TOKENS = 1600
+private const val DEFAULT_COMPAT_HISTORY_BUDGET_CHARS = 3600
+private const val MIN_COMPAT_HISTORY_BUDGET_CHARS = 1600
+private const val MAX_COMPAT_HISTORY_BUDGET_CHARS = 8000
 
 data class LlmModelInstance(val engine: Engine, var conversation: Conversation)
 
 object LlmChatModelHelper : LlmModelHelper {
   // Indexed by model name.
   private val cleanUpListeners: MutableMap<String, CleanUpListener> = mutableMapOf()
-
-  // MCP203: COMPAT tool continuations are made self-contained and run in a fresh Conversation.
-  // This avoids the pathological second-turn prefill/KV-cache path seen on large LiteRT-LM models.
-  private val compatInstructionPrefixes: MutableMap<String, String> = ConcurrentHashMap()
 
   @OptIn(ExperimentalApi::class) // opt-in experimental flags
   override fun initialize(
@@ -209,7 +207,7 @@ object LlmChatModelHelper : LlmModelHelper {
       )
       Log.d(
         TAG,
-        "MCP202 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
+        "MCP204 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
       )
     } catch (e: Exception) {
       ExperimentalFlags.enableSpeculativeDecoding = false
@@ -285,6 +283,7 @@ object LlmChatModelHelper : LlmModelHelper {
 
   override fun cleanUp(model: Model, onDone: () -> Unit) {
     if (model.instance == null) {
+      AgentCompatRuntimeCoordinator.clear(model.name)
       return
     }
 
@@ -306,7 +305,7 @@ object LlmChatModelHelper : LlmModelHelper {
     if (onCleanUp != null) {
       onCleanUp()
     }
-    compatInstructionPrefixes.remove(model.name)
+    AgentCompatRuntimeCoordinator.clear(model.name)
     model.instance = null
     LlmChatPerformanceRegistry.clear(model.name)
 
@@ -346,6 +345,7 @@ object LlmChatModelHelper : LlmModelHelper {
       try {
         prepareCompatAgentInput(model = model, input = input)
       } catch (e: Exception) {
+        AgentCompatRuntimeCoordinator.onGenerationFailed(model.name)
         val errorMessage = "Failed to prepare COMPAT continuation: ${e.message ?: "Unknown error"}"
         AgentPerformanceCoordinator.finishWithError(model.name, errorMessage.length)
         onError(errorMessage)
@@ -374,6 +374,8 @@ object LlmChatModelHelper : LlmModelHelper {
       inputChars = effectiveInput.length,
     )
     var generatedChars = 0
+    val generatedText = StringBuilder()
+    val firstTokenReported = AtomicBoolean(false)
 
     conversation.sendMessageAsync(
       messageToSend,
@@ -381,16 +383,32 @@ object LlmChatModelHelper : LlmModelHelper {
         override fun onMessage(message: Message) {
           val text = message.toString()
           generatedChars += text.length
-          AgentPerformanceCoordinator.onFirstToken(model.name)
+          generatedText.append(text)
+          if (firstTokenReported.compareAndSet(false, true)) {
+            AgentPerformanceCoordinator.onFirstToken(model.name)
+          }
           resultListener(text, false, message.channels["thought"])
         }
 
         override fun onDone() {
+          val decision =
+            AgentCompatRuntimeCoordinator.onGenerationCompleted(
+              modelName = model.name,
+              generatedText = generatedText.toString(),
+            )
           AgentPerformanceCoordinator.onInferenceDone(model.name, generatedChars)
+          if (decision.blockedRepeatedToolCall) {
+            val errorMessage =
+              "兼容工具调用已停止：检测到连续三次完全相同的工具调用，已在再次执行前拦截，避免重复操作。"
+            Log.w(TAG, "MCP204 blocked repeated COMPAT tool call for '${model.name}'.")
+            onError(errorMessage)
+            return
+          }
           resultListener("", true, null)
         }
 
         override fun onError(throwable: Throwable) {
+          AgentCompatRuntimeCoordinator.onGenerationFailed(model.name)
           if (throwable is CancellationException) {
             Log.i(TAG, "The inference is cancelled.")
             resultListener("", true, null)
@@ -407,40 +425,59 @@ object LlmChatModelHelper : LlmModelHelper {
   }
 
   private fun prepareCompatAgentInput(model: Model, input: String): String {
-    val trimmedInput = input.trimStart()
-    if (trimmedInput.startsWith(COMPAT_INSTRUCTIONS_MARKER)) {
-      val separatorIndex = input.indexOf(COMPAT_USER_REQUEST_SEPARATOR)
-      if (separatorIndex > 0) {
-        compatInstructionPrefixes[model.name] = input.substring(0, separatorIndex).trimEnd()
-      }
-      return input
+    val prepareStartedNanos = SystemClock.elapsedRealtimeNanos()
+    val prepared =
+      AgentCompatRuntimeCoordinator.prepareInput(
+        modelName = model.name,
+        rawInput = input,
+        historyBudgetChars = resolveCompatRuntimeHistoryBudget(model),
+      )
+    if (!prepared.requiresFreshConversation) {
+      return prepared.input
     }
 
-    val instructionPrefix = compatInstructionPrefixes[model.name]
-    if (
-      !instructionPrefix.isNullOrBlank() &&
-        trimmedInput.startsWith(COMPAT_TOOL_RESULT_MARKER)
-    ) {
-      val resetStartedNanos = SystemClock.elapsedRealtimeNanos()
-      resetConversation(
-        model = model,
-        supportImage = false,
-        supportAudio = false,
-        systemInstruction = null,
-        tools = listOf(),
-        enableConversationConstrainedDecoding = false,
-        initialMessages = listOf(),
-      )
-      val resetMs = elapsedMsSince(resetStartedNanos)
-      val isolatedInput = "$instructionPrefix\n\n$input"
-      Log.d(
-        TAG,
-        "MCP203 isolated COMPAT continuation for '${model.name}': reset=${"%.2f".format(resetMs)}ms rawChars=${input.length} effectiveChars=${isolatedInput.length}",
-      )
-      return isolatedInput
-    }
+    val resetStartedNanos = SystemClock.elapsedRealtimeNanos()
+    resetConversation(
+      model = model,
+      supportImage = false,
+      supportAudio = false,
+      systemInstruction = null,
+      tools = listOf(),
+      enableConversationConstrainedDecoding = false,
+      initialMessages = listOf(),
+    )
+    val resetMs = elapsedMsSince(resetStartedNanos)
+    val prepareMs = elapsedMsSince(prepareStartedNanos)
+    AgentCompatRuntimeCoordinator.recordContinuationPreparation(
+      modelName = model.name,
+      prepareMs = prepareMs,
+      resetMs = resetMs,
+      rawInputChars = prepared.rawInputChars,
+      effectiveInputChars = prepared.effectiveInputChars,
+      historyStepCount = prepared.historyStepCount,
+      historyChars = prepared.historyChars,
+    )
+    Log.d(
+      TAG,
+      "MCP204 explicit COMPAT continuation for '${model.name}': reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms rawChars=${prepared.rawInputChars} effectiveChars=${prepared.effectiveInputChars} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
+    )
+    return prepared.input
+  }
 
-    return input
+  private fun resolveCompatRuntimeHistoryBudget(model: Model): Int {
+    val contextWindow = runCatching { model.getConfiguredContextWindow() }.getOrDefault(0)
+    if (contextWindow <= 0) return DEFAULT_COMPAT_HISTORY_BUDGET_CHARS
+    val reservedOutputTokens =
+      runCatching {
+          model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = DEFAULT_MAX_TOKEN)
+        }
+        .getOrDefault(DEFAULT_MAX_TOKEN)
+        .coerceAtLeast(512)
+    val availableHistoryTokens =
+      (contextWindow - reservedOutputTokens - COMPAT_RUNTIME_PROMPT_OVERHEAD_TOKENS)
+        .coerceAtLeast(900)
+    return (availableHistoryTokens * 1.25f).toInt()
+      .coerceIn(MIN_COMPAT_HISTORY_BUDGET_CHARS, MAX_COMPAT_HISTORY_BUDGET_CHARS)
   }
 
   private fun Bitmap.toPngByteArray(): ByteArray {
