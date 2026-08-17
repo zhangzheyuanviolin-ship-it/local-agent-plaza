@@ -16,6 +16,7 @@
 package com.google.ai.edge.gallery.customtasks.agentchat
 
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -32,6 +33,44 @@ class AgentCompatRuntimeCoordinatorTest {
   @After
   fun tearDown() {
     AgentCompatRuntimeCoordinator.clearAllForTest()
+  }
+
+  @Test
+  fun everyTopLevelTurnUsesFreshConversationAndCarriesBoundedSessionHistory() {
+    val first =
+      AgentCompatRuntimeCoordinator.prepareInput(
+        modelName = modelName,
+        rawInput = initialInput("列出工作区全部文件"),
+        historyBudgetChars = 3200,
+      )
+
+    assertTrue(first.requiresFreshConversation)
+    assertEquals(COMPAT_FRESH_REASON_TOP_LEVEL, first.freshConversationReason)
+    assertEquals(1, first.userTurnIndex)
+    assertEquals(0, first.sessionHistoryTurnCount)
+    assertFalse(first.input.contains("SESSION_HISTORY"))
+
+    AgentCompatRuntimeCoordinator.onGenerationCompleted(
+      modelName = modelName,
+      generatedText = "FIRST_TURN_FINAL_SENTINEL：工作区文件已经列出。",
+    )
+
+    val second =
+      AgentCompatRuntimeCoordinator.prepareInput(
+        modelName = modelName,
+        rawInput = initialInput("写一个自我介绍到 intro.txt"),
+        historyBudgetChars = 3200,
+      )
+
+    assertTrue(second.requiresFreshConversation)
+    assertEquals(COMPAT_FRESH_REASON_TOP_LEVEL, second.freshConversationReason)
+    assertEquals(2, second.userTurnIndex)
+    assertEquals(1, second.sessionHistoryTurnCount)
+    assertTrue(second.input.contains("SESSION_HISTORY"))
+    assertTrue(second.input.contains("FIRST_TURN_FINAL_SENTINEL"))
+    assertTrue(second.input.contains("列出工作区全部文件"))
+    assertTrue(second.input.contains("写一个自我介绍到 intro.txt"))
+    assertTrue(second.sessionHistoryChars <= 2600)
   }
 
   @Test
@@ -105,7 +144,8 @@ class AgentCompatRuntimeCoordinatorTest {
       )
       AgentCompatRuntimeCoordinator.prepareInput(
         modelName = modelName,
-        rawInput = toolResult("read_workspace_text_file", "STEP_${index}_MARKER_" + "x".repeat(1600)),
+        rawInput =
+          toolResult("read_workspace_text_file", "STEP_${index}_MARKER_" + "x".repeat(1600)),
         historyBudgetChars = 1800,
       )
     }
