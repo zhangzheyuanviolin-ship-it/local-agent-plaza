@@ -169,7 +169,13 @@ object AgentCompatRuntimeCoordinator {
           "If the task is still incomplete and another enabled compatibility tool is genuinely required, output exactly one <tool_call> JSON block and no prose. "
         )
         append(
-          "Do not repeat an identical tool call unless new information makes the repeat necessary. Do not output hidden reasoning, analysis, scratchpad text, or raw JSON outside the tool-call block."
+          "Do not repeat an identical tool call unless new information makes the repeat necessary. Do not output hidden reasoning, analysis, scratchpad text, or raw JSON outside the tool-call block.\n"
+        )
+        append(
+          "For every XLSX row-fact line containing 行事实, treat that single line as authoritative and preserve the exact metric name, unit, year, and value from the same line. "
+        )
+        append(
+          "If context_safety_note says tool output was truncated, answer only from the visible history and tell the user that the complete exact tool output is available in the saved audit file."
         )
       }
 
@@ -226,7 +232,7 @@ object AgentCompatRuntimeCoordinator {
   @Synchronized
   internal fun recordPreSubmitWait(modelName: String, elapsedMs: Double) {
     val safeMs = elapsedMs.coerceAtLeast(0.0)
-    pendingPreSubmitWaitMs.merge(modelName, safeMs) { current, added -> current + added }
+    pendingPreSubmitWaitMs[modelName] = (pendingPreSubmitWaitMs[modelName] ?: 0.0) + safeMs
   }
 
   @Synchronized
