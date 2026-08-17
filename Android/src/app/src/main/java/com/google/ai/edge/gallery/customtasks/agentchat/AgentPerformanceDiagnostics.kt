@@ -68,7 +68,7 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
 
-private const val DIAGNOSTICS_SCHEMA = "mcp206.agent_perf.v4"
+private const val DIAGNOSTICS_SCHEMA = "mcp207.agent_perf.v5"
 private const val LITERT_LM_VERSION = "0.15.0"
 private const val LITERT_VERSION = "2.1.6"
 private const val FINALIZATION_DELAY_MS = 1200L
@@ -80,7 +80,17 @@ private data class InferencePassTiming(
   val kind: String,
   val inputChars: Int,
   val submitNanos: Long,
-  var firstTokenNanos: Long? = null,
+  val thinkingOverride: String,
+  var firstCallbackNanos: Long? = null,
+  var firstVisibleNanos: Long? = null,
+  var firstThoughtNanos: Long? = null,
+  var lastVisibleNanos: Long? = null,
+  var lastThoughtNanos: Long? = null,
+  var callbackCount: Int = 0,
+  var visibleCallbackCount: Int = 0,
+  var thoughtCallbackCount: Int = 0,
+  var visibleChars: Int = 0,
+  var thoughtChars: Int = 0,
   var doneNanos: Long? = null,
   var outputChars: Int = 0,
 )
@@ -103,7 +113,7 @@ private data class MemorySnapshot(
 )
 
 /**
- * Per-request MCP206 Agent performance trace.
+ * Per-request MCP207 Agent performance trace.
  *
  * Privacy rule: this class stores lengths and timings only. It never stores user prompts, tool
  * arguments, tool results, workspace file contents, paths, secrets, API keys, or access tokens.
@@ -177,7 +187,7 @@ class AgentPerformanceTrace(
   }
 
   @Synchronized
-  fun markInferenceSubmitted(inputChars: Int) {
+  fun markInferenceSubmitted(inputChars: Int, thinkingOverride: String) {
     reopen()
     val kind = if (passes.isEmpty()) "initial" else "continuation"
     passes +=
@@ -186,15 +196,39 @@ class AgentPerformanceTrace(
         kind = kind,
         inputChars = inputChars,
         submitNanos = SystemClock.elapsedRealtimeNanos(),
+        thinkingOverride = thinkingOverride,
       )
   }
 
   @Synchronized
-  fun markFirstToken(): Boolean {
+  fun markStreamChunk(visibleChars: Int, thoughtChars: Int) {
     val pass = ensureOpenPass()
-    if (pass.firstTokenNanos != null) return false
-    pass.firstTokenNanos = SystemClock.elapsedRealtimeNanos()
-    captureMemoryAsync("first_token_${pass.index}")
+    val now = SystemClock.elapsedRealtimeNanos()
+    pass.callbackCount += 1
+    if (pass.firstCallbackNanos == null) {
+      pass.firstCallbackNanos = now
+      captureMemoryAsync("first_callback_${pass.index}")
+    }
+    if (visibleChars > 0) {
+      pass.visibleCallbackCount += 1
+      pass.visibleChars += visibleChars
+      if (pass.firstVisibleNanos == null) pass.firstVisibleNanos = now
+      pass.lastVisibleNanos = now
+    }
+    if (thoughtChars > 0) {
+      pass.thoughtCallbackCount += 1
+      pass.thoughtChars += thoughtChars
+      if (pass.firstThoughtNanos == null) pass.firstThoughtNanos = now
+      pass.lastThoughtNanos = now
+    }
+  }
+
+  @Synchronized
+  fun markLegacyFirstCallback(): Boolean {
+    val pass = ensureOpenPass()
+    if (pass.firstCallbackNanos != null) return false
+    pass.firstCallbackNanos = SystemClock.elapsedRealtimeNanos()
+    captureMemoryAsync("first_callback_${pass.index}")
     return true
   }
 
@@ -280,7 +314,7 @@ class AgentPerformanceTrace(
       }
 
     return buildString {
-      appendLine("=== MCP206 Agent 性能诊断 ===")
+      appendLine("=== MCP207 Agent 性能诊断 ===")
       appendLine("schema=$DIAGNOSTICS_SCHEMA")
       appendLine("request_id=$requestId")
       appendLine("status=$finalStatus")
@@ -307,7 +341,7 @@ class AgentPerformanceTrace(
       appendLine("original_input_chars=$originalInputChars")
       appendLine("runtime_input_chars=$runtimeInputChars")
       appendLine("compat_added_input_chars=${valueOrUnavailable(compatAddedInputChars)}")
-      appendLine("thinking_override=${if (toolMode == "COMPAT") "disabled" else "runtime_default"}")
+      appendLine("thinking_override=per_pass;see_stream_channels")
       appendLine()
 
       appendLine("[runtime_initialization]")
@@ -324,7 +358,7 @@ class AgentPerformanceTrace(
       )
       appendLine()
 
-      appendLine("[mcp206_runtime]")
+      appendLine("[mcp207_runtime]")
       appendLine("session_id=${compatRuntime?.sessionId ?: "unavailable"}")
       appendLine("user_turn_index=${valueOrUnavailable(compatRuntime?.userTurnIndex)}")
       appendLine(
@@ -386,16 +420,16 @@ class AgentPerformanceTrace(
       appendLine("llm_pass_count=${passes.size}")
       appendLine("continuation_count=${continuationPasses.size}")
       appendLine("initial_input_chars=${valueOrUnavailable(initialPass?.inputChars)}")
-      appendLine("initial_ttft_ms=${passTtft(initialPass)}")
-      appendLine("initial_decode_after_first_token_ms=${passDecode(initialPass)}")
+      appendLine("initial_ttft_ms=${passFirstCallbackTtft(initialPass)}")
+      appendLine("initial_decode_after_first_token_ms=${passDecodeFromFirstCallback(initialPass)}")
       appendLine("initial_total_generation_ms=${passTotal(initialPass)}")
       appendLine("initial_output_chars=${valueOrUnavailable(initialPass?.outputChars)}")
       for (pass in continuationPasses) {
         val continuationIndex = pass.index - 1
         appendLine("continuation_${continuationIndex}_input_chars=${pass.inputChars}")
-        appendLine("continuation_${continuationIndex}_ttft_ms=${passTtft(pass)}")
+        appendLine("continuation_${continuationIndex}_ttft_ms=${passFirstCallbackTtft(pass)}")
         appendLine(
-          "continuation_${continuationIndex}_decode_after_first_token_ms=${passDecode(pass)}"
+          "continuation_${continuationIndex}_decode_after_first_token_ms=${passDecodeFromFirstCallback(pass)}"
         )
         appendLine("continuation_${continuationIndex}_total_generation_ms=${passTotal(pass)}")
         appendLine("continuation_${continuationIndex}_output_chars=${pass.outputChars}")
@@ -406,6 +440,13 @@ class AgentPerformanceTrace(
       }
       appendLine("retry_count=$retryCount")
       appendLine("error_chars=$errorChars")
+      appendLine()
+
+      appendLine("[stream_channels]")
+      appendStreamPass(this, "initial", initialPass)
+      for (pass in continuationPasses) {
+        appendStreamPass(this, "continuation_${pass.index - 1}", pass)
+      }
       appendLine()
 
       appendLine("[tool_timing]")
@@ -450,8 +491,30 @@ class AgentPerformanceTrace(
       appendLine(
         "privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged"
       )
-      append("=== MCP206 Agent 性能诊断结束 ===")
+      append("=== MCP207 Agent 性能诊断结束 ===")
     }
+  }
+
+  private fun appendStreamPass(builder: StringBuilder, prefix: String, pass: InferencePassTiming?) {
+    builder.appendLine("${prefix}_thinking_override=${pass?.thinkingOverride ?: "unavailable"}")
+    builder.appendLine("${prefix}_first_callback_ttft_ms=${passFirstCallbackTtft(pass)}")
+    builder.appendLine("${prefix}_first_visible_ttft_ms=${passFirstVisibleTtft(pass)}")
+    builder.appendLine("${prefix}_first_thought_ttft_ms=${passFirstThoughtTtft(pass)}")
+    builder.appendLine("${prefix}_callback_count=${valueOrUnavailable(pass?.callbackCount)}")
+    builder.appendLine(
+      "${prefix}_visible_callback_count=${valueOrUnavailable(pass?.visibleCallbackCount)}"
+    )
+    builder.appendLine(
+      "${prefix}_thought_callback_count=${valueOrUnavailable(pass?.thoughtCallbackCount)}"
+    )
+    builder.appendLine("${prefix}_visible_chars=${valueOrUnavailable(pass?.visibleChars)}")
+    builder.appendLine("${prefix}_thought_chars=${valueOrUnavailable(pass?.thoughtChars)}")
+    builder.appendLine("${prefix}_thought_window_ms=${passThoughtWindow(pass)}")
+    builder.appendLine("${prefix}_visible_window_ms=${passVisibleWindow(pass)}")
+    builder.appendLine("${prefix}_first_visible_to_done_ms=${passVisibleToDone(pass)}")
+    builder.appendLine(
+      "${prefix}_thought_to_first_visible_gap_ms=${passThoughtToVisibleGap(pass)}"
+    )
   }
 
   private fun ensureOpenPass(): InferencePassTiming {
@@ -461,6 +524,7 @@ class AgentPerformanceTrace(
         kind = if (passes.isEmpty()) "initial_unmarked" else "continuation_unmarked",
         inputChars = 0,
         submitNanos = SystemClock.elapsedRealtimeNanos(),
+        thinkingOverride = "unmarked",
       )
         .also { passes += it }
   }
@@ -489,15 +553,27 @@ class AgentPerformanceTrace(
     }
   }
 
-  private fun passTtft(pass: InferencePassTiming?): String {
+  private fun passFirstCallbackTtft(pass: InferencePassTiming?): String {
     if (pass == null) return "unavailable"
-    val first = pass.firstTokenNanos ?: return "unavailable"
+    val first = pass.firstCallbackNanos ?: return "unavailable"
     return formatMs(nanosToMs((first - pass.submitNanos).coerceAtLeast(0L)))
   }
 
-  private fun passDecode(pass: InferencePassTiming?): String {
+  private fun passFirstVisibleTtft(pass: InferencePassTiming?): String {
     if (pass == null) return "unavailable"
-    val first = pass.firstTokenNanos ?: return "unavailable"
+    val first = pass.firstVisibleNanos ?: return "unavailable"
+    return formatMs(nanosToMs((first - pass.submitNanos).coerceAtLeast(0L)))
+  }
+
+  private fun passFirstThoughtTtft(pass: InferencePassTiming?): String {
+    if (pass == null) return "unavailable"
+    val first = pass.firstThoughtNanos ?: return "unavailable"
+    return formatMs(nanosToMs((first - pass.submitNanos).coerceAtLeast(0L)))
+  }
+
+  private fun passDecodeFromFirstCallback(pass: InferencePassTiming?): String {
+    if (pass == null) return "unavailable"
+    val first = pass.firstCallbackNanos ?: return "unavailable"
     val done = pass.doneNanos ?: return "unavailable"
     return formatMs(nanosToMs((done - first).coerceAtLeast(0L)))
   }
@@ -506,6 +582,34 @@ class AgentPerformanceTrace(
     if (pass == null) return "unavailable"
     val done = pass.doneNanos ?: return "unavailable"
     return formatMs(nanosToMs((done - pass.submitNanos).coerceAtLeast(0L)))
+  }
+
+  private fun passThoughtWindow(pass: InferencePassTiming?): String {
+    if (pass == null) return "unavailable"
+    val first = pass.firstThoughtNanos ?: return "unavailable"
+    val last = pass.lastThoughtNanos ?: return "unavailable"
+    return formatMs(nanosToMs((last - first).coerceAtLeast(0L)))
+  }
+
+  private fun passVisibleWindow(pass: InferencePassTiming?): String {
+    if (pass == null) return "unavailable"
+    val first = pass.firstVisibleNanos ?: return "unavailable"
+    val last = pass.lastVisibleNanos ?: return "unavailable"
+    return formatMs(nanosToMs((last - first).coerceAtLeast(0L)))
+  }
+
+  private fun passVisibleToDone(pass: InferencePassTiming?): String {
+    if (pass == null) return "unavailable"
+    val first = pass.firstVisibleNanos ?: return "unavailable"
+    val done = pass.doneNanos ?: return "unavailable"
+    return formatMs(nanosToMs((done - first).coerceAtLeast(0L)))
+  }
+
+  private fun passThoughtToVisibleGap(pass: InferencePassTiming?): String {
+    if (pass == null) return "unavailable"
+    val thought = pass.firstThoughtNanos ?: return "unavailable"
+    val visible = pass.firstVisibleNanos ?: return "unavailable"
+    return formatMs(nanosToMs((visible - thought).coerceAtLeast(0L)))
   }
 
   private fun interPassGap(previous: InferencePassTiming?, current: InferencePassTiming): String {
@@ -550,7 +654,7 @@ private data class ToolStartState(
   val startNanos: Long,
 )
 
-/** Process-local MCP206 bridge between Agent UI, LiteRT-LM callbacks, and existing tool logs. */
+/** Process-local MCP207 bridge between Agent UI, LiteRT-LM callbacks, and existing tool logs. */
 object AgentPerformanceCoordinator {
   val reports = mutableStateMapOf<String, String>()
   val sessionReports = mutableStateMapOf<String, String>()
@@ -604,7 +708,11 @@ object AgentPerformanceCoordinator {
   }
 
   @Synchronized
-  fun onInferenceSubmitted(modelName: String, inputChars: Int) {
+  fun onInferenceSubmitted(
+    modelName: String,
+    inputChars: Int,
+    thinkingOverride: String = "runtime_default",
+  ) {
     val state = traces[modelName] ?: return
     val runtimeSnapshot = AgentCompatRuntimeCoordinator.snapshot(modelName)
     val sessionId = runtimeSnapshot?.sessionId
@@ -616,15 +724,22 @@ object AgentPerformanceCoordinator {
     state.activityGeneration += 1
     state.lastActivityNanos = SystemClock.elapsedRealtimeNanos()
     state.toolEventWindowUntilNanos = Long.MAX_VALUE
-    state.trace.markInferenceSubmitted(inputChars)
+    state.trace.markInferenceSubmitted(inputChars, thinkingOverride)
     activeModelName = modelName
     publish(modelName, state)
   }
 
   @Synchronized
+  fun onStreamChunk(modelName: String, visibleChars: Int, thoughtChars: Int) {
+    val state = traces[modelName] ?: return
+    state.trace.markStreamChunk(visibleChars = visibleChars, thoughtChars = thoughtChars)
+    state.lastActivityNanos = SystemClock.elapsedRealtimeNanos()
+  }
+
+  @Synchronized
   fun onFirstToken(modelName: String) {
     val state = traces[modelName] ?: return
-    if (!state.trace.markFirstToken()) return
+    if (!state.trace.markLegacyFirstCallback()) return
     state.lastActivityNanos = SystemClock.elapsedRealtimeNanos()
     publish(modelName, state)
   }
@@ -774,7 +889,7 @@ object AgentPerformanceCoordinator {
     AgentDiagnosticsLogger.log(
       context = state.context,
       category = "agent.performance.summary",
-      message = "MCP206 performance trace completed for $modelName",
+      message = "MCP207 performance trace completed for $modelName",
       detail = report,
     )
   }
@@ -802,8 +917,8 @@ object AgentPerformanceCoordinator {
     val currentTurn = runtimeSnapshot?.userTurnIndex ?: allReports.size
     sessionReports[modelName] =
       buildString {
-        appendLine("=== MCP206 Agent 会话性能诊断 ===")
-        appendLine("schema=mcp206.agent_session_perf.v2")
+        appendLine("=== MCP207 Agent 会话性能诊断 ===")
+        appendLine("schema=mcp207.agent_session_perf.v3")
         appendLine("model_name=$modelName")
         appendLine("session_id=$sessionId")
         appendLine("current_user_turn_index=$currentTurn")
@@ -816,7 +931,7 @@ object AgentPerformanceCoordinator {
           appendLine("--- USER_TURN_${index + 1} ---")
           appendLine(report)
         }
-        append("=== MCP206 Agent 会话性能诊断结束 ===")
+        append("=== MCP207 Agent 会话性能诊断结束 ===")
       }
   }
 
@@ -861,9 +976,9 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
     ) {
       val expandLabel =
         if (expanded) {
-          "收起 MCP206 Agent 性能诊断"
+          "收起 MCP207 Agent 性能诊断"
         } else {
-          "展开 MCP206 Agent 性能诊断"
+          "展开 MCP207 Agent 性能诊断"
         }
       FilledTonalButton(
         onClick = { expanded = !expanded },
@@ -874,7 +989,7 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
             stateDescription = if (expanded) "已展开" else "已收起"
           },
       ) {
-        Text(if (expanded) "MCP206 性能诊断：点击收起" else "MCP206 性能诊断：点击展开")
+        Text(if (expanded) "MCP207 性能诊断：点击收起" else "MCP207 性能诊断：点击展开")
       }
 
       val currentCopyLabel =
@@ -888,7 +1003,7 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
           val clipboard =
             context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
           clipboard.setPrimaryClip(
-            ClipData.newPlainText("MCP206 Agent Current Request Diagnostics", reportText)
+            ClipData.newPlainText("MCP207 Agent Current Request Diagnostics", reportText)
           )
           copiedCurrent = true
         },
@@ -912,7 +1027,7 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
           val clipboard =
             context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
           clipboard.setPrimaryClip(
-            ClipData.newPlainText("MCP206 Agent Session Diagnostics", sessionReportText)
+            ClipData.newPlainText("MCP207 Agent Session Diagnostics", sessionReportText)
           )
           copiedSession = true
         },
@@ -928,7 +1043,7 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
       AnimatedVisibility(visible = expanded) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Text(
-            "下面显示当前用户任务的完整性能诊断。复制按钮常驻在上方，不依赖展开状态。",
+            "下面显示当前用户任务的完整性能诊断，并分离 thought channel 与可见正文时间线。复制按钮常驻在上方。",
             style = MaterialTheme.typography.bodyMedium,
           )
           SelectionContainer {
