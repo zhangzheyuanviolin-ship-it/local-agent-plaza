@@ -1,0 +1,3 @@
+MCP215 tool-call compatibility validation build.
+
+This marker exists only on the temporary feature validation branch so GitHub Actions compiles the exact MCP215 code before experimental is advanced.
