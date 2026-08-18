@@ -26,6 +26,7 @@ internal object CompatToolCallWireAdapter {
     if (raw.isBlank()) return null
     parseCompatToolCall(raw)?.let { return canonical(it) }
     return listOfNotNull(
+        parseLooseToolBlock(raw),
         parseQwen35(raw),
         parseGlm(raw),
         parseGemma(raw),
@@ -78,6 +79,25 @@ internal object CompatToolCallWireAdapter {
       }
     }
     return name.removePrefix("call:").trim()
+  }
+
+  // Generic <tool_call> variants with relaxed JSON, unquoted keys, or call:NAME{...}.
+  private fun parseLooseToolBlock(text: String): ParsedCompatToolCall? {
+    val open = text.indexOf("<tool_call>", ignoreCase = true)
+    if (open >= 0) {
+      val tail = text.substring(open + "<tool_call>".length).trimStart()
+      Regex("^(?:call:)?([^\\s<{]+)\\s*\\{").find(tail)?.let { named ->
+        firstBalanced(tail.substring(named.range.last))?.let { body ->
+          flexibleObject(body)?.let { return ParsedCompatToolCall(named.groupValues[1], it) }
+        }
+      }
+      firstBalanced(tail)?.let { body ->
+        flexibleObject(body)?.let(::jsonObjectShape)?.let { return it }
+      }
+    }
+    val bareCall = Regex("^\\s*call:([^\\s{]+)", RegexOption.IGNORE_CASE).find(text) ?: return null
+    val body = firstBalanced(text.substring(bareCall.range.last + 1)) ?: return null
+    return flexibleObject(body)?.let { ParsedCompatToolCall(bareCall.groupValues[1], it) }
   }
 
   // Qwen3.5: <tool_call><function=name><parameter=key>value</parameter>...</function></tool_call>
@@ -197,11 +217,13 @@ internal object CompatToolCallWireAdapter {
 
   private fun jsonObjectShape(root: JSONObject): ParsedCompatToolCall? {
     root.optJSONArray("tool_calls")?.optJSONObject(0)?.let(::jsonObjectShape)?.let { return it }
+    root.optJSONObject("tool_call")?.let(::jsonObjectShape)?.let { return it }
+    root.optJSONObject("function_call")?.let(::jsonObjectShape)?.let { return it }
     root.optJSONObject("function")?.let { fn ->
       val name = fn.optString("name").ifBlank { fn.optString("tool_name") }
       if (name.isNotBlank()) return ParsedCompatToolCall(name, arguments(fn))
     }
-    val name = listOf("tool", "name", "tool_name", "function_name").asSequence()
+    val name = listOf("tool", "name", "tool_name", "function_name", "function").asSequence()
       .map { root.optString(it).trim() }.firstOrNull { it.isNotBlank() }.orEmpty()
     if (name.isNotBlank() && listOf("arguments", "parameters", "args", "input").any(root::has)) {
       return ParsedCompatToolCall(name, arguments(root))
