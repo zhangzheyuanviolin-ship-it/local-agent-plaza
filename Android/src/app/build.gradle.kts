@@ -35,6 +35,13 @@ providers.exec {
   commandLine("python3", rootProject.file("scripts/prepare_box049_runtime.py").absolutePath)
 }.result.get().assertNormalExitValue()
 
+// MCP215: keep the MCP210 engine/runtime baseline while hardening the textual COMPAT boundary.
+// The patch is fail-fast and idempotent: if its exact anchors ever drift, the build stops rather
+// than silently shipping without multi-family tool-call normalization.
+providers.exec {
+  commandLine("python3", rootProject.file("scripts/patch_tool_call_wire_compat.py").absolutePath)
+}.result.get().assertNormalExitValue()
+
 android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
