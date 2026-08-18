@@ -68,12 +68,25 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
 
-private const val DIAGNOSTICS_SCHEMA = "mcp207.agent_perf.v5"
+private const val DIAGNOSTICS_SCHEMA = "mcp211.agent_perf.v6"
+private const val SESSION_DIAGNOSTICS_SCHEMA = "mcp211.agent_session_perf.v4"
 private const val LITERT_LM_VERSION = "0.15.0"
 private const val LITERT_VERSION = "2.1.6"
 private const val FINALIZATION_DELAY_MS = 1200L
 private const val FINAL_MEMORY_REFRESH_DELAY_MS = 500L
 private const val TOOL_EVENT_WINDOW_MS = 5000L
+
+private data class LiteRtNativeBenchmark(
+  val initTimeMs: Double?,
+  val nativeTtftMs: Double?,
+  val prefillTokenCount: Int?,
+  val decodeTokenCount: Int?,
+  val prefillTokensPerSecond: Double?,
+  val decodeTokensPerSecond: Double?,
+  val kvTokenCount: Int?,
+  val benchmarkReadMs: Double,
+  val errorClass: String?,
+)
 
 private data class InferencePassTiming(
   val index: Int,
@@ -93,6 +106,7 @@ private data class InferencePassTiming(
   var thoughtChars: Int = 0,
   var doneNanos: Long? = null,
   var outputChars: Int = 0,
+  var nativeBenchmark: LiteRtNativeBenchmark? = null,
 )
 
 private data class ToolExecutionTiming(
@@ -113,10 +127,9 @@ private data class MemorySnapshot(
 )
 
 /**
- * Per-request MCP207 Agent performance trace.
- *
- * Privacy rule: this class stores lengths and timings only. It never stores user prompts, tool
- * arguments, tool results, workspace file contents, paths, secrets, API keys, or access tokens.
+ * Per-request MCP211 Agent trace. User prompts, tool arguments/results, paths and secrets are never
+ * stored. MCP211 adds LiteRT-LM native benchmark counters after each pass has already completed so
+ * benchmark JNI reads cannot inflate app-observed TTFT or decode timing.
  */
 class AgentPerformanceTrace(
   private val context: Context,
@@ -243,6 +256,33 @@ class AgentPerformanceTrace(
   }
 
   @Synchronized
+  fun recordLiteRtNativeBenchmark(
+    initTimeMs: Double?,
+    nativeTtftMs: Double?,
+    prefillTokenCount: Int?,
+    decodeTokenCount: Int?,
+    prefillTokensPerSecond: Double?,
+    decodeTokensPerSecond: Double?,
+    kvTokenCount: Int?,
+    benchmarkReadMs: Double,
+    errorClass: String?,
+  ) {
+    val pass = passes.lastOrNull() ?: return
+    pass.nativeBenchmark =
+      LiteRtNativeBenchmark(
+        initTimeMs = initTimeMs,
+        nativeTtftMs = nativeTtftMs,
+        prefillTokenCount = prefillTokenCount,
+        decodeTokenCount = decodeTokenCount,
+        prefillTokensPerSecond = prefillTokensPerSecond,
+        decodeTokensPerSecond = decodeTokensPerSecond,
+        kvTokenCount = kvTokenCount,
+        benchmarkReadMs = benchmarkReadMs.coerceAtLeast(0.0),
+        errorClass = errorClass?.replace(Regex("[^A-Za-z0-9_.-]"), "_")?.take(120),
+      )
+  }
+
+  @Synchronized
   fun recordToolExecution(
     toolName: String,
     startNanos: Long,
@@ -314,7 +354,7 @@ class AgentPerformanceTrace(
       }
 
     return buildString {
-      appendLine("=== MCP207 Agent 性能诊断 ===")
+      appendLine("=== MCP211 Agent 性能诊断 ===")
       appendLine("schema=$DIAGNOSTICS_SCHEMA")
       appendLine("request_id=$requestId")
       appendLine("status=$finalStatus")
@@ -342,6 +382,7 @@ class AgentPerformanceTrace(
       appendLine("runtime_input_chars=$runtimeInputChars")
       appendLine("compat_added_input_chars=${valueOrUnavailable(compatAddedInputChars)}")
       appendLine("thinking_override=per_pass;see_stream_channels")
+      appendLine("native_benchmark_enabled=true_for_agent_engine")
       appendLine()
 
       appendLine("[runtime_initialization]")
@@ -358,58 +399,30 @@ class AgentPerformanceTrace(
       )
       appendLine()
 
-      appendLine("[mcp207_runtime]")
+      appendLine("[mcp211_runtime]")
       appendLine("session_id=${compatRuntime?.sessionId ?: "unavailable"}")
       appendLine("user_turn_index=${valueOrUnavailable(compatRuntime?.userTurnIndex)}")
-      appendLine(
-        "session_history_turn_count=${valueOrUnavailable(compatRuntime?.sessionHistoryTurnCount)}"
-      )
+      appendLine("session_history_turn_count=${valueOrUnavailable(compatRuntime?.sessionHistoryTurnCount)}")
       appendLine("session_history_chars=${valueOrUnavailable(compatRuntime?.sessionHistoryChars)}")
-      appendLine(
-        "session_completed_turn_count=${valueOrUnavailable(compatRuntime?.sessionCompletedTurnCount)}"
-      )
-      appendLine(
-        "conversation_generation_id=${valueOrUnavailable(compatRuntime?.conversationGenerationId)}"
-      )
-      appendLine(
-        "last_fresh_conversation_reason=${compatRuntime?.lastFreshConversationReason ?: "unavailable"}"
-      )
+      appendLine("session_completed_turn_count=${valueOrUnavailable(compatRuntime?.sessionCompletedTurnCount)}")
+      appendLine("conversation_generation_id=${valueOrUnavailable(compatRuntime?.conversationGenerationId)}")
+      appendLine("last_fresh_conversation_reason=${compatRuntime?.lastFreshConversationReason ?: "unavailable"}")
       appendLine("top_level_reset_count=${valueOrUnavailable(compatRuntime?.topLevelResetCount)}")
-      appendLine(
-        "top_level_prepare_ms_total=${msOrUnavailable(compatRuntime?.topLevelPrepareMsTotal)}"
-      )
-      appendLine(
-        "last_top_level_prepare_ms=${msOrUnavailable(compatRuntime?.lastTopLevelPrepareMs)}"
-      )
+      appendLine("top_level_prepare_ms_total=${msOrUnavailable(compatRuntime?.topLevelPrepareMsTotal)}")
+      appendLine("last_top_level_prepare_ms=${msOrUnavailable(compatRuntime?.lastTopLevelPrepareMs)}")
       appendLine("last_top_level_reset_ms=${msOrUnavailable(compatRuntime?.lastTopLevelResetMs)}")
-      appendLine(
-        "top_level_raw_input_chars=${valueOrUnavailable(compatRuntime?.topLevelRawInputChars)}"
-      )
-      appendLine(
-        "top_level_effective_input_chars=${valueOrUnavailable(compatRuntime?.topLevelEffectiveInputChars)}"
-      )
+      appendLine("top_level_raw_input_chars=${valueOrUnavailable(compatRuntime?.topLevelRawInputChars)}")
+      appendLine("top_level_effective_input_chars=${valueOrUnavailable(compatRuntime?.topLevelEffectiveInputChars)}")
       appendLine("pre_submit_wait_ms_total=${msOrUnavailable(compatRuntime?.preSubmitWaitMsTotal)}")
-      appendLine(
-        "continuation_prepare_ms_total=${msOrUnavailable(compatRuntime?.continuationPrepareMsTotal)}"
-      )
-      appendLine(
-        "last_continuation_prepare_ms=${msOrUnavailable(compatRuntime?.lastContinuationPrepareMs)}"
-      )
-      appendLine(
-        "last_continuation_reset_ms=${msOrUnavailable(compatRuntime?.lastContinuationResetMs)}"
-      )
-      appendLine(
-        "continuation_raw_input_chars=${valueOrUnavailable(compatRuntime?.continuationRawInputChars)}"
-      )
-      appendLine(
-        "continuation_effective_input_chars=${valueOrUnavailable(compatRuntime?.continuationEffectiveInputChars)}"
-      )
+      appendLine("continuation_prepare_ms_total=${msOrUnavailable(compatRuntime?.continuationPrepareMsTotal)}")
+      appendLine("last_continuation_prepare_ms=${msOrUnavailable(compatRuntime?.lastContinuationPrepareMs)}")
+      appendLine("last_continuation_reset_ms=${msOrUnavailable(compatRuntime?.lastContinuationResetMs)}")
+      appendLine("continuation_raw_input_chars=${valueOrUnavailable(compatRuntime?.continuationRawInputChars)}")
+      appendLine("continuation_effective_input_chars=${valueOrUnavailable(compatRuntime?.continuationEffectiveInputChars)}")
       appendLine("continuation_session_history_included=false")
       appendLine("compat_history_step_count=${valueOrUnavailable(compatRuntime?.historyStepCount)}")
       appendLine("compat_history_chars=${valueOrUnavailable(compatRuntime?.historyChars)}")
-      appendLine(
-        "repeated_tool_call_count=${valueOrUnavailable(compatRuntime?.repeatedToolCallCount)}"
-      )
+      appendLine("repeated_tool_call_count=${valueOrUnavailable(compatRuntime?.repeatedToolCallCount)}")
       appendLine("tool_result_prompt_build_ms=unavailable")
       appendLine("audit_write_ms=unavailable")
       appendLine("diagnostic_memory_async=true")
@@ -428,15 +441,11 @@ class AgentPerformanceTrace(
         val continuationIndex = pass.index - 1
         appendLine("continuation_${continuationIndex}_input_chars=${pass.inputChars}")
         appendLine("continuation_${continuationIndex}_ttft_ms=${passFirstCallbackTtft(pass)}")
-        appendLine(
-          "continuation_${continuationIndex}_decode_after_first_token_ms=${passDecodeFromFirstCallback(pass)}"
-        )
+        appendLine("continuation_${continuationIndex}_decode_after_first_token_ms=${passDecodeFromFirstCallback(pass)}")
         appendLine("continuation_${continuationIndex}_total_generation_ms=${passTotal(pass)}")
         appendLine("continuation_${continuationIndex}_output_chars=${pass.outputChars}")
         val previousPass = passes.getOrNull(pass.index - 2)
-        appendLine(
-          "before_continuation_${continuationIndex}_gap_ms=${interPassGap(previousPass, pass)}"
-        )
+        appendLine("before_continuation_${continuationIndex}_gap_ms=${interPassGap(previousPass, pass)}")
       }
       appendLine("retry_count=$retryCount")
       appendLine("error_chars=$errorChars")
@@ -449,11 +458,18 @@ class AgentPerformanceTrace(
       }
       appendLine()
 
+      appendLine("[litert_native_benchmark]")
+      appendLine("capture_phase=after_generation_done_before_tool_orchestration")
+      appendLine("benchmark_read_excluded_from_app_generation_timing=true")
+      appendNativeBenchmarkPass(this, "initial", initialPass)
+      for (pass in continuationPasses) {
+        appendNativeBenchmarkPass(this, "continuation_${pass.index - 1}", pass)
+      }
+      appendLine()
+
       appendLine("[tool_timing]")
       appendLine("compat_parser_exact_ms=unavailable")
-      appendLine(
-        "compat_parser_note=post_generation_to_tool_start_ms includes parser and orchestration overhead"
-      )
+      appendLine("compat_parser_note=post_generation_to_tool_start_ms includes parser, benchmark-read, and orchestration overhead")
       appendLine("observed_tool_event_count=${tools.size}")
       appendLine("observed_tool_exec_total_ms=${formatMs(totalToolExecMs)}")
       appendLine("observed_tool_logged_detail_chars_total=$totalLoggedDetailChars")
@@ -463,9 +479,7 @@ class AgentPerformanceTrace(
         for (tool in tools) {
           appendLine("tool_${tool.index}_name=${tool.toolName}")
           appendLine("tool_${tool.index}_exec_ms=${formatMs(tool.elapsedMs)}")
-          appendLine(
-            "tool_${tool.index}_post_generation_to_start_ms=${msOrUnavailable(tool.postGenerationGapMs)}"
-          )
+          appendLine("tool_${tool.index}_post_generation_to_start_ms=${msOrUnavailable(tool.postGenerationGapMs)}")
           appendLine("tool_${tool.index}_logged_detail_chars=${tool.loggedDetailChars}")
           appendLine("tool_${tool.index}_success=${tool.success}")
         }
@@ -478,20 +492,14 @@ class AgentPerformanceTrace(
       } else {
         for (snapshot in memory) {
           appendLine("${snapshot.stage}.pss_mb=${kbToMb(snapshot.pssKb)}")
-          appendLine(
-            "${snapshot.stage}.java_heap_used_mb=${bytesToMb(snapshot.javaHeapUsedBytes)}"
-          )
-          appendLine(
-            "${snapshot.stage}.native_heap_allocated_mb=${bytesToMb(snapshot.nativeHeapAllocatedBytes)}"
-          )
+          appendLine("${snapshot.stage}.java_heap_used_mb=${bytesToMb(snapshot.javaHeapUsedBytes)}")
+          appendLine("${snapshot.stage}.native_heap_allocated_mb=${bytesToMb(snapshot.nativeHeapAllocatedBytes)}")
           appendLine("${snapshot.stage}.sample_delay_ms=${formatMs(snapshot.sampleDelayMs)}")
         }
       }
       appendLine()
-      appendLine(
-        "privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged"
-      )
-      append("=== MCP207 Agent 性能诊断结束 ===")
+      appendLine("privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged")
+      append("=== MCP211 Agent 性能诊断结束 ===")
     }
   }
 
@@ -501,20 +509,47 @@ class AgentPerformanceTrace(
     builder.appendLine("${prefix}_first_visible_ttft_ms=${passFirstVisibleTtft(pass)}")
     builder.appendLine("${prefix}_first_thought_ttft_ms=${passFirstThoughtTtft(pass)}")
     builder.appendLine("${prefix}_callback_count=${valueOrUnavailable(pass?.callbackCount)}")
-    builder.appendLine(
-      "${prefix}_visible_callback_count=${valueOrUnavailable(pass?.visibleCallbackCount)}"
-    )
-    builder.appendLine(
-      "${prefix}_thought_callback_count=${valueOrUnavailable(pass?.thoughtCallbackCount)}"
-    )
+    builder.appendLine("${prefix}_visible_callback_count=${valueOrUnavailable(pass?.visibleCallbackCount)}")
+    builder.appendLine("${prefix}_thought_callback_count=${valueOrUnavailable(pass?.thoughtCallbackCount)}")
     builder.appendLine("${prefix}_visible_chars=${valueOrUnavailable(pass?.visibleChars)}")
     builder.appendLine("${prefix}_thought_chars=${valueOrUnavailable(pass?.thoughtChars)}")
     builder.appendLine("${prefix}_thought_window_ms=${passThoughtWindow(pass)}")
     builder.appendLine("${prefix}_visible_window_ms=${passVisibleWindow(pass)}")
     builder.appendLine("${prefix}_first_visible_to_done_ms=${passVisibleToDone(pass)}")
-    builder.appendLine(
-      "${prefix}_thought_to_first_visible_gap_ms=${passThoughtToVisibleGap(pass)}"
-    )
+    builder.appendLine("${prefix}_thought_to_first_visible_gap_ms=${passThoughtToVisibleGap(pass)}")
+  }
+
+  private fun appendNativeBenchmarkPass(
+    builder: StringBuilder,
+    prefix: String,
+    pass: InferencePassTiming?,
+  ) {
+    val benchmark = pass?.nativeBenchmark
+    val appTtft = passFirstCallbackTtftValue(pass)
+    val estimatedPrefillMs = estimateStageMs(benchmark?.prefillTokenCount, benchmark?.prefillTokensPerSecond)
+    val estimatedDecodeMs = estimateStageMs(benchmark?.decodeTokenCount, benchmark?.decodeTokensPerSecond)
+    val appMinusNative =
+      if (appTtft != null && benchmark?.nativeTtftMs != null) appTtft - benchmark.nativeTtftMs else null
+    val nativeMinusPrefill =
+      if (benchmark?.nativeTtftMs != null && estimatedPrefillMs != null) {
+        benchmark.nativeTtftMs - estimatedPrefillMs
+      } else {
+        null
+      }
+
+    builder.appendLine("${prefix}_native_init_ms=${doubleOrUnavailable(benchmark?.initTimeMs)}")
+    builder.appendLine("${prefix}_native_ttft_ms=${doubleOrUnavailable(benchmark?.nativeTtftMs)}")
+    builder.appendLine("${prefix}_prefill_tokens=${valueOrUnavailable(benchmark?.prefillTokenCount)}")
+    builder.appendLine("${prefix}_decode_tokens=${valueOrUnavailable(benchmark?.decodeTokenCount)}")
+    builder.appendLine("${prefix}_prefill_tokens_per_sec=${doubleOrUnavailable(benchmark?.prefillTokensPerSecond, 3)}")
+    builder.appendLine("${prefix}_decode_tokens_per_sec=${doubleOrUnavailable(benchmark?.decodeTokensPerSecond, 3)}")
+    builder.appendLine("${prefix}_estimated_prefill_ms=${doubleOrUnavailable(estimatedPrefillMs)}")
+    builder.appendLine("${prefix}_estimated_decode_ms=${doubleOrUnavailable(estimatedDecodeMs)}")
+    builder.appendLine("${prefix}_app_minus_native_ttft_ms=${doubleOrUnavailable(appMinusNative)}")
+    builder.appendLine("${prefix}_native_ttft_minus_estimated_prefill_ms=${doubleOrUnavailable(nativeMinusPrefill)}")
+    builder.appendLine("${prefix}_kv_token_count=${valueOrUnavailable(benchmark?.kvTokenCount)}")
+    builder.appendLine("${prefix}_benchmark_read_ms=${doubleOrUnavailable(benchmark?.benchmarkReadMs)}")
+    builder.appendLine("${prefix}_benchmark_error=${benchmark?.errorClass ?: if (benchmark == null) "unavailable" else "none"}")
   }
 
   private fun ensureOpenPass(): InferencePassTiming {
@@ -553,11 +588,14 @@ class AgentPerformanceTrace(
     }
   }
 
-  private fun passFirstCallbackTtft(pass: InferencePassTiming?): String {
-    if (pass == null) return "unavailable"
-    val first = pass.firstCallbackNanos ?: return "unavailable"
-    return formatMs(nanosToMs((first - pass.submitNanos).coerceAtLeast(0L)))
+  private fun passFirstCallbackTtftValue(pass: InferencePassTiming?): Double? {
+    if (pass == null) return null
+    val first = pass.firstCallbackNanos ?: return null
+    return nanosToMs((first - pass.submitNanos).coerceAtLeast(0L))
   }
+
+  private fun passFirstCallbackTtft(pass: InferencePassTiming?): String =
+    doubleOrUnavailable(passFirstCallbackTtftValue(pass))
 
   private fun passFirstVisibleTtft(pass: InferencePassTiming?): String {
     if (pass == null) return "unavailable"
@@ -617,26 +655,24 @@ class AgentPerformanceTrace(
     return formatMs(nanosToMs((current.submitNanos - previousDone).coerceAtLeast(0L)))
   }
 
+  private fun estimateStageMs(tokens: Int?, tokensPerSecond: Double?): Double? {
+    if (tokens == null || tokensPerSecond == null || tokensPerSecond <= 0.0 || tokens < 0) return null
+    return tokens.toDouble() / tokensPerSecond * 1000.0
+  }
+
   private fun nanosToMs(nanos: Long): Double = nanos / 1_000_000.0
-
   private fun formatMs(value: Double): String = String.format(Locale.US, "%.2f", value)
-
-  private fun msOrUnavailable(value: Double?): String =
-    value?.let { formatMs(it) } ?: "unavailable"
-
+  private fun msOrUnavailable(value: Double?): String = value?.let { formatMs(it) } ?: "unavailable"
+  private fun doubleOrUnavailable(value: Double?, decimals: Int = 2): String =
+    value?.let { String.format(Locale.US, "%.${decimals}f", it) } ?: "unavailable"
   private fun floatOrUnavailable(value: Float?): String =
     value?.let { String.format(Locale.US, "%.4f", it) } ?: "unavailable"
-
   private fun valueOrUnavailable(value: Any?): String = value?.toString() ?: "unavailable"
-
   private fun kbToMb(kb: Long): String = String.format(Locale.US, "%.2f", kb / 1024.0)
-
   private fun bytesToMb(bytes: Long): String =
     String.format(Locale.US, "%.2f", bytes / (1024.0 * 1024.0))
-
   private fun formatWallTime(epochMillis: Long): String =
     SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US).format(Date(epochMillis))
-
   private fun sanitizeToolName(value: String): String =
     value.replace(Regex("[^A-Za-z0-9_.:-]"), "_").take(120)
 }
@@ -654,7 +690,7 @@ private data class ToolStartState(
   val startNanos: Long,
 )
 
-/** Process-local MCP207 bridge between Agent UI, LiteRT-LM callbacks, and existing tool logs. */
+/** Process-local MCP211 bridge between Agent UI, LiteRT-LM callbacks, and tool diagnostics. */
 object AgentPerformanceCoordinator {
   val reports = mutableStateMapOf<String, String>()
   val sessionReports = mutableStateMapOf<String, String>()
@@ -757,6 +793,34 @@ object AgentPerformanceCoordinator {
   }
 
   @Synchronized
+  fun onLiteRtNativeBenchmark(
+    modelName: String,
+    initTimeMs: Double?,
+    nativeTtftMs: Double?,
+    prefillTokenCount: Int?,
+    decodeTokenCount: Int?,
+    prefillTokensPerSecond: Double?,
+    decodeTokensPerSecond: Double?,
+    kvTokenCount: Int?,
+    benchmarkReadMs: Double,
+    errorClass: String?,
+  ) {
+    val state = traces[modelName] ?: return
+    state.trace.recordLiteRtNativeBenchmark(
+      initTimeMs = initTimeMs,
+      nativeTtftMs = nativeTtftMs,
+      prefillTokenCount = prefillTokenCount,
+      decodeTokenCount = decodeTokenCount,
+      prefillTokensPerSecond = prefillTokensPerSecond,
+      decodeTokensPerSecond = decodeTokensPerSecond,
+      kvTokenCount = kvTokenCount,
+      benchmarkReadMs = benchmarkReadMs,
+      errorClass = errorClass,
+    )
+    publish(modelName, state)
+  }
+
+  @Synchronized
   fun finishWithError(modelName: String, errorChars: Int) {
     val state = traces[modelName] ?: return
     state.activityGeneration += 1
@@ -794,7 +858,6 @@ object AgentPerformanceCoordinator {
     scheduleFinalMemoryRefresh(modelName = modelName, generation = state.activityGeneration)
   }
 
-  /** Observes existing tool log events without reading their content. */
   @Synchronized
   fun observeDiagnosticEvent(category: String, detailChars: Int) {
     if (!category.startsWith("tool.")) return
@@ -889,7 +952,7 @@ object AgentPerformanceCoordinator {
     AgentDiagnosticsLogger.log(
       context = state.context,
       category = "agent.performance.summary",
-      message = "MCP207 performance trace completed for $modelName",
+      message = "MCP211 performance trace completed for $modelName",
       detail = report,
     )
   }
@@ -917,21 +980,19 @@ object AgentPerformanceCoordinator {
     val currentTurn = runtimeSnapshot?.userTurnIndex ?: allReports.size
     sessionReports[modelName] =
       buildString {
-        appendLine("=== MCP207 Agent 会话性能诊断 ===")
-        appendLine("schema=mcp207.agent_session_perf.v3")
+        appendLine("=== MCP211 Agent 会话性能诊断 ===")
+        appendLine("schema=$SESSION_DIAGNOSTICS_SCHEMA")
         appendLine("model_name=$modelName")
         appendLine("session_id=$sessionId")
         appendLine("current_user_turn_index=$currentTurn")
         appendLine("included_request_reports=${allReports.size}")
-        appendLine(
-          "privacy=diagnostic_metrics_only;user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged"
-        )
+        appendLine("privacy=diagnostic_metrics_only;user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged")
         allReports.forEachIndexed { index, report ->
           appendLine()
           appendLine("--- USER_TURN_${index + 1} ---")
           appendLine(report)
         }
-        append("=== MCP207 Agent 会话性能诊断结束 ===")
+        append("=== MCP211 Agent 会话性能诊断结束 ===")
       }
   }
 
@@ -975,11 +1036,7 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
       verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
       val expandLabel =
-        if (expanded) {
-          "收起 MCP207 Agent 性能诊断"
-        } else {
-          "展开 MCP207 Agent 性能诊断"
-        }
+        if (expanded) "收起 MCP211 Agent 性能诊断" else "展开 MCP211 Agent 性能诊断"
       FilledTonalButton(
         onClick = { expanded = !expanded },
         modifier =
@@ -989,21 +1046,15 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
             stateDescription = if (expanded) "已展开" else "已收起"
           },
       ) {
-        Text(if (expanded) "MCP207 性能诊断：点击收起" else "MCP207 性能诊断：点击展开")
+        Text(if (expanded) "MCP211 性能诊断：点击收起" else "MCP211 性能诊断：点击展开")
       }
 
-      val currentCopyLabel =
-        if (copiedCurrent) {
-          "本轮性能诊断已复制"
-        } else {
-          "复制本轮性能诊断"
-        }
+      val currentCopyLabel = if (copiedCurrent) "本轮性能诊断已复制" else "复制本轮性能诊断"
       Button(
         onClick = {
-          val clipboard =
-            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+          val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
           clipboard.setPrimaryClip(
-            ClipData.newPlainText("MCP207 Agent Current Request Diagnostics", reportText)
+            ClipData.newPlainText("MCP211 Agent Current Request Diagnostics", reportText)
           )
           copiedCurrent = true
         },
@@ -1016,18 +1067,12 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
         Text(currentCopyLabel)
       }
 
-      val sessionCopyLabel =
-        if (copiedSession) {
-          "本会话性能诊断已复制"
-        } else {
-          "复制本会话性能诊断"
-        }
+      val sessionCopyLabel = if (copiedSession) "本会话性能诊断已复制" else "复制本会话性能诊断"
       Button(
         onClick = {
-          val clipboard =
-            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+          val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
           clipboard.setPrimaryClip(
-            ClipData.newPlainText("MCP207 Agent Session Diagnostics", sessionReportText)
+            ClipData.newPlainText("MCP211 Agent Session Diagnostics", sessionReportText)
           )
           copiedSession = true
         },
@@ -1043,7 +1088,7 @@ fun AgentPerformanceDiagnosticsPanel(reportText: String, modifier: Modifier = Mo
       AnimatedVisibility(visible = expanded) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Text(
-            "下面显示当前用户任务的完整性能诊断，并分离 thought channel 与可见正文时间线。复制按钮常驻在上方。",
+            "下面显示当前用户任务的完整性能诊断，包含 LiteRT-LM 原生 prefill、decode、TTFT 与 KV token 指标。复制按钮常驻在上方。",
             style = MaterialTheme.typography.bodyMedium,
           )
           SelectionContainer {
