@@ -26,7 +26,6 @@ import com.google.ai.edge.gallery.customtasks.agentchat.AgentPerformanceCoordina
 import com.google.ai.edge.gallery.customtasks.agentchat.COMPAT_FRESH_REASON_TOOL_CONTINUATION
 import com.google.ai.edge.gallery.customtasks.agentchat.COMPAT_FRESH_REASON_TOP_LEVEL
 import com.google.ai.edge.gallery.data.Accelerator
-import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.DEFAULT_MAX_TOKEN
 import com.google.ai.edge.gallery.data.DEFAULT_TEMPERATURE
@@ -54,9 +53,6 @@ import com.google.ai.edge.litertlm.ThinkingConfig
 import com.google.ai.edge.litertlm.ToolProvider
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
 import kotlinx.coroutines.CoroutineScope
 
 private const val TAG = "AGLlmChatModelHelper"
@@ -69,47 +65,14 @@ private const val COMPAT_USER_REQUEST_SEPARATOR = "\n\nUSER_REQUEST\n"
 private const val COMPAT_AVAILABLE_TOOLS_MARKER = "Available compatibility tools:"
 private const val COMPAT_ENABLED_SKILLS_MARKER = "Enabled skills for this session:"
 private const val COMPAT_NEXT_ACTION_MARKER = "\n\nNEXT_ACTION\n"
-private const val COMPAT_TOOL_CALL_OPEN = "<tool_call>"
-private const val COMPAT_TOOL_CALL_CLOSE = "</tool_call>"
 
 data class LlmModelInstance(val engine: Engine, var conversation: Conversation)
 
-private data class CompatWarmTopLevelConversation(
-  val conversation: Conversation,
-  val instructionPrefix: String,
-  val prefillMs: Double,
-)
-
-private data class CompatWarmTopLevelPlan(
-  val instructionPrefix: String,
-  val future: Future<CompatWarmTopLevelConversation?>,
-)
-
-private data class CompatWarmActivation(
-  val foregroundWaitMs: Double,
-  val backgroundPrefillMs: Double,
-  val activationMs: Double,
-  val prefixChars: Int,
-)
-
 object LlmChatModelHelper : LlmModelHelper {
+  // Indexed by model name.
   private val cleanUpListeners: MutableMap<String, CleanUpListener> = mutableMapOf()
 
-  // MCP212 controlled experiment: prepare at most one fresh top-level Conversation during the
-  // user's idle time after a completed COMPAT turn. Tool continuations deliberately keep the MCP211
-  // cold path so the same request remains an A/B comparison.
-  private val compatWarmExecutor =
-    Executors.newSingleThreadExecutor { runnable ->
-      Thread(runnable, "CompatTopLevelPrefill").apply {
-        isDaemon = true
-        priority = Thread.NORM_PRIORITY - 1
-      }
-    }
-  private val compatWarmPlans = ConcurrentHashMap<String, CompatWarmTopLevelPlan>()
-  private val compatInstructionPrefixes = ConcurrentHashMap<String, String>()
-  private val compatPrefillStrategies = ConcurrentHashMap<String, String>()
-
-  @OptIn(ExperimentalApi::class)
+  @OptIn(ExperimentalApi::class) // opt-in experimental flags
   override fun initialize(
     context: Context,
     model: Model,
@@ -203,20 +166,13 @@ object LlmChatModelHelper : LlmModelHelper {
           )
       }
       ExperimentalFlags.enableSpeculativeDecoding = speculativeDecoding
-      // Keep MCP211 native counters in MCP212 so the warm-preface experiment can be measured with
-      // exactly the same native benchmark fields.
-      ExperimentalFlags.enableBenchmark = taskId == BuiltInTaskId.LLM_AGENT_CHAT
-      Log.d(
-        TAG,
-        "Speculative decoding enabled: $speculativeDecoding; native benchmark enabled for engine: ${ExperimentalFlags.enableBenchmark}",
-      )
+      Log.d(TAG, "Speculative decoding enabled: $speculativeDecoding")
 
       val engineInitStartNanos = SystemClock.elapsedRealtimeNanos()
       val engine = Engine(engineConfig)
       engine.initialize()
       val engineInitMs = elapsedMsSince(engineInitStartNanos)
       ExperimentalFlags.enableSpeculativeDecoding = false
-      ExperimentalFlags.enableBenchmark = false
 
       ExperimentalFlags.enableConversationConstrainedDecoding =
         enableConversationConstrainedDecoding
@@ -254,10 +210,9 @@ object LlmChatModelHelper : LlmModelHelper {
       )
       Log.d(
         TAG,
-        "MCP212 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
+        "MCP209 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
       )
     } catch (e: Exception) {
-      ExperimentalFlags.enableBenchmark = false
       ExperimentalFlags.enableSpeculativeDecoding = false
       ExperimentalFlags.enableConversationConstrainedDecoding = false
       onDone(cleanUpMediapipeTaskErrorMessage(e.message ?: "Unknown error"))
@@ -328,22 +283,12 @@ object LlmChatModelHelper : LlmModelHelper {
   }
 
   override fun cleanUp(model: Model, onDone: () -> Unit) {
-    val instance = model.instance as? LlmModelInstance
-    if (instance == null) {
-      discardCompatWarmPlan(model.name, waitForCompletion = false)
-      compatInstructionPrefixes.remove(model.name)
-      compatPrefillStrategies.remove(model.name)
+    if (model.instance == null) {
       AgentCompatRuntimeCoordinator.clear(model.name)
       return
     }
 
-    // A prefill-preface creation uses the same Engine. Wait for it before engine.close() so a native
-    // createConversation cannot race engine destruction. This path runs only during explicit model
-    // cleanup/reset, never during normal generation.
-    discardCompatWarmPlan(model.name, waitForCompletion = true)
-    compatInstructionPrefixes.remove(model.name)
-    compatPrefillStrategies.remove(model.name)
-
+    val instance = model.instance as LlmModelInstance
     try {
       instance.conversation.close()
     } catch (e: Exception) {
@@ -421,6 +366,8 @@ object LlmChatModelHelper : LlmModelHelper {
       mutableMapOf<String, Any>().apply {
         extraContext?.forEach { (key, value) -> put(key, value) }
         if (isCompatPass) {
+          // MCP209: COMPAT is a latency-first mode. Hard-disable Gemma 4 thinking at both the Jinja
+          // template and native decoding layers for every COMPAT pass, including the first pass.
           put("enable_thinking", false)
           put("preserve_thinking", false)
           put("thinking_token_budget", 0)
@@ -454,8 +401,7 @@ object LlmChatModelHelper : LlmModelHelper {
               "render_chars=${rendered.length};render_open_thought=$openThoughtAtTail;render_closed_thought_cue=$closedThoughtCue"
             }
             .getOrElse { "render_audit_error=${it.javaClass.simpleName}" }
-        val prefillStrategy = compatPrefillStrategies[model.name] ?: "prefill_strategy=unknown"
-        "disabled_compat_global_template_native_budget0_$compatPassKind;$renderAudit;$prefillStrategy"
+        "disabled_compat_global_template_native_budget0_$compatPassKind;$renderAudit"
       } else {
         "runtime_default"
       }
@@ -486,54 +432,18 @@ object LlmChatModelHelper : LlmModelHelper {
           }
 
           override fun onDone() {
-            // Keep the MCP211 timing boundary: app generation is done before JNI benchmark reads.
-            AgentPerformanceCoordinator.onInferenceDone(model.name, generatedChars)
-
-            if (isCompatPass) {
-              val benchmarkReadStartedNanos = SystemClock.elapsedRealtimeNanos()
-              val benchmarkResult = runCatching { conversation.getBenchmarkInfo() }
-              val tokenCountResult = runCatching { conversation.getTokenCount() }
-              val benchmarkReadMs = elapsedMsSince(benchmarkReadStartedNanos)
-              val benchmark = benchmarkResult.getOrNull()
-              val benchmarkError =
-                benchmarkResult.exceptionOrNull()?.javaClass?.simpleName
-                  ?: tokenCountResult.exceptionOrNull()?.javaClass?.simpleName
-              AgentPerformanceCoordinator.onLiteRtNativeBenchmark(
-                modelName = model.name,
-                initTimeMs = benchmark?.initTimeInSecond?.times(1000.0),
-                nativeTtftMs = benchmark?.timeToFirstTokenInSecond?.times(1000.0),
-                prefillTokenCount = benchmark?.lastPrefillTokenCount,
-                decodeTokenCount = benchmark?.lastDecodeTokenCount,
-                prefillTokensPerSecond = benchmark?.lastPrefillTokensPerSecond,
-                decodeTokensPerSecond = benchmark?.lastDecodeTokensPerSecond,
-                kvTokenCount = tokenCountResult.getOrNull(),
-                benchmarkReadMs = benchmarkReadMs,
-                errorClass = benchmarkError,
-              )
-            }
-
-            val generated = generatedText.toString()
-            val generatedToolCall =
-              generated.contains(COMPAT_TOOL_CALL_OPEN) && generated.contains(COMPAT_TOOL_CALL_CLOSE)
             val decision =
               AgentCompatRuntimeCoordinator.onGenerationCompleted(
                 modelName = model.name,
-                generatedText = generated,
+                generatedText = generatedText.toString(),
               )
+            AgentPerformanceCoordinator.onInferenceDone(model.name, generatedChars)
             if (decision.blockedRepeatedToolCall) {
               val errorMessage =
                 "兼容工具调用已停止：检测到连续三次完全相同的工具调用，已在再次执行前拦截，避免重复操作。"
-              Log.w(TAG, "MCP212 blocked repeated COMPAT tool call for '${model.name}'.")
+              Log.w(TAG, "MCP209 blocked repeated COMPAT tool call for '${model.name}'.")
               onError(errorMessage)
               return
-            }
-
-            // Only a completed user turn gets an idle top-level prewarm. Tool-call passes do not
-            // start background GPU work because the continuation is about to run immediately.
-            if (isCompatPass && !generatedToolCall) {
-              compatInstructionPrefixes[model.name]?.takeIf { it.isNotBlank() }?.let { prefix ->
-                scheduleCompatTopLevelWarmup(model = model, instructionPrefix = prefix)
-              }
             }
             resultListener("", true, null)
           }
@@ -564,16 +474,6 @@ object LlmChatModelHelper : LlmModelHelper {
   private fun prepareCompatAgentInput(model: Model, input: String): String {
     val prepareStartedNanos = SystemClock.elapsedRealtimeNanos()
     val compactedRawInput = compactCompatEnvelope(input)
-    val inputInstructionPrefix = extractCompatInstructionPrefix(compactedRawInput)
-    if (!inputInstructionPrefix.isNullOrBlank()) {
-      val previousPrefix = compatInstructionPrefixes.put(model.name, inputInstructionPrefix)
-      if (previousPrefix != null && previousPrefix != inputInstructionPrefix) {
-        // Skills/tool configuration changed. An old prewarm is semantically stale and must never be
-        // consumed by the new request.
-        discardCompatWarmPlan(model.name, waitForCompletion = false)
-      }
-    }
-
     val prepared =
       AgentCompatRuntimeCoordinator.prepareInput(
         modelName = model.name,
@@ -582,43 +482,7 @@ object LlmChatModelHelper : LlmModelHelper {
       )
     val finalInput = compactPreparedCompatInput(prepared.input)
     if (!prepared.requiresFreshConversation) {
-      compatPrefillStrategies[model.name] = "prefill_strategy=conversation_existing"
       return finalInput
-    }
-
-    if (
-      prepared.freshConversationReason == COMPAT_FRESH_REASON_TOP_LEVEL &&
-        !inputInstructionPrefix.isNullOrBlank()
-    ) {
-      val warmActivation =
-        activateCompatWarmTopLevelConversation(
-          model = model,
-          instructionPrefix = inputInstructionPrefix,
-        )
-      if (warmActivation != null) {
-        AgentCompatRuntimeCoordinator.recordPreSubmitWait(
-          modelName = model.name,
-          elapsedMs = warmActivation.foregroundWaitMs,
-        )
-        val dynamicInput = stripCompatInstructionPrefix(finalInput, inputInstructionPrefix)
-        val prepareMs = elapsedMsSince(prepareStartedNanos)
-        AgentCompatRuntimeCoordinator.recordContinuationPreparation(
-          modelName = model.name,
-          prepareMs = prepareMs,
-          resetMs = warmActivation.activationMs,
-          rawInputChars = compactedRawInput.length,
-          effectiveInputChars = dynamicInput.length,
-          historyStepCount = prepared.historyStepCount,
-          historyChars = prepared.historyChars,
-        )
-        compatPrefillStrategies[model.name] =
-          "prefill_strategy=idle_preface_hit;prefix_chars=${warmActivation.prefixChars};background_prefill_ms=${"%.2f".format(warmActivation.backgroundPrefillMs)};foreground_wait_ms=${"%.2f".format(warmActivation.foregroundWaitMs)}"
-        Log.d(
-          TAG,
-          "MCP212 warm top-level activated for '${model.name}': prefixChars=${warmActivation.prefixChars} backgroundPrefill=${"%.2f".format(warmActivation.backgroundPrefillMs)}ms foregroundWait=${"%.2f".format(warmActivation.foregroundWaitMs)}ms dynamicChars=${dynamicInput.length}",
-        )
-        return dynamicInput
-      }
     }
 
     val resetStartedNanos = SystemClock.elapsedRealtimeNanos()
@@ -642,147 +506,19 @@ object LlmChatModelHelper : LlmModelHelper {
       historyStepCount = prepared.historyStepCount,
       historyChars = prepared.historyChars,
     )
-    compatPrefillStrategies[model.name] =
-      "prefill_strategy=cold_full_message;reason=${prepared.freshConversationReason ?: "unknown"}"
     Log.d(
       TAG,
-      "MCP212 COMPAT cold fresh conversation for '${model.name}': reason=${prepared.freshConversationReason} reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms originalRawChars=${input.length} compactRawChars=${compactedRawInput.length} finalChars=${finalInput.length} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
+      "MCP209 COMPAT fresh conversation for '${model.name}': reason=${prepared.freshConversationReason} reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms originalRawChars=${input.length} compactRawChars=${compactedRawInput.length} finalChars=${finalInput.length} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
     )
     return finalInput
   }
 
-  @OptIn(ExperimentalApi::class)
-  private fun scheduleCompatTopLevelWarmup(model: Model, instructionPrefix: String) {
-    val instance = model.instance as? LlmModelInstance ?: return
-    val existing = compatWarmPlans[model.name]
-    if (existing != null && existing.instructionPrefix == instructionPrefix) return
-    if (existing != null) discardCompatWarmPlan(model.name, waitForCompletion = false)
-
-    val future =
-      compatWarmExecutor.submit<CompatWarmTopLevelConversation?> {
-        val startedNanos = SystemClock.elapsedRealtimeNanos()
-        val warm =
-          runCatching {
-              val conversation =
-                instance.engine.createConversation(
-                  ConversationConfig(
-                    samplerConfig = compatSamplerConfig(model),
-                    systemInstruction = Contents.of(instructionPrefix),
-                    tools = listOf(),
-                    extraContext =
-                      mapOf(
-                        "enable_thinking" to false,
-                        "preserve_thinking" to false,
-                        "thinking_token_budget" to 0,
-                      ),
-                    prefillPrefaceOnInit = true,
-                    thinkingConfig = ThinkingConfig(enableThinking = false, thinkingTokenBudget = 0),
-                  )
-                )
-              CompatWarmTopLevelConversation(
-                conversation = conversation,
-                instructionPrefix = instructionPrefix,
-                prefillMs = elapsedMsSince(startedNanos),
-              )
-            }
-            .onFailure { throwable ->
-              Log.w(
-                TAG,
-                "MCP212 idle prefill failed for '${model.name}': ${throwable.javaClass.simpleName}: ${throwable.message}",
-              )
-            }
-            .getOrNull()
-
-        if (
-          warm != null &&
-            (model.instance !== instance || compatInstructionPrefixes[model.name] != instructionPrefix)
-        ) {
-          runCatching { warm.conversation.close() }
-          null
-        } else {
-          warm
-        }
-      }
-    compatWarmPlans[model.name] =
-      CompatWarmTopLevelPlan(instructionPrefix = instructionPrefix, future = future)
-    Log.d(TAG, "MCP212 scheduled idle top-level prefill for '${model.name}', prefixChars=${instructionPrefix.length}")
-  }
-
-  private fun activateCompatWarmTopLevelConversation(
-    model: Model,
-    instructionPrefix: String,
-  ): CompatWarmActivation? {
-    val plan = compatWarmPlans[model.name] ?: return null
-    if (plan.instructionPrefix != instructionPrefix) return null
-    val instance = model.instance as? LlmModelInstance ?: return null
-
-    val waitStartedNanos = SystemClock.elapsedRealtimeNanos()
-    val warm =
-      runCatching { plan.future.get() }
-        .onFailure { throwable ->
-          Log.w(
-            TAG,
-            "MCP212 warm top-level unavailable for '${model.name}': ${throwable.javaClass.simpleName}: ${throwable.message}",
-          )
-        }
-        .getOrNull()
-    val foregroundWaitMs = elapsedMsSince(waitStartedNanos)
-    compatWarmPlans.remove(model.name, plan)
-    if (warm == null || warm.instructionPrefix != instructionPrefix || model.instance !== instance) {
-      warm?.let { runCatching { it.conversation.close() } }
-      return null
-    }
-
-    val activationStartedNanos = SystemClock.elapsedRealtimeNanos()
-    runCatching { instance.conversation.close() }
-      .onFailure { Log.w(TAG, "MCP212 failed closing prior conversation: ${it.message}") }
-    instance.conversation = warm.conversation
-    val activationMs = elapsedMsSince(activationStartedNanos)
-    return CompatWarmActivation(
-      foregroundWaitMs = foregroundWaitMs,
-      backgroundPrefillMs = warm.prefillMs,
-      activationMs = activationMs,
-      prefixChars = instructionPrefix.length,
-    )
-  }
-
-  private fun discardCompatWarmPlan(modelName: String, waitForCompletion: Boolean) {
-    val plan = compatWarmPlans.remove(modelName) ?: return
-    if (!waitForCompletion && !plan.future.isDone) {
-      plan.future.cancel(false)
-      return
-    }
-    val warm = runCatching { plan.future.get() }.getOrNull()
-    warm?.let { runCatching { it.conversation.close() } }
-  }
-
-  private fun compatSamplerConfig(model: Model): SamplerConfig? {
-    val accelerator =
-      model.getStringConfigValue(key = ConfigKeys.ACCELERATOR, defaultValue = Accelerator.GPU.label)
-    if (accelerator == Accelerator.NPU.label || accelerator == Accelerator.TPU.label) return null
-    val topK = model.getIntConfigValue(key = ConfigKeys.TOPK, defaultValue = DEFAULT_TOPK)
-    val topP = model.getFloatConfigValue(key = ConfigKeys.TOPP, defaultValue = DEFAULT_TOPP)
-    val temperature =
-      model.getFloatConfigValue(key = ConfigKeys.TEMPERATURE, defaultValue = DEFAULT_TEMPERATURE)
-    return SamplerConfig(
-      topK = topK,
-      topP = topP.toDouble(),
-      temperature = temperature.toDouble(),
-    )
-  }
-
-  private fun extractCompatInstructionPrefix(input: String): String? {
-    val markerIndex = input.indexOf(COMPAT_INSTRUCTIONS_MARKER)
-    val separatorIndex = input.indexOf(COMPAT_USER_REQUEST_SEPARATOR)
-    if (markerIndex < 0 || separatorIndex <= markerIndex) return null
-    return input.substring(markerIndex, separatorIndex).trimEnd()
-  }
-
-  private fun stripCompatInstructionPrefix(input: String, instructionPrefix: String): String {
-    if (!input.startsWith(instructionPrefix)) return input
-    return input.removePrefix(instructionPrefix).trimStart()
-  }
-
+  /**
+   * MCP209 latency optimization: compact only the fixed COMPAT protocol envelope before the
+   * coordinator captures it as instructionPrefix. Tool names and JSON argument schemas are kept
+   * verbatim; descriptive prose and full skill descriptions are shortened. This directly reduces
+   * every top-level and tool-continuation prefill without changing LiteRT-LM or model versions.
+   */
   private fun compactCompatEnvelope(input: String): String {
     val trimmed = input.trimStart()
     if (!trimmed.startsWith(COMPAT_INSTRUCTIONS_MARKER)) return input
@@ -859,6 +595,7 @@ $compactSkills
       .ifBlank { "- No compatibility tools enabled." }
   }
 
+  /** Shrink the per-continuation control tail after the coordinator has assembled TOOL_HISTORY. */
   private fun compactPreparedCompatInput(input: String): String {
     val markerIndex = input.indexOf(COMPAT_NEXT_ACTION_MARKER)
     if (markerIndex < 0) return input
