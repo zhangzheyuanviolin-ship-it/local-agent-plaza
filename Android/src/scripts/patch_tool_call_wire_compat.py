@@ -1,77 +1,72 @@
 #!/usr/bin/env python3
-"""Idempotently harden the COMPAT tool-call boundary without disturbing the MCP210 runtime baseline.
-
-MCP218 keeps one model-family parser as the source of truth, recovers long multiline workspace-write
-calls, and adds a tiny explicit-web-search guard. AgentTools remains the execution/permission
-authority; LiteRT-LM, Conversation lifetime, Box, and thinking policy are untouched.
-"""
+"""Build-time MCP218 COMPAT hardening while preserving the MCP210 runtime baseline."""
 
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def patch_target(relative_path: str, replacements: list[tuple[str, str]], sentinel: str) -> None:
-    target = ROOT / relative_path
-    text = target.read_text(encoding="utf-8")
-    if sentinel in text:
-        return
-    for old, new in replacements:
-        count = text.count(old)
-        if count != 1:
-            raise SystemExit(
-                f"patch_tool_call_wire_compat: expected exactly one anchor in {relative_path}, "
-                f"found {count}: {old[:100]!r}"
-            )
-        text = text.replace(old, new, 1)
-    target.write_text(text, encoding="utf-8")
-    print(f"Patched {relative_path}")
+def read(rel: str) -> tuple[Path, str]:
+    path = ROOT / rel
+    return path, path.read_text(encoding="utf-8")
 
 
-# 1) Make the model-family adapter the single public parsing entrypoint.
-patch_target(
-    "app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentTooling.kt",
-    [
-        (
-            "fun parseCompatToolCall(rawText: String): ParsedCompatToolCall? {",
-            "internal fun decodeCanonicalCompatToolCall(rawText: String): ParsedCompatToolCall? {",
-        ),
-        (
-            "\nfun stripCompatThinkingText(rawText: String): String {",
-            "\nfun parseCompatToolCall(rawText: String): ParsedCompatToolCall? =\n"
-            "  CompatToolCallWireAdapter.parseFirstToolCall(rawText)\n\n"
-            "fun stripCompatThinkingText(rawText: String): String {",
-        ),
-    ],
-    sentinel="CompatToolCallWireAdapter.parseFirstToolCall(rawText)",
-)
+def write(path: Path, text: str) -> None:
+    path.write_text(text, encoding="utf-8")
+    print(f"MCP218 patched {path.relative_to(ROOT)}")
 
 
-# 2) Route canonical + model-family formats through one adapter, and recover very long workspace
-# writes even when the model emits raw newlines or unescaped quotes inside content.
-adapter_normalize_old = '''  internal fun normalizeFirstToolCall(rawText: String): String? {
-    val raw = rawText.trim()
-    if (raw.isBlank()) return null
-    parseCompatToolCall(raw)?.let { return canonical(it) }
-    return listOfNotNull(
-        parseLooseToolBlock(raw),
-        parseQwen35(raw),
-        parseGlm(raw),
-        parseGemma(raw),
-        parseMistral(raw),
-        parseDeepSeek(raw),
-        parseGptOss(raw),
-        parsePythonTag(raw),
-        parseMarkedJson(raw),
-        parseInvokeXml(raw),
-        parseToolUseXml(raw),
-        parseBareJson(raw),
-      )
-      .firstOrNull()
-      ?.let(::canonical)
-  }
-'''
-adapter_normalize_new = '''  internal fun normalizeFirstToolCall(rawText: String): String? =
+def require_index(text: str, marker: str, rel: str, start: int = 0) -> int:
+    index = text.find(marker, start)
+    if index < 0:
+        print(f"MCP218 patch missing marker in {rel}: {marker[:120]!r}", file=sys.stderr)
+        raise SystemExit(1)
+    return index
+
+
+def replace_once(text: str, old: str, new: str, rel: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        print(
+            f"MCP218 patch expected one marker in {rel}, found {count}: {old[:120]!r}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    return text.replace(old, new, 1)
+
+
+# AgentTooling: preserve the old strict decoder as an internal canonical decoder and make the
+# model-family adapter the only public parseCompatToolCall entrypoint.
+rel = "app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentTooling.kt"
+path, text = read(rel)
+if "CompatToolCallWireAdapter.parseFirstToolCall(rawText)" not in text:
+    text = replace_once(
+        text,
+        "fun parseCompatToolCall(rawText: String): ParsedCompatToolCall? {",
+        "internal fun decodeCanonicalCompatToolCall(rawText: String): ParsedCompatToolCall? {",
+        rel,
+    )
+    text = replace_once(
+        text,
+        "\nfun stripCompatThinkingText(rawText: String): String {",
+        "\nfun parseCompatToolCall(rawText: String): ParsedCompatToolCall? =\n"
+        "  CompatToolCallWireAdapter.parseFirstToolCall(rawText)\n\n"
+        "fun stripCompatThinkingText(rawText: String): String {",
+        rel,
+    )
+    write(path, text)
+
+
+# CompatToolCallWireAdapter: unify canonical/model-family parsing and recover invalid long writes.
+rel = "app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/CompatToolCallWireAdapter.kt"
+path, text = read(rel)
+if "internal fun parseFirstToolCall(rawText: String): ParsedCompatToolCall?" not in text:
+    start_marker = "  internal fun normalizeFirstToolCall(rawText: String): String? {"
+    end_marker = "\n\n  internal fun hasStrongToolSignal(text: String): Boolean {"
+    start = require_index(text, start_marker, rel)
+    end = require_index(text, end_marker, rel, start)
+    replacement = '''  internal fun normalizeFirstToolCall(rawText: String): String? =
     parseFirstToolCall(rawText)?.let(::canonical)
 
   internal fun parseFirstToolCall(rawText: String): ParsedCompatToolCall? {
@@ -94,10 +89,14 @@ adapter_normalize_new = '''  internal fun normalizeFirstToolCall(rawText: String
         parseBareJson(raw),
       )
       .firstOrNull()
-  }
-'''
-long_write_parser = r'''  // Recovery path for long article/file writes. Models sometimes emit valid tool structure but
-  // leave raw newlines or ASCII quotes unescaped inside the content string, which strict JSON rejects.
+  }'''
+    text = text[:start] + replacement + text[end:]
+
+    insertion_marker = "  // Generic <tool_call> variants with relaxed JSON, unquoted keys, or call:NAME{...}.\n"
+    insertion_at = require_index(text, insertion_marker, rel)
+    long_write_parser = r'''  // Long article/file writes can contain raw newlines or unescaped ASCII quotes inside content.
+  // Recover the stable outer envelope and treat the final quote before the two closing braces as
+  // the content terminator. Valid JSON is already handled by decodeCanonicalCompatToolCall first.
   private fun parseLongWorkspaceWrite(text: String): ParsedCompatToolCall? {
     val open = text.indexOf("<tool_call>", ignoreCase = true)
     if (open < 0) return null
@@ -119,9 +118,7 @@ long_write_parser = r'''  // Recovery path for long article/file writes. Models 
           "append_workspace_file",
           "append_workspace_text_file",
         )
-    ) {
-      return null
-    }
+    ) return null
 
     val contentMatch =
       Regex("[\\\"']content[\\\"']\\s*:\\s*([\\\"'])", RegexOption.IGNORE_CASE).find(block)
@@ -130,34 +127,27 @@ long_write_parser = r'''  // Recovery path for long article/file writes. Models 
     val contentStart = contentMatch.range.last + 1
     val tail = block.substring(contentStart)
     val terminal =
-      if (quote == '\"') {
-        Regex("\\\"\\s*}\\s*}\\s*$", RegexOption.DOT_MATCHES_ALL)
-      } else {
-        Regex("'\\s*}\\s*}\\s*$", RegexOption.DOT_MATCHES_ALL)
-      }
+      if (quote == '\"') Regex("\\\"\\s*}\\s*}\\s*$", RegexOption.DOT_MATCHES_ALL)
+      else Regex("'\\s*}\\s*}\\s*$", RegexOption.DOT_MATCHES_ALL)
     val terminalMatch = terminal.find(tail) ?: return null
     val rawContent = tail.substring(0, terminalMatch.range.first)
     val prefix = block.substring(0, contentMatch.range.first)
-    val path =
+    val pathValue =
       Regex("[\\\"']path[\\\"']\\s*:\\s*[\\\"']([^\\\"']*)[\\\"']", RegexOption.IGNORE_CASE)
         .find(prefix)
         ?.groupValues
         ?.getOrNull(1)
         ?.let(::decodeRecoveredString)
         .orEmpty()
-    if (path.isBlank()) return null
-
+    if (pathValue.isBlank()) return null
     return ParsedCompatToolCall(
       toolName = toolName,
-      arguments =
-        JSONObject()
-          .put("path", path)
-          .put("content", decodeRecoveredString(rawContent)),
+      arguments = JSONObject().put("path", pathValue).put("content", decodeRecoveredString(rawContent)),
     )
   }
 
-  private fun decodeRecoveredString(raw: String): String {
-    return raw
+  private fun decodeRecoveredString(raw: String): String =
+    raw
       .replace("\\r\\n", "\n")
       .replace("\\n", "\n")
       .replace("\\r", "\r")
@@ -165,160 +155,132 @@ long_write_parser = r'''  // Recovery path for long article/file writes. Models 
       .replace("\\\"", "\"")
       .replace("\\'", "'")
       .replace("\\\\", "\\")
-  }
 
 '''
-patch_target(
-    "app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/CompatToolCallWireAdapter.kt",
-    [
-        (adapter_normalize_old, adapter_normalize_new),
-        (
-            "  // Generic <tool_call> variants with relaxed JSON, unquoted keys, or call:NAME{...}.\n",
-            long_write_parser
-            + "  // Generic <tool_call> variants with relaxed JSON, unquoted keys, or call:NAME{...}.\n",
-        ),
-        (
-            "internal class CompatToolCallStreamGate(private val enabled: Boolean) {",
-            "internal class CompatToolCallStreamGate(\n"
-            "  private val enabled: Boolean,\n"
-            "  private val holdUntilDone: Boolean = false,\n"
-            ") {",
-        ),
-        (
-            "  fun accept(text: String): String {\n    if (!enabled) return text\n",
-            "  fun accept(text: String): String {\n"
-            "    if (!enabled) return text\n"
-            "    if (holdUntilDone) {\n"
-            "      mode = Mode.TOOL\n"
-            "      buffered.append(text)\n"
-            "      return \"\"\n"
-            "    }\n",
-        ),
-    ],
-    sentinel="internal fun parseFirstToolCall(rawText: String): ParsedCompatToolCall?",
-)
+    text = text[:insertion_at] + long_write_parser + text[insertion_at:]
+
+    text = replace_once(
+        text,
+        "internal class CompatToolCallStreamGate(private val enabled: Boolean) {",
+        "internal class CompatToolCallStreamGate(\n"
+        "  private val enabled: Boolean,\n"
+        "  private val holdUntilDone: Boolean = false,\n"
+        ") {",
+        rel,
+    )
+    text = replace_once(
+        text,
+        "  fun accept(text: String): String {\n    if (!enabled) return text\n",
+        "  fun accept(text: String): String {\n"
+        "    if (!enabled) return text\n"
+        "    if (holdUntilDone) {\n"
+        "      mode = Mode.TOOL\n"
+        "      buffered.append(text)\n"
+        "      return \"\"\n"
+        "    }\n",
+        rel,
+    )
+    write(path, text)
 
 
-# 3) Use the same parser for runtime tool fingerprints as the UI/execution path.
-fingerprint_old = '''  private fun extractToolCallFingerprint(text: String): String? {
-    val open = text.indexOf(TOOL_CALL_OPEN_TAG_RUNTIME, ignoreCase = true)
-    if (open < 0) return null
-    val payloadStart = open + TOOL_CALL_OPEN_TAG_RUNTIME.length
-    val close =
-      text.indexOf(
-        TOOL_CALL_CLOSE_TAG_RUNTIME,
-        startIndex = payloadStart,
-        ignoreCase = true,
-      )
-    val payload = text.substring(payloadStart, if (close >= 0) close else text.length).trim()
-    if (payload.isBlank()) return null
-    val jsonText = extractFirstJsonObject(payload)
-    if (jsonText != null) {
-      val json = runCatching { JSONObject(jsonText) }.getOrNull()
-      if (json != null) {
-        return canonicalizeJsonObject(json).take(MAX_FINGERPRINT_CHARS)
-      }
-    }
-    return payload.replace(Regex("\\s+"), " ").trim().take(MAX_FINGERPRINT_CHARS)
-  }
-'''
-fingerprint_new = '''  private fun extractToolCallFingerprint(text: String): String? {
+# Runtime coordinator: fingerprint exactly the same ParsedCompatToolCall used by execution/UI.
+rel = "app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentCompatRuntimeCoordinator.kt"
+path, text = read(rel)
+if "val call = parseCompatToolCall(text) ?: return null" not in text:
+    start_marker = "  private fun extractToolCallFingerprint(text: String): String? {"
+    end_marker = "\n\n  private fun extractFirstJsonObject(text: String): String? {"
+    start = require_index(text, start_marker, rel)
+    end = require_index(text, end_marker, rel, start)
+    replacement = '''  private fun extractToolCallFingerprint(text: String): String? {
     val call = parseCompatToolCall(text) ?: return null
     val canonical =
       JSONObject()
         .put("tool", call.toolName.trim())
         .put("arguments", call.arguments)
     return canonicalizeJsonObject(canonical).take(MAX_FINGERPRINT_CHARS)
-  }
-'''
-patch_target(
-    "app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentCompatRuntimeCoordinator.kt",
-    [(fingerprint_old, fingerprint_new)],
-    sentinel="val call = parseCompatToolCall(text) ?: return null",
-)
+  }'''
+    text = text[:start] + replacement + text[end:]
+    write(path, text)
 
 
-# 4) LlmChatModelHelper: inject the date/search control only for explicit web requests, hold that
-# first pass off the UI, and if the model still refuses to search, replace the stale prose with a
-# host-generated search_web call using the untouched original request. No extra corrective LLM pass.
-compat_kind_old = '''    val compatPassKind =
-      when (compatReason) {
-        COMPAT_FRESH_REASON_TOP_LEVEL -> "top_level"
-        COMPAT_FRESH_REASON_TOOL_CONTINUATION -> "continuation"
-        else -> "none"
-      }
+# LlmChatModelHelper: add the explicit-search control after prompt compaction, hold the required
+# first pass off the UI, and host-fallback straight to search_web if the model refuses to search.
+rel = "app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt"
+path, text = read(rel)
+if "searchRequiredForTopLevel" not in text:
+    text = replace_once(
+        text,
+        "import com.google.ai.edge.gallery.customtasks.agentchat.AgentCompatRuntimeCoordinator\n",
+        "import com.google.ai.edge.gallery.customtasks.agentchat.AgentCompatRuntimeCoordinator\n"
+        "import com.google.ai.edge.gallery.customtasks.agentchat.CompatSearchRequiredPolicy\n"
+        "import com.google.ai.edge.gallery.customtasks.agentchat.CompatToolCallStreamGate\n",
+        rel,
+    )
 
-    val effectiveExtraContext =
-'''
-compat_kind_new = '''    val compatPassKind =
-      when (compatReason) {
-        COMPAT_FRESH_REASON_TOP_LEVEL -> "top_level"
-        COMPAT_FRESH_REASON_TOOL_CONTINUATION -> "continuation"
-        else -> "none"
-      }
+    compat_start = require_index(text, "    val compatPassKind =", rel)
+    extra_context = require_index(text, "\n\n    val effectiveExtraContext =", rel, compat_start)
+    search_block = '''
     val searchRequiredForTopLevel =
       isCompatPass &&
         compatReason == COMPAT_FRESH_REASON_TOP_LEVEL &&
-        CompatSearchRequiredPolicy.isSearchRequiredInput(effectiveInput)
+        CompatSearchRequiredPolicy.isSearchRequiredInput(effectiveInput)'''
+    text = text[:extra_context] + search_block + text[extra_context:]
 
-    val effectiveExtraContext =
+    text = replace_once(
+        text,
+        "    var generatedChars = 0\n    val generatedText = StringBuilder()\n\n    conversation.sendMessageAsync(\n",
+        "    var generatedChars = 0\n"
+        "    val generatedText = StringBuilder()\n"
+        "    val compatToolCallGate =\n"
+        "      CompatToolCallStreamGate(\n"
+        "        enabled = isCompatPass,\n"
+        "        holdUntilDone = searchRequiredForTopLevel,\n"
+        "      )\n\n"
+        "    conversation.sendMessageAsync(\n",
+        rel,
+    )
+    text = replace_once(
+        text,
+        "            resultListener(text, false, thought.takeIf { it.isNotBlank() })\n",
+        "            val visibleText = compatToolCallGate.accept(text)\n"
+        "            if (visibleText.isNotEmpty() || thought.isNotBlank()) {\n"
+        "              resultListener(visibleText, false, thought.takeIf { it.isNotBlank() })\n"
+        "            }\n",
+        rel,
+    )
+
+    send_start = require_index(text, "    conversation.sendMessageAsync(", rel)
+    done_start = require_index(text, "          override fun onDone() {", rel, send_start)
+    perf_marker = "            AgentPerformanceCoordinator.onInferenceDone(model.name, generatedChars)"
+    perf_at = require_index(text, perf_marker, rel, done_start)
+    new_done_prefix = '''          override fun onDone() {
+            val rawGeneration = generatedText.toString()
+            val generationForRouting =
+              if (
+                searchRequiredForTopLevel &&
+                  !CompatSearchRequiredPolicy.hasWebSearchToolCall(rawGeneration)
+              ) {
+                CompatSearchRequiredPolicy.buildFallbackToolCall(effectiveInput) ?: rawGeneration
+              } else {
+                rawGeneration
+              }
+            val completedGeneration = compatToolCallGate.finish(generationForRouting)
+            if (completedGeneration.uiTail.isNotBlank()) {
+              resultListener(completedGeneration.uiTail, false, null)
+            }
+            val decision =
+              AgentCompatRuntimeCoordinator.onGenerationCompleted(
+                modelName = model.name,
+                generatedText = completedGeneration.runtimeText,
+              )
 '''
-patch_target(
-    "app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt",
-    [
-        (
-            "import com.google.ai.edge.gallery.customtasks.agentchat.AgentCompatRuntimeCoordinator\n",
-            "import com.google.ai.edge.gallery.customtasks.agentchat.AgentCompatRuntimeCoordinator\n"
-            "import com.google.ai.edge.gallery.customtasks.agentchat.CompatSearchRequiredPolicy\n"
-            "import com.google.ai.edge.gallery.customtasks.agentchat.CompatToolCallStreamGate\n",
-        ),
-        (compat_kind_old, compat_kind_new),
-        (
-            "    var generatedChars = 0\n    val generatedText = StringBuilder()\n\n    conversation.sendMessageAsync(\n",
-            "    var generatedChars = 0\n"
-            "    val generatedText = StringBuilder()\n"
-            "    val compatToolCallGate =\n"
-            "      CompatToolCallStreamGate(\n"
-            "        enabled = isCompatPass,\n"
-            "        holdUntilDone = searchRequiredForTopLevel,\n"
-            "      )\n\n"
-            "    conversation.sendMessageAsync(\n",
-        ),
-        (
-            "            resultListener(text, false, thought.takeIf { it.isNotBlank() })\n",
-            "            val visibleText = compatToolCallGate.accept(text)\n"
-            "            if (visibleText.isNotEmpty() || thought.isNotBlank()) {\n"
-            "              resultListener(visibleText, false, thought.takeIf { it.isNotBlank() })\n"
-            "            }\n",
-        ),
-        (
-            "          override fun onDone() {\n            val decision =\n              AgentCompatRuntimeCoordinator.onGenerationCompleted(\n                modelName = model.name,\n                generatedText = generatedText.toString(),\n              )\n",
-            "          override fun onDone() {\n"
-            "            val rawGeneration = generatedText.toString()\n"
-            "            val generationForRouting =\n"
-            "              if (\n"
-            "                searchRequiredForTopLevel &&\n"
-            "                  !CompatSearchRequiredPolicy.hasWebSearchToolCall(rawGeneration)\n"
-            "              ) {\n"
-            "                CompatSearchRequiredPolicy.buildFallbackToolCall(effectiveInput) ?: rawGeneration\n"
-            "              } else {\n"
-            "                rawGeneration\n"
-            "              }\n"
-            "            val completedGeneration = compatToolCallGate.finish(generationForRouting)\n"
-            "            if (completedGeneration.uiTail.isNotBlank()) {\n"
-            "              resultListener(completedGeneration.uiTail, false, null)\n"
-            "            }\n"
-            "            val decision =\n"
-            "              AgentCompatRuntimeCoordinator.onGenerationCompleted(\n"
-            "                modelName = model.name,\n"
-            "                generatedText = completedGeneration.runtimeText,\n"
-            "              )\n",
-        ),
-        (
-            "    val compactedRawInput = compactCompatEnvelope(input)\n",
-            "    val compactedRawInput =\n"
-            "      CompatSearchRequiredPolicy.injectIntoCompatInput(compactCompatEnvelope(input))\n",
-        ),
-    ],
-    sentinel="searchRequiredForTopLevel",
-)
+    text = text[:done_start] + new_done_prefix + text[perf_at:]
+
+    text = replace_once(
+        text,
+        "    val compactedRawInput = compactCompatEnvelope(input)\n",
+        "    val compactedRawInput =\n"
+        "      CompatSearchRequiredPolicy.injectIntoCompatInput(compactCompatEnvelope(input))\n",
+        rel,
+    )
+    write(path, text)
