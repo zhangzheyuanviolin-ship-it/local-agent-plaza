@@ -26,6 +26,7 @@ import com.google.ai.edge.gallery.customtasks.agentchat.AgentPerformanceCoordina
 import com.google.ai.edge.gallery.customtasks.agentchat.COMPAT_FRESH_REASON_TOOL_CONTINUATION
 import com.google.ai.edge.gallery.customtasks.agentchat.COMPAT_FRESH_REASON_TOP_LEVEL
 import com.google.ai.edge.gallery.data.Accelerator
+import com.google.ai.edge.gallery.data.BuiltInTaskId
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.DEFAULT_MAX_TOKEN
 import com.google.ai.edge.gallery.data.DEFAULT_TEMPERATURE
@@ -69,10 +70,9 @@ private const val COMPAT_NEXT_ACTION_MARKER = "\n\nNEXT_ACTION\n"
 data class LlmModelInstance(val engine: Engine, var conversation: Conversation)
 
 object LlmChatModelHelper : LlmModelHelper {
-  // Indexed by model name.
   private val cleanUpListeners: MutableMap<String, CleanUpListener> = mutableMapOf()
 
-  @OptIn(ExperimentalApi::class) // opt-in experimental flags
+  @OptIn(ExperimentalApi::class)
   override fun initialize(
     context: Context,
     model: Model,
@@ -166,13 +166,21 @@ object LlmChatModelHelper : LlmModelHelper {
           )
       }
       ExperimentalFlags.enableSpeculativeDecoding = speculativeDecoding
-      Log.d(TAG, "Speculative decoding enabled: $speculativeDecoding")
+      // MCP211 is a measurement-only Agent build. LiteRT-LM 0.15.0 reads this flag exactly once
+      // when the Engine is created, so reset it immediately after initialization to avoid changing
+      // unrelated engines created later in this process.
+      ExperimentalFlags.enableBenchmark = taskId == BuiltInTaskId.LLM_AGENT_CHAT
+      Log.d(
+        TAG,
+        "Speculative decoding enabled: $speculativeDecoding; native benchmark enabled for engine: ${ExperimentalFlags.enableBenchmark}",
+      )
 
       val engineInitStartNanos = SystemClock.elapsedRealtimeNanos()
       val engine = Engine(engineConfig)
       engine.initialize()
       val engineInitMs = elapsedMsSince(engineInitStartNanos)
       ExperimentalFlags.enableSpeculativeDecoding = false
+      ExperimentalFlags.enableBenchmark = false
 
       ExperimentalFlags.enableConversationConstrainedDecoding =
         enableConversationConstrainedDecoding
@@ -210,9 +218,10 @@ object LlmChatModelHelper : LlmModelHelper {
       )
       Log.d(
         TAG,
-        "MCP209 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
+        "MCP211 init metrics for '${model.name}': engine=${"%.2f".format(engineInitMs)}ms conversation=${"%.2f".format(conversationInitMs)}ms",
       )
     } catch (e: Exception) {
+      ExperimentalFlags.enableBenchmark = false
       ExperimentalFlags.enableSpeculativeDecoding = false
       ExperimentalFlags.enableConversationConstrainedDecoding = false
       onDone(cleanUpMediapipeTaskErrorMessage(e.message ?: "Unknown error"))
@@ -366,8 +375,6 @@ object LlmChatModelHelper : LlmModelHelper {
       mutableMapOf<String, Any>().apply {
         extraContext?.forEach { (key, value) -> put(key, value) }
         if (isCompatPass) {
-          // MCP209: COMPAT is a latency-first mode. Hard-disable Gemma 4 thinking at both the Jinja
-          // template and native decoding layers for every COMPAT pass, including the first pass.
           put("enable_thinking", false)
           put("preserve_thinking", false)
           put("thinking_token_budget", 0)
@@ -432,16 +439,43 @@ object LlmChatModelHelper : LlmModelHelper {
           }
 
           override fun onDone() {
+            // Mark app-observed generation done before reading diagnostics so the JNI benchmark read
+            // cannot inflate decode_after_first_token_ms. Its small orchestration cost is measured
+            // separately and will naturally appear in the post-generation/tool gap.
+            AgentPerformanceCoordinator.onInferenceDone(model.name, generatedChars)
+
+            if (isCompatPass) {
+              val benchmarkReadStartedNanos = SystemClock.elapsedRealtimeNanos()
+              val benchmarkResult = runCatching { conversation.getBenchmarkInfo() }
+              val tokenCountResult = runCatching { conversation.getTokenCount() }
+              val benchmarkReadMs = elapsedMsSince(benchmarkReadStartedNanos)
+              val benchmark = benchmarkResult.getOrNull()
+              val benchmarkError =
+                benchmarkResult.exceptionOrNull()?.javaClass?.simpleName
+                  ?: tokenCountResult.exceptionOrNull()?.javaClass?.simpleName
+              AgentPerformanceCoordinator.onLiteRtNativeBenchmark(
+                modelName = model.name,
+                initTimeMs = benchmark?.initTimeInSecond?.times(1000.0),
+                nativeTtftMs = benchmark?.timeToFirstTokenInSecond?.times(1000.0),
+                prefillTokenCount = benchmark?.lastPrefillTokenCount,
+                decodeTokenCount = benchmark?.lastDecodeTokenCount,
+                prefillTokensPerSecond = benchmark?.lastPrefillTokensPerSecond,
+                decodeTokensPerSecond = benchmark?.lastDecodeTokensPerSecond,
+                kvTokenCount = tokenCountResult.getOrNull(),
+                benchmarkReadMs = benchmarkReadMs,
+                errorClass = benchmarkError,
+              )
+            }
+
             val decision =
               AgentCompatRuntimeCoordinator.onGenerationCompleted(
                 modelName = model.name,
                 generatedText = generatedText.toString(),
               )
-            AgentPerformanceCoordinator.onInferenceDone(model.name, generatedChars)
             if (decision.blockedRepeatedToolCall) {
               val errorMessage =
                 "兼容工具调用已停止：检测到连续三次完全相同的工具调用，已在再次执行前拦截，避免重复操作。"
-              Log.w(TAG, "MCP209 blocked repeated COMPAT tool call for '${model.name}'.")
+              Log.w(TAG, "MCP211 blocked repeated COMPAT tool call for '${model.name}'.")
               onError(errorMessage)
               return
             }
@@ -508,17 +542,11 @@ object LlmChatModelHelper : LlmModelHelper {
     )
     Log.d(
       TAG,
-      "MCP209 COMPAT fresh conversation for '${model.name}': reason=${prepared.freshConversationReason} reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms originalRawChars=${input.length} compactRawChars=${compactedRawInput.length} finalChars=${finalInput.length} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
+      "MCP211 COMPAT fresh conversation for '${model.name}': reason=${prepared.freshConversationReason} reset=${"%.2f".format(resetMs)}ms prepare=${"%.2f".format(prepareMs)}ms originalRawChars=${input.length} compactRawChars=${compactedRawInput.length} finalChars=${finalInput.length} historySteps=${prepared.historyStepCount} historyChars=${prepared.historyChars}",
     )
     return finalInput
   }
 
-  /**
-   * MCP209 latency optimization: compact only the fixed COMPAT protocol envelope before the
-   * coordinator captures it as instructionPrefix. Tool names and JSON argument schemas are kept
-   * verbatim; descriptive prose and full skill descriptions are shortened. This directly reduces
-   * every top-level and tool-continuation prefill without changing LiteRT-LM or model versions.
-   */
   private fun compactCompatEnvelope(input: String): String {
     val trimmed = input.trimStart()
     if (!trimmed.startsWith(COMPAT_INSTRUCTIONS_MARKER)) return input
@@ -595,7 +623,6 @@ $compactSkills
       .ifBlank { "- No compatibility tools enabled." }
   }
 
-  /** Shrink the per-continuation control tail after the coordinator has assembled TOOL_HISTORY. */
   private fun compactPreparedCompatInput(input: String): String {
     val markerIndex = input.indexOf(COMPAT_NEXT_ACTION_MARKER)
     if (markerIndex < 0) return input
