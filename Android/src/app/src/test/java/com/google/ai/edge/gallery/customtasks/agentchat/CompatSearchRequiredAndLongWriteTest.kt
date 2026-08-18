@@ -1,5 +1,6 @@
 package com.google.ai.edge.gallery.customtasks.agentchat
 
+// MCP218 direct feature-branch CI marker: compile against the experimental-derived source tree.
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
