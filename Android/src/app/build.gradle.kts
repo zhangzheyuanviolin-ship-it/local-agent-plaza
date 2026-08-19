@@ -29,13 +29,13 @@ plugins {
 }
 
 // Temporary model-build bridge. The marker exists only on the dedicated CI branch.
-// It runs the Qwen3.5 conversion/validation before the normal APK build, then prepares
-// the later artifact upload step to carry the verified .litertlm bytes.
 val qwen35BridgeMarker = rootProject.file("../../model-conversion/qwen35/ANDROID_WORKFLOW_BRIDGE")
 if (qwen35BridgeMarker.exists() && System.getenv("CI") == "true") {
   providers.exec {
     workingDir(rootProject.file("../.."))
-    commandLine("bash", "model-conversion/qwen35/run_android_bridge_ci.sh")
+    commandLine("bash", "-x", "model-conversion/qwen35/run_android_bridge_ci.sh")
+    standardOutput = System.out
+    errorOutput = System.err
   }.result.get().assertNormalExitValue()
 }
 
@@ -43,8 +43,6 @@ android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
 
-  // 允许通过环境变量 APPLICATION_ID_SUFFIX 为非主线渠道（如 mcp、experimental）追加包名后缀，
-  // 使新构件可与已安装的稳定版（com.localagent.plaza）在同一台设备并行安装而互不覆盖。
   val appApplicationIdSuffix =
     providers.environmentVariable("APPLICATION_ID_SUFFIX").orNull ?: ""
   val appApplicationId = "com.localagent.plaza${appApplicationIdSuffix}"
@@ -62,8 +60,6 @@ android {
     versionName = localVersionName
     ndk { abiFilters += listOf("arm64-v8a") }
 
-    // Needed for HuggingFace auth workflows.
-    // Use the scheme of the "Redirect URLs" in HuggingFace app.
     manifestPlaceholders["appAuthRedirectScheme"] =
         "${appApplicationId}.oauthredirect"
     manifestPlaceholders["appDeepLinkScheme"] = appApplicationId
