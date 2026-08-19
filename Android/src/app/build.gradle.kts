@@ -42,6 +42,12 @@ providers.exec {
   commandLine("python3", rootProject.file("scripts/patch_tool_call_wire_compat.py").absolutePath)
 }.result.get().assertNormalExitValue()
 
+// MCP224: preserve the validated runtime while adding copyable model lifecycle diagnostics,
+// true manual Native selection, and user-controlled COMPAT tool-loop termination.
+providers.exec {
+  commandLine("python3", rootProject.file("scripts/patch_mcp224_model_diagnostics.py").absolutePath)
+}.result.get().assertNormalExitValue()
+
 android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
@@ -180,5 +186,5 @@ dependencies {
 
 protobuf {
   protoc { artifact = "com.google.protobuf:protoc:4.26.1" }
-  generateProtoTasks { all().forEach { it.plugins { create("java") { option("lite") } } } }
+  generateProtoTasks { all().forEach { it.plugins { create("java") { option("lite") } } }
 }
