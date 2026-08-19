@@ -13,6 +13,25 @@ export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 export MALLOC_ARENA_MAX=2
 
+# Keep a visible heartbeat throughout dependency installation, model download,
+# conversion and verification. Some hosted runners can be reclaimed when a
+# nested build produces no visible output for several minutes.
+heartbeat() {
+  while true; do
+    sleep 45
+    echo "QWEN35_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    df -h "$REPO_ROOT" || true
+    free -h || true
+  done
+}
+heartbeat &
+HEARTBEAT_PID=$!
+cleanup_heartbeat() {
+  kill "$HEARTBEAT_PID" >/dev/null 2>&1 || true
+  wait "$HEARTBEAT_PID" >/dev/null 2>&1 || true
+}
+trap cleanup_heartbeat EXIT
+
 if [ -f "$OUTPUT_DIR/BRIDGE_COMPLETE" ]; then
   echo 'Qwen3.5 conversion bridge already completed in this job.'
   exit 0
@@ -34,20 +53,58 @@ df -h || true
 
 PY=python3
 $PY -m pip install --upgrade pip setuptools wheel
-$PY -m pip install --pre --upgrade litert-torch-nightly
-$PY -m pip install --upgrade transformers psutil
+
+# Use the official current LiteRT Torch source tree as one coherent package.
+# This avoids mismatched nightly wheels where model_ext imports files omitted
+# from the wheel (observed with experimental/npu_export).
+LITERT_TORCH_SRC="${RUNNER_TEMP:-/tmp}/litert-torch-main"
+rm -rf "$LITERT_TORCH_SRC"
+git clone --depth 1 https://github.com/google-ai-edge/litert-torch.git "$LITERT_TORCH_SRC"
+export PYTHONPATH="$LITERT_TORCH_SRC${PYTHONPATH:+:$PYTHONPATH}"
+
+# The conversion is CPU-only. Pin Google's currently declared Torch baseline
+# to the official PyTorch CPU wheel so pip does not pull several gigabytes of
+# CUDA 13 libraries onto the hosted runner.
+$PY -m pip install --upgrade 'torch==2.12.0+cpu' --extra-index-url https://download.pytorch.org/whl/cpu
+
+# Install the LiteRT Torch source package's runtime dependencies without asking
+# pip to resolve litert-torch itself (and therefore without replacing CPU Torch).
+$PY -m pip install --upgrade \
+  absl-py \
+  numpy \
+  scipy \
+  safetensors \
+  multipledispatch \
+  transformers \
+  kagglehub \
+  tabulate \
+  'ai-edge-litert-nightly[model-utils]' \
+  ai-edge-quantizer-nightly \
+  'litert-converter>=0.0.0.dev0' \
+  'jax[cpu]' \
+  jaxtyping \
+  fire \
+  sentencepiece \
+  rich \
+  'litert-lm-builder>=0.0.0.dev0' \
+  pillow \
+  psutil
+$PY -m pip install --no-deps --upgrade 'torchao>=0.17.0'
+
+# Smoke-test against the same LiteRT-LM 0.15 generation used by the Android app.
 $PY -m pip install --pre --upgrade 'litert-lm-api-nightly==0.15.0.dev20260727'
 
 $PY - <<'PY'
-import importlib.metadata
-for name in ('litert-torch-nightly','litert-lm-api-nightly','litert-lm','litert-lm-builder','litert-lm-builder-nightly','transformers','torch'):
+import importlib.metadata, pathlib
+import litert_torch
+for name in ('litert-lm-api-nightly','litert-lm','litert-lm-builder','transformers','torch','torchao'):
     try:
         print(name, importlib.metadata.version(name))
     except importlib.metadata.PackageNotFoundError:
         print(name, 'not-installed')
+print('litert_torch source:', pathlib.Path(litert_torch.__file__).resolve())
 PY
 
-check_support() {
 $PY - <<'PY'
 import inspect
 from transformers import Qwen3_5Config
@@ -63,19 +120,6 @@ for token in ('TYPE_LINEAR_ATTENTION','kv_cache_c_','kv_cache_r_','kv_cache_k_',
     assert token in src, token
 print('Qwen3.5 Full Model Reauthoring + hybrid executor metadata support present.')
 PY
-}
-
-if ! check_support; then
-  echo 'Installed wheel is incomplete/mismatched for current Qwen3.5; using the complete Google main source tree on PYTHONPATH.'
-  rm -rf "${RUNNER_TEMP:-/tmp}/litert-torch-main"
-  git clone --depth 1 https://github.com/google-ai-edge/litert-torch.git "${RUNNER_TEMP:-/tmp}/litert-torch-main"
-  export PYTHONPATH="${RUNNER_TEMP:-/tmp}/litert-torch-main${PYTHONPATH:+:$PYTHONPATH}"
-  $PY - <<'PY'
-import pathlib, litert_torch
-print('Using litert_torch from:', pathlib.Path(litert_torch.__file__).resolve())
-PY
-  check_support
-fi
 
 $PY - <<'PY'
 import litert_lm_builder
@@ -111,7 +155,7 @@ print('FINAL_MANIFEST='+json.dumps(m,ensure_ascii=False,separators=(',',':')))
 PY
 
 # Free source-model/cache space before the normal Android APK build continues.
-rm -rf "$HF_HOME" "${RUNNER_TEMP:-/tmp}/litert-torch-main" || true
+rm -rf "$HF_HOME" "$LITERT_TORCH_SRC" || true
 $PY -m pip cache purge || true
 free -h || true
 df -h || true
