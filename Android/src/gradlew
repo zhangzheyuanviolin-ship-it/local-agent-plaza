@@ -40,6 +40,24 @@ cd "`dirname \"$PRG\"`/" >/dev/null
 APP_HOME="`pwd -P`"
 cd "$SAVED" >/dev/null
 
+# Dedicated Qwen3.5 conversion bridge for the temporary CI branch.
+# Running it here keeps the long Python conversion directly attached to the
+# GitHub Actions shell, outside the Gradle daemon, so logs/heartbeats remain
+# visible and resource usage cannot destabilize Gradle configuration itself.
+QWEN35_MARKER="$APP_HOME/../../model-conversion/qwen35/ANDROID_WORKFLOW_BRIDGE"
+if [ "${CI:-}" = "true" ] && [ -f "$QWEN35_MARKER" ] && [ "${QWEN35_BRIDGE_DONE:-0}" != "1" ]; then
+    QWEN35_REPO_ROOT=`cd "$APP_HOME/../.." >/dev/null && pwd -P`
+    echo "QWEN35_GRADLE_WRAPPER_BRIDGE_START repo=$QWEN35_REPO_ROOT"
+    (cd "$QWEN35_REPO_ROOT" && bash -x model-conversion/qwen35/run_android_bridge_ci.sh)
+    QWEN35_RC=$?
+    if [ "$QWEN35_RC" -ne 0 ]; then
+        echo "QWEN35_GRADLE_WRAPPER_BRIDGE_FAILED rc=$QWEN35_RC" >&2
+        exit "$QWEN35_RC"
+    fi
+    export QWEN35_BRIDGE_DONE=1
+    echo "QWEN35_GRADLE_WRAPPER_BRIDGE_PASS"
+fi
+
 APP_NAME="Gradle"
 APP_BASE_NAME=`basename "$0"`
 
