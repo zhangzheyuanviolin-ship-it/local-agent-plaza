@@ -39,9 +39,9 @@ else:
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
     print(f"MCP224 fixed Context-free inference diagnostics in {REL}")
 
-# MCP238 runs after the validated MCP224 transforms. The v2 bootstrap rewrites one Python-3.11
-# incompatible f-string expression in the retained v1 patch before executing the reviewed patch.
-mcp238 = ROOT / "scripts/patch_mcp238_qwen35_model_download_v2.py"
+# MCP238 runs last. v3 injects the conversion workflow's verified ten-part release metadata and
+# performs the Python-3.11 f-string compatibility rewrite before executing the retained patch.
+mcp238 = ROOT / "scripts/patch_mcp238_qwen35_model_download_v3.py"
 if not mcp238.exists():
     print(f"MCP238 patch script missing: {mcp238}", file=sys.stderr)
     raise SystemExit(1)
