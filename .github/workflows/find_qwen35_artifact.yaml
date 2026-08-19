@@ -1,0 +1,66 @@
+name: Locate Qwen3.5 Converted Artifact
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/find_qwen35_artifact.yaml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find newest non-expired converted model artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=qwen35-2b-q8-4096-litertlm&per_page=100" > "$RUNNER_TEMP/artifacts.json"
+          python - <<'PY' > "$RUNNER_TEMP/result.json"
+          import json, os, pathlib
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'artifacts.json'
+          data = json.loads(p.read_text())
+          artifacts = [a for a in data.get('artifacts', []) if not a.get('expired')]
+          artifacts.sort(key=lambda a: a.get('created_at',''), reverse=True)
+          if not artifacts:
+              raise SystemExit('No non-expired qwen35-2b-q8-4096-litertlm artifact found')
+          a = artifacts[0]
+          out = {
+              'schema':'local-agent-plaza.qwen35-artifact-location.v1',
+              'id':a['id'],
+              'name':a['name'],
+              'size_in_bytes':a['size_in_bytes'],
+              'archive_download_url':a['archive_download_url'],
+              'expired':a['expired'],
+              'created_at':a['created_at'],
+              'expires_at':a['expires_at'],
+              'workflow_run':a.get('workflow_run'),
+              'all_candidates':[{
+                  'id':x['id'],'size_in_bytes':x['size_in_bytes'],'created_at':x['created_at'],'expired':x['expired'],'workflow_run':x.get('workflow_run')
+              } for x in artifacts[:10]],
+          }
+          print(json.dumps(out, indent=2))
+          PY
+          cat "$RUNNER_TEMP/result.json"
+
+      - name: Publish location marker
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/qwen35_converted_artifact.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message="Update Qwen3.5 converted artifact location" -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message="Add Qwen3.5 converted artifact location" -f branch=experimental -f content="$CONTENT"
+          fi
