@@ -1,0 +1,1 @@
+Baseline CI trigger to verify GitHub Actions event delivery through the connected GitHub account.
