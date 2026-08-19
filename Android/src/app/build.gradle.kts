@@ -30,12 +30,20 @@ plugins {
 val qwen35BridgeMarker = rootProject.file("../../model-conversion/qwen35/ANDROID_WORKFLOW_BRIDGE")
 if (qwen35BridgeMarker.exists() && System.getenv("CI") == "true") {
   val qwen35RepoRoot = rootProject.file("../..").absoluteFile
+  val qwen35Log = File(qwen35RepoRoot, "qwen35-bridge-ci.log")
   val qwen35Process =
     ProcessBuilder("bash", "-x", "model-conversion/qwen35/run_android_bridge_ci.sh")
       .directory(qwen35RepoRoot)
-      .inheritIO()
+      .redirectErrorStream(true)
+      .redirectOutput(qwen35Log)
       .start()
   val qwen35Exit = qwen35Process.waitFor()
+  if (qwen35Log.exists()) {
+    val qwen35Text = qwen35Log.readText()
+    println("===== QWEN35 BRIDGE LOG =====")
+    println(if (qwen35Text.length > 30000) qwen35Text.takeLast(30000) else qwen35Text)
+    println("===== END QWEN35 BRIDGE LOG =====")
+  }
   if (qwen35Exit != 0) {
     throw GradleException("Qwen3.5 model conversion bridge failed with exit code $qwen35Exit")
   }
