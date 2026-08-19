@@ -48,6 +48,15 @@ providers.exec {
   commandLine("python3", rootProject.file("scripts/patch_mcp224_model_diagnostics.py").absolutePath)
 }.result.get().assertNormalExitValue()
 
+// MCP224 CI follow-up: run after the main MCP224 patch so inference callbacks can append the
+// diagnostic exception without requiring an Android Context that is unavailable in runInference.
+providers.exec {
+  commandLine(
+    "python3",
+    rootProject.file("scripts/patch_mcp224_inference_diag_context_fix.py").absolutePath,
+  )
+}.result.get().assertNormalExitValue()
+
 android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
