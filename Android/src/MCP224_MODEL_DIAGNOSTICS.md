@@ -9,3 +9,5 @@ This build preserves the MCP223 runtime baseline and adds:
 - the existing user Stop button remains the generic tool-loop termination control.
 
 Primary first-device probe: Qwen3.5 2B LiteRT-LM on Android.
+
+CI validation: the MCP224 source changes passed the full Android assembleRelease compile probe before this MCP-channel build trigger.
