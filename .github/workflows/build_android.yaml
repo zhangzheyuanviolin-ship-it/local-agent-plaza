@@ -13,167 +13,146 @@ on:
     branches: [ "main" ]
     paths:
       - 'Android/**'
+      - '.github/workflows/build_android.yaml'
 
 permissions:
-  contents: write
+  contents: read
+  actions: read
 
 jobs:
-  build_apk:
-    name: Build Android APK
+  split_qwen35_model:
+    name: Split verified Qwen3.5 model artifact
+    if: >-
+      (github.event_name == 'push' && github.ref_name == 'feature/qwen35-artifact-split') ||
+      (github.event_name == 'pull_request' && github.head_ref == 'feature/qwen35-artifact-split')
     runs-on: ubuntu-latest
     env:
-      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
-      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
-      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
-      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
-    defaults:
-      run:
-        working-directory: ./Android/src
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_ARTIFACT_ID: '9367298862'
+      SOURCE_RUN_ID: '32255079022'
+      MODEL_NAME: 'Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm'
     steps:
-      - name: Checkout the source code
-        uses: actions/checkout@v4
-      - name: Checkout stable-diffusion.cpp
-        uses: actions/checkout@v4
-        with:
-          repository: leejet/stable-diffusion.cpp
-          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
-          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
-          submodules: recursive
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-      - name: Derive branch-aware version channel
-        id: channel
+      - name: Download verified source artifact and split model
+        shell: bash
         run: |
-          REF_NAME="${GITHUB_REF_NAME}"
-          REF_TYPE="${GITHUB_REF_TYPE}"
-          echo "Triggered by ref_name=${REF_NAME} ref_type=${REF_TYPE}"
-          IS_PRERELEASE="false"
-          if [ "$REF_TYPE" = "tag" ]; then
-            RAW_VNAME="${REF_NAME#v}"
-            # tag 关键字 → 渠道与包名后缀（保证可与稳定版 com.localagent.plaza 并行安装）
-            # 注意：VNAME 的基底必须是已经发布到 google-ai-edge/gallery/model_allowlists 的版本，
-            # 因为应用会通过 BuildConfig.VERSION_NAME.substringBefore("-").replace(".", "_") 去拉
-            # https://raw.githubusercontent.com/google-ai-edge/gallery/refs/heads/main/model_allowlists/{base}.json
-            # 当前可用基底版本上限为 1.0.14（截至 2025-06 校验）。
-            ALLOWLIST_BASE="1.0.14"
-            case "$REF_NAME" in
-              *mcp*)
-                CHANNEL="mcp"
-                SUFFIX=".mcp"
-                VNAME="${ALLOWLIST_BASE}-mcp.${GITHUB_RUN_NUMBER}"
-                ;;
-              *experimental*)
-                CHANNEL="mcp"
-                SUFFIX=".mcp"
-                VNAME="${ALLOWLIST_BASE}-mcp.${GITHUB_RUN_NUMBER}"
-                ;;
-              *visual*)
-                CHANNEL="visual"
-                SUFFIX=""
-                VNAME="${RAW_VNAME}"
-                ;;
-              v1.0.[0-9]*-plaza.[0-9]*|v1.0.[0-9]*|v[0-9]*.[0-9]*.[0-9]*)
-                CHANNEL="release"
-                SUFFIX=""
-                VNAME="${RAW_VNAME}"
-                ;;
-              *)
-                CHANNEL="tag"
-                SUFFIX=".dev"
-                VNAME="${ALLOWLIST_BASE}-dev.${GITHUB_RUN_NUMBER}"
-                ;;
-            esac
-            # prerelease 判定：含 smoketest/alpha/beta/rc/dev 等关键字
-            case "$REF_NAME" in
-              *smoketest*|*alpha*|*beta*|*rc*|*dev*|*experimental*)
-                IS_PRERELEASE="true"
-                ;;
-            esac
-          else
-            BRANCH="${REF_NAME}"
-            case "$BRANCH" in
-              main)
-                VNAME="1.0.14-plaza.main.$GITHUB_RUN_NUMBER"
-                CHANNEL="main"
-                SUFFIX=""
-                ;;
-              experimental)
-                VNAME="1.0.14-mcp.$GITHUB_RUN_NUMBER"
-                CHANNEL="mcp"
-                SUFFIX=".mcp"
-                ;;
-              feature/*)
-                SAFE_VERSION="$(printf '%s' "$BRANCH" | sed 's|^feature/||; s|[^a-zA-Z0-9.-]|-|g; s|^-*||; s|-*$||')"
-                SAFE_PACKAGE="$(printf '%s' "$BRANCH" | sed 's|^feature/||; s|[^a-zA-Z0-9_]|_|g; s|^_*||; s|_*$||')"
-                [ -n "$SAFE_VERSION" ] || SAFE_VERSION="feature"
-                [ -n "$SAFE_PACKAGE" ] || SAFE_PACKAGE="feature"
-                VNAME="1.0.13-plaza.${SAFE_VERSION}.$GITHUB_RUN_NUMBER"
-                CHANNEL="$SAFE_VERSION"
-                SUFFIX=".${SAFE_PACKAGE}"
-                ;;
-              *)
-                VNAME="1.0.13-plaza.dev.$GITHUB_RUN_NUMBER"
-                CHANNEL="dev"
-                SUFFIX=".dev"
-                ;;
-            esac
+          set -euo pipefail
+          mkdir -p source parts manifest
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip"
+          echo "Downloading verified source artifact ${SOURCE_ARTIFACT_ID} from run ${SOURCE_RUN_ID}"
+          curl --fail --location --retry 5 --retry-all-errors \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api" -o source/source.zip
+          unzip -q source/source.zip -d source/extracted
+          mapfile -t candidates < <(find source/extracted -type f -name 'local-agent-plaza-*.apk' -print)
+          if [ "${#candidates[@]}" -ne 1 ]; then
+            echo "Expected exactly one bridged model file, found ${#candidates[@]}" >&2
+            printf '%s\n' "${candidates[@]:-}" >&2
+            exit 1
           fi
-          echo "LOCAL_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
-          echo "LOCAL_VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "APPLICATION_ID_SUFFIX=$SUFFIX" >> "$GITHUB_ENV"
-          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "vname=$VNAME" >> "$GITHUB_OUTPUT"
-          echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
-      - name: Prepare release signing
-        run: |
-          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
-          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
-          test -n "$ANDROID_RELEASE_KEY_ALIAS"
-          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
-          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
-          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
-      - name: Build
-        run: ./gradlew assembleRelease
-      - name: Verify APK signing and version
-        run: |
-          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk
-          BADGING="$("$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/aapt" dump badging app/build/outputs/apk/release/app-release.apk | head -n 1)"
-          echo "$BADGING"
-          case "$LOCAL_VERSION_NAME" in
-            *mcp*)
-              echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
-              ;;
-          esac
-      - name: Rename APK to channel-aware filename
-        id: rename
-        run: |
-          OUT="app/build/outputs/apk/release/app-release.apk"
-          NEW="local-agent-plaza-${{ steps.channel.outputs.vname }}.apk"
-          cp "$OUT" "$NEW"
-          sha256sum "$NEW" | awk '{print $1}' > "$NEW.sha256"
-          echo "apk_name=$NEW" >> "$GITHUB_OUTPUT"
-          echo "sha256_name=$NEW.sha256" >> "$GITHUB_OUTPUT"
-      - name: Upload APK artifact (短保留：3 天，节省云端存储)
+          src="${candidates[0]}"
+          magic="$(head -c 8 "$src")"
+          test "$magic" = 'LITERTLM'
+          cp "$src" "manifest/${MODEL_NAME}"
+          bytes="$(stat -c '%s' "manifest/${MODEL_NAME}")"
+          sha="$(sha256sum "manifest/${MODEL_NAME}" | awk '{print $1}')"
+          printf '%s  %s\n' "$sha" "$MODEL_NAME" > manifest/model.sha256
+          printf 'filename=%s\nbytes=%s\nsha256=%s\nmagic=LITERTLM\nsource_run_id=%s\nsource_artifact_id=%s\n' \
+            "$MODEL_NAME" "$bytes" "$sha" "$SOURCE_RUN_ID" "$SOURCE_ARTIFACT_ID" > manifest/model-info.txt
+          split -b 480000000 -d -a 2 "manifest/${MODEL_NAME}" parts/qwen35.part.
+          count="$(find parts -maxdepth 1 -type f -name 'qwen35.part.*' | wc -l)"
+          echo "parts=$count bytes=$bytes sha256=$sha"
+          test "$count" -eq 10
+          rm "manifest/${MODEL_NAME}"
+          ls -lh parts manifest
+
+      - name: Upload manifest
         uses: actions/upload-artifact@v4
         with:
-          name: local-agent-plaza-${{ steps.channel.outputs.channel }}-${{ github.run_number }}
-          path: |
-            Android/src/${{ steps.rename.outputs.apk_name }}
-            Android/src/${{ steps.rename.outputs.sha256_name }}
+          name: qwen35-q8-4096-manifest
+          path: manifest/*
+          compression-level: 0
           if-no-files-found: error
           retention-days: 3
-      - name: Publish APK to GitHub Release (仅当 tag 触发)
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+
+      - name: Upload part 00
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          prerelease: ${{ steps.channel.outputs.prerelease }}
-          files: |
-            Android/src/${{ steps.rename.outputs.apk_name }}
-            Android/src/${{ steps.rename.outputs.sha256_name }}
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: qwen35-q8-4096-part-00
+          path: parts/qwen35.part.00
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen35-q8-4096-part-01
+          path: parts/qwen35.part.01
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen35-q8-4096-part-02
+          path: parts/qwen35.part.02
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen35-q8-4096-part-03
+          path: parts/qwen35.part.03
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload part 04
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen35-q8-4096-part-04
+          path: parts/qwen35.part.04
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload part 05
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen35-q8-4096-part-05
+          path: parts/qwen35.part.05
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload part 06
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen35-q8-4096-part-06
+          path: parts/qwen35.part.06
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload part 07
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen35-q8-4096-part-07
+          path: parts/qwen35.part.07
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload part 08
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen35-q8-4096-part-08
+          path: parts/qwen35.part.08
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload part 09
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen35-q8-4096-part-09
+          path: parts/qwen35.part.09
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
