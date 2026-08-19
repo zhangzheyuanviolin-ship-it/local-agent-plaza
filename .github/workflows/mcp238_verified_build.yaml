@@ -1,0 +1,317 @@
+name: MCP238 Verified Build
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp238_verified_build.yaml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: mcp238-verified-build
+  cancel-in-progress: false
+
+jobs:
+  publish_model:
+    name: Publish verified ten-part Qwen3.5 model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      RELEASE_TAG: 'qwen35-2b-q8-4096-v1'
+      MODEL_NAME: 'Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm'
+      MODEL_SIZE: '4780966112'
+      MODEL_SHA256: 'd5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73'
+    steps:
+      - name: Publish verified-build run marker
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/run.json"
+          import json, os
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp238-verified-run.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'run_number':int(os.environ['GITHUB_RUN_NUMBER']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'html_url':f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          }, indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/run.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp238_verified_run.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message="Update MCP238 verified run marker" -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message="Add MCP238 verified run marker" -f branch=experimental -f content="$CONTENT"
+          fi
+
+      - name: Reclaim runner disk space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean || true
+          docker system prune -af || true
+          df -h
+
+      - name: Download and verify ten source part artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/model-parts"
+          ARTIFACT_IDS=(9367910490 9367916011 9367920273 9367925084 9367930096 9367934316 9367942970 9367947260 9367951599 9367955724)
+          EXPECTED_SIZES=(480000000 480000000 480000000 480000000 480000000 480000000 480000000 480000000 480000000 460966112)
+          for i in $(seq 0 9); do
+            IDX="$(printf '%02d' "$i")"
+            ID="${ARTIFACT_IDS[$i]}"
+            ZIP="$RUNNER_TEMP/part-$IDX.zip"
+            EXTRACT="$RUNNER_TEMP/extract-$IDX"
+            mkdir -p "$EXTRACT"
+            curl --fail-with-body -L \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/$ID/zip" \
+              -o "$ZIP"
+            unzip -q "$ZIP" -d "$EXTRACT"
+            rm -f "$ZIP"
+            SRC="$EXTRACT/qwen35.part.$IDX"
+            test -f "$SRC"
+            ACTUAL_SIZE="$(stat -c %s "$SRC")"
+            test "$ACTUAL_SIZE" = "${EXPECTED_SIZES[$i]}"
+            DEST="$RUNNER_TEMP/model-parts/$MODEL_NAME.part$IDX"
+            mv "$SRC" "$DEST"
+            rm -rf "$EXTRACT"
+            printf '%s  %s\n' "$(sha256sum "$DEST" | awk '{print $1}')" "$(basename "$DEST")" >> "$RUNNER_TEMP/model-parts/parts.sha256"
+            echo "verified part $IDX bytes=$ACTUAL_SIZE artifact=$ID"
+          done
+          test "$(find "$RUNNER_TEMP/model-parts" -type f -name "$MODEL_NAME.part*" | wc -l)" = 10
+          ACTUAL_TOTAL="$(find "$RUNNER_TEMP/model-parts" -type f -name "$MODEL_NAME.part*" -printf '%s\n' | awk '{s+=$1} END{print s}')"
+          test "$ACTUAL_TOTAL" = "$MODEL_SIZE"
+          MAGIC="$(head -c 8 "$RUNNER_TEMP/model-parts/$MODEL_NAME.part00")"
+          test "$MAGIC" = "LITERTLM"
+          ACTUAL_FULL_SHA="$(cat "$RUNNER_TEMP/model-parts/$MODEL_NAME.part"{00..09} | sha256sum | awk '{print $1}')"
+          test "$ACTUAL_FULL_SHA" = "$MODEL_SHA256"
+          echo "full model verified bytes=$ACTUAL_TOTAL sha256=$ACTUAL_FULL_SHA magic=$MAGIC"
+          df -h
+
+      - name: Create stable release manifest
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'model-parts'
+          model=os.environ['MODEL_NAME']
+          artifact_ids=[9367910490,9367916011,9367920273,9367925084,9367930096,9367934316,9367942970,9367947260,9367951599,9367955724]
+          parts=[]
+          for i,artifact_id in enumerate(artifact_ids):
+              name=f'{model}.part{i:02d}'
+              p=root/name
+              h=hashlib.sha256()
+              with p.open('rb') as f:
+                  for block in iter(lambda:f.read(8*1024*1024), b''):
+                      h.update(block)
+              parts.append({'index':i,'name':name,'size':p.stat().st_size,'sha256':h.hexdigest(),'sourceArtifactId':artifact_id})
+          manifest={
+              'schema':'local-agent-plaza.multipart-model.v1',
+              'fileName':model,
+              'sizeInBytes':int(os.environ['MODEL_SIZE']),
+              'sha256':os.environ['MODEL_SHA256'],
+              'magic':'LITERTLM',
+              'sourceRunId':32259128613,
+              'sourceHeadSha':'f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690',
+              'parts':parts,
+          }
+          (root/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n', encoding='utf-8')
+          print(json.dumps(manifest, indent=2))
+          PY
+
+      - name: Publish ten stable GitHub Release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Qwen3.5-2B LiteRT-LM Q8 4096 v1" \
+              --notes "Verified Local Agent Plaza Qwen3.5-2B Q8/4096 LiteRT-LM test model. Full size: $MODEL_SIZE bytes. SHA-256: $MODEL_SHA256. MCP238 downloads ten stable parts and reconstructs the model inside the app."
+          # Remove stale assets from earlier failed publication attempts while retaining the release tag.
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | while read -r ASSET; do
+            case "$ASSET" in
+              "$MODEL_NAME".part*|manifest.json|parts.sha256)
+                gh release delete-asset "$RELEASE_TAG" "$ASSET" --repo "$GITHUB_REPOSITORY" -y || true
+                ;;
+            esac
+          done
+          for i in $(seq 0 9); do
+            IDX="$(printf '%02d' "$i")"
+            gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/model-parts/$MODEL_NAME.part$IDX" --repo "$GITHUB_REPOSITORY"
+          done
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/model-parts/manifest.json" "$RUNNER_TEMP/model-parts/parts.sha256" --repo "$GITHUB_REPOSITORY"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,url,assets
+
+      - name: Verify public release asset inventory
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets > "$RUNNER_TEMP/release.json"
+          python - <<'PY'
+          import json, os, pathlib
+          data=json.loads((pathlib.Path(os.environ['RUNNER_TEMP'])/'release.json').read_text())
+          assets={a['name']:a for a in data['assets']}
+          model=os.environ['MODEL_NAME']
+          sizes=[480000000]*9+[460966112]
+          for i,size in enumerate(sizes):
+              name=f'{model}.part{i:02d}'
+              assert name in assets, name
+              assert int(assets[name]['size']) == size, (name, assets[name]['size'], size)
+          assert 'manifest.json' in assets
+          assert 'parts.sha256' in assets
+          print('Stable Qwen3.5 Release inventory verified.')
+          PY
+
+  build_apk:
+    name: Build signed MCP238 APK
+    needs: publish_model
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.238'
+      LOCAL_VERSION_CODE: '338'
+      APPLICATION_ID_SUFFIX: '.mcp'
+    defaults:
+      run:
+        working-directory: ./Android/src
+    steps:
+      - name: Checkout MCP238 source
+        uses: actions/checkout@v4
+
+      - name: Preflight MCP238 patch scripts
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 -m py_compile scripts/patch_mcp224_inference_diag_context_fix.py
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build MCP238 release APK
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Verify signed APK identity
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='338'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.238'"
+
+      - name: Rename MCP238 APK
+        id: rename
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          APK="local-agent-plaza-1.0.14-mcp.238.apk"
+          cp "$SRC" "$APK"
+          SHA="$(sha256sum "$APK" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$APK" > "$APK.sha256"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP238 APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-238
+          path: |
+            Android/src/local-agent-plaza-1.0.14-mcp.238.apk
+            Android/src/local-agent-plaza-1.0.14-mcp.238.apk.sha256
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Publish MCP238 verified result
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA: ${{ steps.rename.outputs.sha }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/result.json"
+          import json, os
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp238-verified-result.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'run_number':int(os.environ['GITHUB_RUN_NUMBER']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'artifact_id':int(os.environ['ARTIFACT_ID']),
+              'artifact_url':os.environ['ARTIFACT_URL'],
+              'artifact_name':'local-agent-plaza-mcp-238',
+              'apk_name':'local-agent-plaza-1.0.14-mcp.238.apk',
+              'apk_sha256':os.environ['APK_SHA'],
+              'version_name':'1.0.14-mcp.238',
+              'version_code':338,
+              'package':'com.localagent.plaza.mcp',
+              'model_release_tag':'qwen35-2b-q8-4096-v1',
+              'model_size':4780966112,
+              'model_sha256':'d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73',
+              'model_parts':10
+          }, indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp238_verified_result.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message="Update MCP238 verified build result" -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message="Add MCP238 verified build result" -f branch=experimental -f content="$CONTENT"
+          fi
