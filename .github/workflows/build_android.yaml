@@ -22,7 +22,7 @@ permissions:
 jobs:
   split_qwen35_model:
     name: Split verified Qwen3.5 model artifact
-    if: github.event_name == 'pull_request' && github.head_ref == 'agent/qwen35-model-build'
+    if: github.event_name == 'push' && github.ref_name == 'feature/qwen35-artifact-split'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
