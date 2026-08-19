@@ -35,19 +35,22 @@ providers.exec {
   commandLine("python3", rootProject.file("scripts/prepare_box049_runtime.py").absolutePath)
 }.result.get().assertNormalExitValue()
 
-// MCP215: keep the MCP210 engine/runtime baseline while hardening the textual COMPAT boundary.
-// The patch is fail-fast and idempotent: if its exact anchors ever drift, the build stops rather
-// than silently shipping without multi-family tool-call normalization.
+// MCP215+: keep the MCP210 engine/runtime baseline while hardening the textual COMPAT boundary.
 providers.exec {
   commandLine("python3", rootProject.file("scripts/patch_tool_call_wire_compat.py").absolutePath)
+}.result.get().assertNormalExitValue()
+
+// MCP224: remove the legacy UI-side eight-tool ceiling after the compatibility patch has been
+// materialized. Normal tool chains are unbounded; repeated-identical-call protection and the user's
+// Stop button remain the only termination guards.
+providers.exec {
+  commandLine("python3", rootProject.file("scripts/patch_mcp224_post.py").absolutePath)
 }.result.get().assertNormalExitValue()
 
 android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
 
-  // 允许通过环境变量 APPLICATION_ID_SUFFIX 为非主线渠道（如 mcp、experimental）追加包名后缀，
-  // 使新构件可与已安装的稳定版（com.localagent.plaza）在同一台设备并行安装而互不覆盖。
   val appApplicationIdSuffix =
     providers.environmentVariable("APPLICATION_ID_SUFFIX").orNull ?: ""
   val appApplicationId = "com.localagent.plaza${appApplicationIdSuffix}"
@@ -65,8 +68,6 @@ android {
     versionName = localVersionName
     ndk { abiFilters += listOf("arm64-v8a") }
 
-    // Needed for HuggingFace auth workflows.
-    // Use the scheme of the "Redirect URLs" in HuggingFace app.
     manifestPlaceholders["appAuthRedirectScheme"] =
         "${appApplicationId}.oauthredirect"
     manifestPlaceholders["appDeepLinkScheme"] = appApplicationId
@@ -180,5 +181,5 @@ dependencies {
 
 protobuf {
   protoc { artifact = "com.google.protobuf:protoc:4.26.1" }
-  generateProtoTasks { all().forEach { it.plugins { create("java") { option("lite") } } } }
+  generateProtoTasks { all().forEach { it.plugins { create("java") { option("lite") } } }
 }
