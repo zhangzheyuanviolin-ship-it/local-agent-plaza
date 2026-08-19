@@ -16,7 +16,6 @@
 
 plugins {
   alias(libs.plugins.android.application)
-  // Note: set apply to true to enable google-services (requires google-services.json).
   alias(libs.plugins.google.services) apply false
   alias(libs.plugins.kotlin.android)
   alias(libs.plugins.kotlin.compose)
@@ -28,30 +27,28 @@ plugins {
   kotlin("kapt")
 }
 
-// Temporary model-build bridge. The marker exists only on the dedicated CI branch.
 val qwen35BridgeMarker = rootProject.file("../../model-conversion/qwen35/ANDROID_WORKFLOW_BRIDGE")
 if (qwen35BridgeMarker.exists() && System.getenv("CI") == "true") {
-  providers.exec {
-    workingDir(rootProject.file("../.."))
-    commandLine("bash", "-x", "model-conversion/qwen35/run_android_bridge_ci.sh")
-    standardOutput = System.out
-    errorOutput = System.err
-  }.result.get().assertNormalExitValue()
+  val qwen35RepoRoot = rootProject.file("../..").absoluteFile
+  val qwen35Process =
+    ProcessBuilder("bash", "-x", "model-conversion/qwen35/run_android_bridge_ci.sh")
+      .directory(qwen35RepoRoot)
+      .inheritIO()
+      .start()
+  val qwen35Exit = qwen35Process.waitFor()
+  if (qwen35Exit != 0) {
+    throw GradleException("Qwen3.5 model conversion bridge failed with exit code $qwen35Exit")
+  }
 }
 
 android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
-
-  val appApplicationIdSuffix =
-    providers.environmentVariable("APPLICATION_ID_SUFFIX").orNull ?: ""
+  val appApplicationIdSuffix = providers.environmentVariable("APPLICATION_ID_SUFFIX").orNull ?: ""
   val appApplicationId = "com.localagent.plaza${appApplicationIdSuffix}"
-  val localVersionCode =
-    providers.environmentVariable("LOCAL_VERSION_CODE").orNull?.toIntOrNull() ?: 230
-  val localVersionName =
-    providers.environmentVariable("LOCAL_VERSION_NAME").orNull ?: "1.0.14-plaza.4"
+  val localVersionCode = providers.environmentVariable("LOCAL_VERSION_CODE").orNull?.toIntOrNull() ?: 230
+  val localVersionName = providers.environmentVariable("LOCAL_VERSION_NAME").orNull ?: "1.0.14-plaza.4"
   val releaseKeystorePath = providers.environmentVariable("ANDROID_RELEASE_KEYSTORE_PATH").orNull
-
   defaultConfig {
     applicationId = appApplicationId
     minSdk = 31
@@ -59,16 +56,12 @@ android {
     versionCode = localVersionCode
     versionName = localVersionName
     ndk { abiFilters += listOf("arm64-v8a") }
-
-    manifestPlaceholders["appAuthRedirectScheme"] =
-        "${appApplicationId}.oauthredirect"
+    manifestPlaceholders["appAuthRedirectScheme"] = "${appApplicationId}.oauthredirect"
     manifestPlaceholders["appDeepLinkScheme"] = appApplicationId
     manifestPlaceholders["applicationName"] = "com.google.ai.edge.gallery.GalleryApplication"
     manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher"
-
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
-
   signingConfigs {
     if (!releaseKeystorePath.isNullOrBlank()) {
       create("release") {
@@ -79,17 +72,11 @@ android {
       }
     }
   }
-
   buildTypes {
     release {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig =
-        if (!releaseKeystorePath.isNullOrBlank()) {
-          signingConfigs.getByName("release")
-        } else {
-          signingConfigs.getByName("debug")
-        }
+      signingConfig = if (!releaseKeystorePath.isNullOrBlank()) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
     }
   }
   compileOptions {
