@@ -110,30 +110,45 @@ object ModelLifecycleDiagnostics {
     message: String,
     detail: String = "",
   ) {
-    if (_reports.value[modelName].isNullOrBlank()) {
-      val minimal =
-        buildString {
-          appendLine("=== MCP224 模型生命周期诊断 ===")
-          appendLine("schema=$MODEL_DIAGNOSTICS_SCHEMA")
-          appendLine("app_version=${BuildConfig.VERSION_NAME}")
-          appendLine("app_version_code=${BuildConfig.VERSION_CODE}")
-          appendLine("litert_lm=$MODEL_DIAGNOSTICS_LITERT_LM_VERSION")
-          appendLine("litert=$MODEL_DIAGNOSTICS_LITERT_VERSION")
-          appendLine("device=${Build.MANUFACTURER} ${Build.MODEL}")
-          appendLine("android_api=${Build.VERSION.SDK_INT}")
-          appendLine("model_name=$modelName")
-          appendLine(
-            "privacy=no_user_prompt;no_tool_arguments;no_tool_result_content;no_workspace_content;no_secrets"
-          )
-        }
-      _reports.value = _reports.value.toMutableMap().apply { put(modelName, minimal) }
-    }
+    // Context is accepted by call sites that already have one, while the event itself contains no
+    // user data and can also be appended safely from callbacks that have no Android Context.
+    record(
+      modelName = modelName,
+      stage = stage,
+      message = message,
+      detail = detail,
+    )
+  }
+
+  @Synchronized
+  fun record(
+    modelName: String,
+    stage: String,
+    message: String,
+    detail: String = "",
+  ) {
+    ensureMinimalHeader(modelName)
     appendEvent(modelName = modelName, stage = stage, message = message, detail = detail)
   }
 
   fun recordThrowable(
     context: Context,
     model: Model,
+    stage: String,
+    throwable: Throwable,
+    detail: String = "",
+  ) {
+    ensureHeader(context.applicationContext, model)
+    recordThrowable(
+      modelName = model.name,
+      stage = stage,
+      throwable = throwable,
+      detail = detail,
+    )
+  }
+
+  fun recordThrowable(
+    modelName: String,
     stage: String,
     throwable: Throwable,
     detail: String = "",
@@ -147,13 +162,33 @@ object ModelLifecycleDiagnostics {
         appendLine("exception_message=${throwable.message.orEmpty()}")
         append(throwable.stackTraceToString())
       }
-    recordModel(
-      context = context,
-      model = model,
+    record(
+      modelName = modelName,
       stage = stage,
       message = "FAILED",
       detail = combined,
     )
+  }
+
+  @Synchronized
+  private fun ensureMinimalHeader(modelName: String) {
+    if (!_reports.value[modelName].isNullOrBlank()) return
+    val minimal =
+      buildString {
+        appendLine("=== MCP224 模型生命周期诊断 ===")
+        appendLine("schema=$MODEL_DIAGNOSTICS_SCHEMA")
+        appendLine("app_version=${BuildConfig.VERSION_NAME}")
+        appendLine("app_version_code=${BuildConfig.VERSION_CODE}")
+        appendLine("litert_lm=$MODEL_DIAGNOSTICS_LITERT_LM_VERSION")
+        appendLine("litert=$MODEL_DIAGNOSTICS_LITERT_VERSION")
+        appendLine("device=${Build.MANUFACTURER} ${Build.MODEL}")
+        appendLine("android_api=${Build.VERSION.SDK_INT}")
+        appendLine("model_name=$modelName")
+        appendLine(
+          "privacy=no_user_prompt;no_tool_arguments;no_tool_result_content;no_workspace_content;no_secrets"
+        )
+      }
+    _reports.value = _reports.value.toMutableMap().apply { put(modelName, minimal) }
   }
 
   @Synchronized
