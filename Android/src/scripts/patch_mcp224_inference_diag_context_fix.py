@@ -39,10 +39,9 @@ else:
     path.write_text(text.replace(old, new, 1), encoding="utf-8")
     print(f"MCP224 fixed Context-free inference diagnostics in {REL}")
 
-# MCP238 is deliberately chained here because this script already runs last in the Gradle patch
-# sequence. Keeping the new experiment after the validated MCP224 transforms avoids changing the
-# production source ordering or the older golden patch files.
-mcp238 = ROOT / "scripts/patch_mcp238_qwen35_model_download.py"
+# MCP238 runs after the validated MCP224 transforms. The v2 bootstrap rewrites one Python-3.11
+# incompatible f-string expression in the retained v1 patch before executing the reviewed patch.
+mcp238 = ROOT / "scripts/patch_mcp238_qwen35_model_download_v2.py"
 if not mcp238.exists():
     print(f"MCP238 patch script missing: {mcp238}", file=sys.stderr)
     raise SystemExit(1)
