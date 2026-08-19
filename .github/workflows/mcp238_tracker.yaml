@@ -1,0 +1,75 @@
+name: MCP238 Build Tracker
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp238_tracker.yaml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Locate latest MCP238 APK workflow run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/build_android.yaml/runs?branch=experimental&per_page=10" \
+            > "$RUNNER_TEMP/runs.json"
+          python - <<'PY' > "$RUNNER_TEMP/tracker.json"
+          import json, os, pathlib
+          data = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'runs.json').read_text())
+          runs = data.get('workflow_runs', [])
+          selected = None
+          for run in runs:
+              if run.get('name') == 'Build Android APK':
+                  selected = run
+                  break
+          if selected is None and runs:
+              selected = runs[0]
+          if selected is None:
+              raise SystemExit('No build_android workflow run found')
+          print(json.dumps({
+              'schema': 'local-agent-plaza.mcp238-tracker.v1',
+              'run_id': selected['id'],
+              'run_number': selected['run_number'],
+              'status': selected['status'],
+              'conclusion': selected.get('conclusion'),
+              'head_sha': selected['head_sha'],
+              'event': selected['event'],
+              'html_url': selected['html_url'],
+              'created_at': selected['created_at'],
+              'updated_at': selected['updated_at'],
+          }, indent=2))
+          PY
+          cat "$RUNNER_TEMP/tracker.json"
+
+      - name: Publish tracker marker
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/tracker.json")"
+          API_PATH="repos/$GITHUB_REPOSITORY/contents/docs/mcp238_tracker.json"
+          SHA="$(gh api "$API_PATH?ref=experimental" --jq .sha 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API_PATH" \
+              -f message="Update MCP238 build tracker" \
+              -f branch="experimental" \
+              -f sha="$SHA" \
+              -f content="$CONTENT"
+          else
+            gh api --method PUT "$API_PATH" \
+              -f message="Add MCP238 build tracker" \
+              -f branch="experimental" \
+              -f content="$CONTENT"
+          fi
