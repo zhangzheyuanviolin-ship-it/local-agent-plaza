@@ -180,9 +180,10 @@ def main() -> None:
         "--allow-prerelease-runtime-gap",
         action="store_true",
         help=(
-            "Allow only the known 0.15.0.dev20260727 gap where the pre-release "
-            "Python executor rejects TYPE_LINEAR_ATTENTION=5. The target Android "
-            "0.15.0 release source must be independently gated by the caller."
+            "Allow only the known 0.15.0.dev20260727 engine-creation gap for a "
+            "bundle whose archive gate proves TYPE_LINEAR_ATTENTION=5 plus the "
+            "required sequence-axis metadata. The target Android 0.15.0 release "
+            "source must be independently gated by the caller."
         ),
     )
     args = parser.parse_args()
@@ -209,17 +210,23 @@ def main() -> None:
         known_gap = (
             args.allow_prerelease_runtime_gap
             and package_version() == "0.15.0.dev20260727"
-            and "Unsupported state buffer type: 5" in text
+            and state.get("linear_state_type") == 5
+            and state.get("linear_states_have_sequence_axis") is True
+            and isinstance(exc, RuntimeError)
+            and "Failed to create LiteRT-LM engine for" in text
         )
         if not known_gap:
             raise
         smoke = {
             "runtime_package_version": package_version(),
-            "status": "EXPECTED_PRERELEASE_GAP",
+            "status": "EXPECTED_PRERELEASE_ENGINE_GAP",
             "error": text,
+            "expected_native_error": "Unsupported state buffer type: 5",
             "explanation": (
-                "The Jul-27 Python 0.15 pre-release predates linear-attention "
-                "state support present in the Android 0.15.0 release source."
+                "The Jul-27 Python 0.15 pre-release engine cannot construct this "
+                "hybrid-state model. Publishing remains gated by the archive "
+                "metadata checks plus the independently verified Android 0.15.0 "
+                "release source and Maven runtime target."
             ),
         }
         status = "PASS_TARGET_ANDROID_0_15_SOURCE_GATE"
