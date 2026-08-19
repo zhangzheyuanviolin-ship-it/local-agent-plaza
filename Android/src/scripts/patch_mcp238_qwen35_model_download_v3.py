@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 legacy = ROOT / "scripts/patch_mcp238_qwen35_model_download.py"
 source = legacy.read_text(encoding="utf-8")
 
+# Functional metadata anchors. Keep these fail-fast because a mismatch would point the app at a
+# wrong model or reconstruct it with wrong boundaries.
 replacements = {
     'MODEL_SHA256 = "a3a7cd9d05242200a4f819228e7cd3987e046f5fd81b030d71eb88e4a96fcd03"':
         'MODEL_SHA256 = "d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73"',
@@ -20,8 +22,6 @@ replacements = {
         'PART_URLS = [f"{RELEASE_BASE}/{MODEL_FILE}.part{i:02d}" for i in range(10)]',
     'PART_SIZES = [1_200_000_000, 1_200_000_000, 1_200_000_000, 1_180_966_112]':
         'PART_SIZES = [480_000_000] * 9 + [460_966_112]',
-    'downloads four public release assets': 'downloads ten public release assets',
-    'downloads four public GitHub Release parts': 'downloads ten public GitHub Release parts',
 }
 for old, new in replacements.items():
     count = source.count(old)
@@ -29,8 +29,13 @@ for old, new in replacements.items():
         raise SystemExit(f"MCP238 v3 expected one replacement anchor, found {count}: {old}")
     source = source.replace(old, new, 1)
 
+# Cosmetic wording lives across source-code line boundaries, so update its stable literal fragments
+# separately without making build correctness depend on prose formatting.
+source = source.replace('downloads four\npublic release assets', 'downloads ten\npublic release assets', 1)
+source = source.replace('downloads four public "', 'downloads ten public "', 1)
+
 # Python 3.11 rejects a backslash-containing expression inside the retained f-string. Rewrite that
-# single expression before compilation; this is the same compatibility fix used by v2.
+# single expression before compilation.
 suffix = ".join(PART_URLS)}"
 pos = source.find(suffix)
 if pos < 0:
