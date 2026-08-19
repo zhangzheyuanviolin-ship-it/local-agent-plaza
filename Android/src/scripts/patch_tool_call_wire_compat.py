@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build-time MCP218 COMPAT hardening while preserving the MCP210 runtime baseline."""
+"""Build-time MCP223/MCP224 Agent hardening while preserving the MCP210 runtime baseline."""
 
 from pathlib import Path
 import sys
@@ -14,13 +14,13 @@ def read(rel: str) -> tuple[Path, str]:
 
 def write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
-    print(f"MCP218 patched {path.relative_to(ROOT)}")
+    print(f"MCP224 patched {path.relative_to(ROOT)}")
 
 
 def require_index(text: str, marker: str, rel: str, start: int = 0) -> int:
     index = text.find(marker, start)
     if index < 0:
-        print(f"MCP218 patch missing marker in {rel}: {marker[:120]!r}", file=sys.stderr)
+        print(f"MCP224 patch missing marker in {rel}: {marker[:120]!r}", file=sys.stderr)
         raise SystemExit(1)
     return index
 
@@ -29,7 +29,7 @@ def replace_once(text: str, old: str, new: str, rel: str) -> str:
     count = text.count(old)
     if count != 1:
         print(
-            f"MCP218 patch expected one marker in {rel}, found {count}: {old[:120]!r}",
+            f"MCP224 patch expected one marker in {rel}, found {count}: {old[:120]!r}",
             file=sys.stderr,
         )
         raise SystemExit(1)
@@ -55,7 +55,34 @@ if "CompatToolCallWireAdapter.parseFirstToolCall(rawText)" not in text:
         "fun stripCompatThinkingText(rawText: String): String {",
         rel,
     )
-    write(path, text)
+
+# MCP224: manual Native means real Native for A/B testing; Auto keeps the safe known-model resolver.
+# Unknown forced-native models receive tool definitions but do not get constrained decoding unless
+# they are already known-good native models.
+if "const val MAX_COMPAT_TOOL_STEPS = 8\n" in text:
+    text = text.replace("const val MAX_COMPAT_TOOL_STEPS = 8\n", "", 1)
+old_native_branch = '''    AgentToolModeValues.NATIVE ->
+      if (supportsNativeAgentTools(model)) {
+        ResolvedAgentToolMode.NATIVE
+      } else {
+        ResolvedAgentToolMode.COMPAT
+      }
+'''
+if old_native_branch in text:
+    text = text.replace(
+        old_native_branch,
+        "    AgentToolModeValues.NATIVE -> ResolvedAgentToolMode.NATIVE\n",
+        1,
+    )
+old_constrained = '''  return resolveAgentToolMode(model) == ResolvedAgentToolMode.NATIVE && !model.imported
+'''
+if old_constrained in text:
+    text = text.replace(
+        old_constrained,
+        "  return resolveAgentToolMode(model) == ResolvedAgentToolMode.NATIVE && supportsNativeAgentTools(model) && !model.imported\n",
+        1,
+    )
+write(path, text)
 
 
 # CompatToolCallWireAdapter: unify canonical/model-family parsing and recover invalid long writes.
@@ -203,8 +230,7 @@ if "val call = parseCompatToolCall(text) ?: return null" not in text:
     write(path, text)
 
 
-# LlmChatModelHelper: add the explicit-search control after prompt compaction, hold the required
-# first pass off the UI, and host-fallback straight to search_web if the model refuses to search.
+# LlmChatModelHelper: explicit-search control plus MCP224 model initialization diagnostics.
 rel = "app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt"
 path, text = read(rel)
 if "searchRequiredForTopLevel" not in text:
@@ -283,4 +309,262 @@ if "searchRequiredForTopLevel" not in text:
         "      CompatSearchRequiredPolicy.injectIntoCompatInput(compactCompatEnvelope(input))\n",
         rel,
     )
-    write(path, text)
+
+if "AgentDiagnosticsLogger" not in text:
+    text = text.replace(
+        "import com.google.ai.edge.gallery.customtasks.agentchat.AgentPerformanceCoordinator\n",
+        "import com.google.ai.edge.gallery.customtasks.agentchat.AgentPerformanceCoordinator\n"
+        "import com.google.ai.edge.gallery.customtasks.agentchat.AgentDiagnosticsLogger\n",
+        1,
+    )
+
+engine_marker = "      val engine = Engine(engineConfig)\n"
+if "category = \"model.engine.initialize.start\"" not in text and engine_marker in text:
+    text = text.replace(
+        engine_marker,
+        '''      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "model.engine.initialize.start",
+        message = "Creating LiteRT-LM engine for ${model.name}",
+        detail =
+          "modelPath=$modelPath\\nfileBytes=${runCatching { java.io.File(modelPath).length() }.getOrDefault(-1L)}\\n" +
+            "backend=$accelerator\\nvisionBackend=$visionAccelerator\\nsupportImage=$shouldEnableImage\\nsupportAudio=$shouldEnableAudio\\n" +
+            "configuredContextWindow=$configuredContextWindow\\nengineMaxNumTokens=$engineMaxNumTokens\\nmaxOutputTokens=$maxOutputTokens\\n" +
+            "litert_lm_version=0.15.0\\nlitert_version=2.1.6",
+      )
+      val engine = Engine(engineConfig)
+''',
+        1,
+    )
+
+catch_marker = '''    } catch (e: Exception) {
+      ExperimentalFlags.enableSpeculativeDecoding = false
+      ExperimentalFlags.enableConversationConstrainedDecoding = false
+      onDone(cleanUpMediapipeTaskErrorMessage(e.message ?: "Unknown error"))
+      return
+    }
+'''
+if "category = \"model.engine.initialize.error\"" not in text and catch_marker in text:
+    text = text.replace(
+        catch_marker,
+        '''    } catch (e: Exception) {
+      AgentDiagnosticsLogger.logThrowable(
+        context = context,
+        category = "model.engine.initialize.error",
+        message = "LiteRT-LM engine initialization failed for ${model.name}",
+        throwable = e,
+        extra =
+          "modelPath=$modelPath\\nbackend=$accelerator\\nvisionBackend=$visionAccelerator\\n" +
+            "configuredContextWindow=$configuredContextWindow\\nengineMaxNumTokens=$engineMaxNumTokens\\nmaxOutputTokens=$maxOutputTokens\\n" +
+            "litert_lm_version=0.15.0\\nlitert_version=2.1.6",
+      )
+      ExperimentalFlags.enableSpeculativeDecoding = false
+      ExperimentalFlags.enableConversationConstrainedDecoding = false
+      onDone(cleanUpMediapipeTaskErrorMessage(e.message ?: "Unknown error"))
+      return
+    }
+''',
+        1,
+    )
+write(path, text)
+
+
+# AgentChatScreen: remove the eight-step ceiling. Keep only the repeated-identical-call guard in
+# AgentCompatRuntimeCoordinator and the user's existing Stop button.
+rel = "app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentChatScreen.kt"
+path, text = read(rel)
+text = text.replace("  val compatToolStepsByModel = remember { mutableStateMapOf<String, Int>() }\n", "", 1)
+text = text.replace("    compatToolStepsByModel.remove(model.name)\n", "")
+text = text.replace("          compatToolStepsByModel.remove(model.name)\n", "")
+step_block = '''        val currentSteps = compatToolStepsByModel[model.name] ?: 0
+        if (currentSteps >= MAX_COMPAT_TOOL_STEPS) {
+          viewModel.removeLastMessage(model = model)
+          viewModel.addMessage(
+            model = model,
+            message =
+              ChatMessageInfo(
+                content = "兼容工具调用已停止：连续工具调用超过 $MAX_COMPAT_TOOL_STEPS 步。请调整提示词或改用原生模式。"
+              ),
+          )
+          compatToolStepsByModel.remove(model.name)
+          updateProgressPanel(viewModel = viewModel, model = model, agentTools = agentTools)
+          return@handleGenerationDone
+        }
+        compatToolStepsByModel[model.name] = currentSteps + 1
+'''
+text = text.replace(step_block, "", 1)
+text = text.replace(
+    "    onBeforeSendMessage = { model, _ -> compatToolStepsByModel.remove(model.name) },\n",
+    '''    onBeforeSendMessage = { model, _ ->
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "agent.tool_mode",
+        message = "Starting Agent request for ${model.name}",
+        detail =
+          "configured=${getConfiguredAgentToolMode(model)}\\nresolved=${resolveAgentToolMode(model)}\\n" +
+            "nativeKnown=${supportsNativeAgentTools(model)}\\nimported=${model.imported}\\ncontext=${model.getConfiguredContextWindow()}",
+      )
+    },
+''',
+    1,
+)
+if "category = \"agent.compat.tool_call\"" not in text:
+    tool_marker = "      if (parsedToolCall != null) {\n"
+    text = text.replace(
+        tool_marker,
+        '''      if (parsedToolCall != null) {
+        AgentDiagnosticsLogger.log(
+          context = context,
+          category = "agent.compat.tool_call",
+          message = "Parsed COMPAT tool call ${parsedToolCall.toolName} for ${model.name}",
+          detail = "arguments=${parsedToolCall.arguments}",
+        )
+''',
+        1,
+    )
+write(path, text)
+
+
+# ModelManagerViewModel: persist model download/import/initialization evidence into the same
+# copyable diagnostic stream used by Agent execution.
+rel = "app/src/main/java/com/google/ai/edge/gallery/ui/modelmanager/ModelManagerViewModel.kt"
+path, text = read(rel)
+if "customtasks.agentchat.AgentDiagnosticsLogger" not in text:
+    text = text.replace(
+        "import com.google.ai.edge.gallery.customtasks.aikeyboard.createAiKeyboardSettingsModel\n",
+        "import com.google.ai.edge.gallery.customtasks.aikeyboard.createAiKeyboardSettingsModel\n"
+        "import com.google.ai.edge.gallery.customtasks.agentchat.AgentDiagnosticsLogger\n"
+        "import com.google.ai.edge.gallery.customtasks.agentchat.getConfiguredAgentToolMode\n"
+        "import com.google.ai.edge.gallery.customtasks.agentchat.resolveAgentToolMode\n",
+        1,
+    )
+
+init_marker = "      val initializeTargetModel: suspend () -> String = {\n"
+if "category = \"model.initialize.request\"" not in text and init_marker in text:
+    text = text.replace(
+        init_marker,
+        '''      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "model.initialize.request",
+        message = "Model initialization requested: ${model.name}",
+        detail =
+          "task=${task.id}\\nmodelId=${model.modelId}\\nfile=${model.downloadFileName}\\n" +
+            "path=${runCatching { model.getPath(context) }.getOrElse { "<path-error:${it.message}>" }}\\n" +
+            "expectedBytes=${model.totalBytes}\\nactualBytes=${runCatching { java.io.File(model.getPath(context)).length() }.getOrDefault(-1L)}\\n" +
+            "backend=${model.getStringConfigValue(key = ConfigKeys.ACCELERATOR, defaultValue = Accelerator.GPU.label)}\\n" +
+            "context=${model.getConfiguredContextWindow()}\\nmaxTokens=${model.getIntConfigValue(key = ConfigKeys.MAX_TOKENS, defaultValue = model.llmMaxToken)}\\n" +
+            "agentModeConfigured=${runCatching { getConfiguredAgentToolMode(model) }.getOrDefault("n/a")}\\n" +
+            "agentModeResolved=${runCatching { resolveAgentToolMode(model).toString() }.getOrDefault("n/a")}",
+      )
+
+      val initializeTargetModel: suspend () -> String = {
+''',
+        1,
+    )
+
+attempt_marker = "        Log.d(TAG, \"Initializing model '${model.name}'... attempt=${attempt + 1}\")\n"
+if "category = \"model.initialize.attempt\"" not in text and attempt_marker in text:
+    text = text.replace(
+        attempt_marker,
+        attempt_marker + '''        AgentDiagnosticsLogger.log(
+          context = context,
+          category = "model.initialize.attempt",
+          message = "Initializing ${model.name}",
+          detail = "attempt=${attempt + 1}\\ntask=${task.id}",
+        )
+''',
+        1,
+    )
+
+success_marker = "          Log.d(TAG, \"Model '${model.name}' initialized successfully on attempt ${attempt + 1}\")\n"
+if "category = \"model.initialize.success\"" not in text and success_marker in text:
+    text = text.replace(
+        success_marker,
+        success_marker + '''          AgentDiagnosticsLogger.log(
+            context = context,
+            category = "model.initialize.success",
+            message = "Model initialized successfully: ${model.name}",
+            detail = "attempt=${attempt + 1}\\ntask=${task.id}",
+          )
+''',
+        1,
+    )
+
+error_marker = "          Log.d(TAG, \"Model '${model.name}' failed to initialize on attempt ${attempt + 1}: $error\")\n"
+if "category = \"model.initialize.failure\"" not in text and error_marker in text:
+    text = text.replace(
+        error_marker,
+        error_marker + '''          AgentDiagnosticsLogger.log(
+            context = context,
+            category = "model.initialize.failure",
+            message = "Model initialization failed: ${model.name}",
+            detail = "attempt=${attempt + 1}\\ntask=${task.id}\\nerror=$error",
+          )
+''',
+        1,
+    )
+
+download_marker = "  fun setDownloadStatus(curModel: Model, status: ModelDownloadStatus) {\n"
+if "category = \"model.download.status\"" not in text and download_marker in text:
+    text = text.replace(
+        download_marker,
+        '''  fun setDownloadStatus(curModel: Model, status: ModelDownloadStatus) {
+    if (status.status == ModelDownloadStatusType.FAILED || status.status == ModelDownloadStatusType.SUCCEEDED) {
+      AgentDiagnosticsLogger.log(
+        context = context,
+        category = "model.download.status",
+        message = "Download ${status.status}: ${curModel.name}",
+        detail =
+          "modelId=${curModel.modelId}\\nfile=${curModel.downloadFileName}\\nreceivedBytes=${status.receivedBytes}\\n" +
+            "totalBytes=${status.totalBytes}\\nerror=${status.errorMessage}",
+      )
+    }
+''',
+        1,
+    )
+
+import_marker = "  fun addImportedLlmModel(info: ImportedModel) {\n    Log.d(TAG, \"adding imported llm model: $info\")\n"
+if "category = \"model.import.added\"" not in text and import_marker in text:
+    text = text.replace(
+        import_marker,
+        import_marker + '''    AgentDiagnosticsLogger.log(
+      context = context,
+      category = "model.import.added",
+      message = "Imported LiteRT-LM model",
+      detail = "file=${info.fileName}\\nfileSize=${info.fileSize}\\ninfo=$info",
+    )
+''',
+        1,
+    )
+write(path, text)
+
+
+# Model card overflow menu: diagnostics remain copyable even if Engine initialization fails before
+# the chat screen can open.
+rel = "app/src/main/java/com/google/ai/edge/gallery/ui/common/modelitem/ModelItem.kt"
+path, text = read(rel)
+if "customtasks.agentchat.AgentDiagnosticsLogger" not in text:
+    text = text.replace(
+        "import com.google.ai.edge.gallery.R\n",
+        "import com.google.ai.edge.gallery.R\n"
+        "import com.google.ai.edge.gallery.customtasks.agentchat.AgentDiagnosticsLogger\n"
+        "import android.widget.Toast\n",
+        1,
+    )
+menu_marker = "      if (showDeleteButton) {\n"
+if "复制诊断信息" not in text and menu_marker in text:
+    text = text.replace(
+        menu_marker,
+        '''      DropdownMenuItem(
+        text = { Text("复制诊断信息") },
+        onClick = {
+          showMenu = false
+          val chars = AgentDiagnosticsLogger.copyLatestToClipboard(context)
+          Toast.makeText(context, "已复制诊断信息（${chars} 字符）", Toast.LENGTH_SHORT).show()
+        },
+      )
+      if (showDeleteButton) {
+''',
+        1,
+    )
+write(path, text)
