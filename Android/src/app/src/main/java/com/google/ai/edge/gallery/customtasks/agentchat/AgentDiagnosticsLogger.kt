@@ -15,6 +15,8 @@
  */
 package com.google.ai.edge.gallery.customtasks.agentchat
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.util.Log
 import java.io.File
@@ -27,7 +29,10 @@ import java.util.concurrent.Executors
 private const val TAG = "AGDiagnostics"
 private const val LOG_DIR_NAME = "agent_diagnostics"
 private const val LOG_FILE_NAME = "latest_agent_chat.log"
-private const val MAX_DETAIL_CHARS = 4000
+private const val MAX_DETAIL_CHARS = 16000
+private const val MAX_COPY_CHARS = 120000
+private const val MAX_LOG_FILE_BYTES = 512 * 1024L
+private const val TRIMMED_LOG_FILE_BYTES = 256 * 1024
 
 object AgentDiagnosticsLogger {
   private val timestampFormatter =
@@ -45,8 +50,6 @@ object AgentDiagnosticsLogger {
     message: String,
     detail: String = "",
   ) {
-    // Performance timing is recorded immediately. Only file persistence is moved off the caller's
-    // critical path in MCP204, preserving tool event ordering without blocking inference callbacks.
     val performanceCategory =
       if (category == "tool.run_configured_intent.flattened") {
         "tool.run_configured_intent.done"
@@ -87,8 +90,49 @@ object AgentDiagnosticsLogger {
     log(context = context, category = category, message = message, detail = rawJson)
   }
 
+  fun logThrowable(
+    context: Context,
+    category: String,
+    message: String,
+    throwable: Throwable,
+    extra: String = "",
+  ) {
+    val detail =
+      buildString {
+        if (extra.isNotBlank()) {
+          append(extra)
+          append('\n')
+        }
+        append("exception_class=")
+        append(throwable.javaClass.name)
+        append('\n')
+        append("exception_message=")
+        append(throwable.message.orEmpty())
+        append('\n')
+        append(throwable.stackTraceToString())
+      }
+    log(context = context, category = category, message = message, detail = detail)
+  }
+
   fun getInternalLogPath(context: Context): String {
     return resolveInternalLogFile(context.applicationContext).absolutePath
+  }
+
+  fun readLatestText(context: Context): String {
+    val file = resolveInternalLogFile(context.applicationContext)
+    if (!file.exists()) return "暂无诊断信息。"
+    return runCatching {
+        val text = file.readText(Charsets.UTF_8)
+        if (text.length <= MAX_COPY_CHARS) text else text.takeLast(MAX_COPY_CHARS)
+      }
+      .getOrElse { error -> "读取诊断信息失败：${error.message ?: error.javaClass.simpleName}" }
+  }
+
+  fun copyLatestToClipboard(context: Context): Int {
+    val text = readLatestText(context)
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("本地智能体广场诊断信息", text))
+    return text.length
   }
 
   private fun formatTimestamp(date: Date): String {
@@ -106,6 +150,10 @@ object AgentDiagnosticsLogger {
   private fun appendLine(file: File, line: String) {
     runCatching {
       file.parentFile?.mkdirs()
+      if (file.exists() && file.length() > MAX_LOG_FILE_BYTES) {
+        val existing = file.readText(Charsets.UTF_8)
+        file.writeText(existing.takeLast(TRIMMED_LOG_FILE_BYTES), Charsets.UTF_8)
+      }
       file.appendText(line, Charsets.UTF_8)
     }.onFailure { error ->
       Log.e(TAG, "Failed to append diagnostics log to ${file.absolutePath}", error)
