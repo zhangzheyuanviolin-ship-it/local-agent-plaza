@@ -1,0 +1,107 @@
+Failed to create engine: INVALID_ARGUMENT: Invalid magic number or failed to read: LTLM
+=== MCP224 模型生命周期诊断 ===
+schema=mcp224.model_lifecycle.v1
+app_version=1.0.14-mcp.237
+app_version_code=337
+litert_lm=0.15.0
+litert=2.1.6
+device=Xiaomi 23117RK66C
+device_code=manet
+android_api=36
+memory_class_mb=256
+task_id=llm_agent_chat
+model_name=Qwen3.5-2B LiteRT-LM Q8 experimental
+model_display_name=
+model_imported=false
+model_file_name=qwen35_2b.litertlm
+model_file_expected_bytes=1901762208
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_experimental/f91f8c5e985350f10bd55e6aebdeb89b7c211fcc/qwen35_2b.litertlm
+model_file_exists=true
+model_file_actual_bytes=1901762208
+configured_context_window=4096
+max_output_tokens=1536
+accelerator=GPU
+supports_image=false
+supports_audio=false
+memory_java_used_bytes=35653008 | memory_native_allocated_bytes=34426720
+privacy=no_user_prompt;no_tool_arguments;no_tool_result_content;no_workspace_content;no_secrets
+
+[2026-08-19 11:29:35.269 +0800] model_manager.initialize.attempt | Starting model initialization attempt 1
+memory_java_used_bytes=35719344 | memory_native_allocated_bytes=34528816
+
+[2026-08-19 11:29:35.291 +0800] litert.engine_config | Preparing LiteRT-LM EngineConfig
+memory_java_used_bytes=38763616 | memory_native_allocated_bytes=34936160
+detail:
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_experimental/f91f8c5e985350f10bd55e6aebdeb89b7c211fcc/qwen35_2b.litertlm | backend=GPU | vision_backend=GPU | support_image=false | support_audio=false | context=4096 | engine_max_tokens=4096 | max_output_tokens=1536
+
+[2026-08-19 11:29:35.298 +0800] litert.engine_initialize.start | Engine.initialize() started
+memory_java_used_bytes=38977360 | memory_native_allocated_bytes=35445888
+
+[2026-08-19 11:29:35.301 +0800] litert.model_initialize.failure | FAILED
+memory_java_used_bytes=39030080 | memory_native_allocated_bytes=35535456
+detail:
+backend=GPU | vision_backend=GPU | support_image=false | support_audio=false | configured_context=4096 | engine_max_tokens=4096 | max_output_tokens=1536 | model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_experimental/f91f8c5e985350f10bd55e6aebdeb89b7c211fcc/qwen35_2b.litertlm
+exception_class=com.google.ai.edge.litertlm.LiteRtLmJniException
+exception_message=Failed to create engine: INVALID_ARGUMENT: Invalid magic number or failed to read: LTLM
+com.google.ai.edge.litertlm.LiteRtLmJniException: Failed to create engine: INVALID_ARGUMENT: Invalid magic number or failed to read: LTLM
+	at com.google.ai.edge.litertlm.LiteRtLmJni.nativeCreateEngine(Native Method)
+	at com.google.ai.edge.litertlm.Engine.initialize(Engine.kt:75)
+	at com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper.initialize(LlmChatModelHelper.kt:190)
+	at com.google.ai.edge.gallery.runtime.LlmModelHelper.initialize$default(LlmModelHelper.kt:53)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.initializeModelFn$lambda$2(AgentChatTaskModule.kt:117)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.$r8$lambda$mnZ_uorPaDQedOpGf07SQpzMVP8(Unknown Source:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask$$ExternalSyntheticLambda1.invoke(D8$$SyntheticClass:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.SkillManagerViewModel$loadSkills$1$7.invokeSuspend(SkillManagerViewModel.kt:274)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:829)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+
+
+[2026-08-19 11:29:35.301 +0800] model_manager.initialize.failure | Model initialization attempt 1 failed
+memory_java_used_bytes=39079984 | memory_native_allocated_bytes=35571584
+detail:
+Failed to create engine: INVALID_ARGUMENT: Invalid magic number or failed to read: LTLM
+
+[2026-08-19 11:29:37.220 +0800] model_manager.initialize.attempt | Starting model initialization attempt 2
+memory_java_used_bytes=20582032 | memory_native_allocated_bytes=35593472
+
+[2026-08-19 11:29:37.224 +0800] litert.engine_config | Preparing LiteRT-LM EngineConfig
+memory_java_used_bytes=20701568 | memory_native_allocated_bytes=35594640
+detail:
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_experimental/f91f8c5e985350f10bd55e6aebdeb89b7c211fcc/qwen35_2b.litertlm | backend=GPU | vision_backend=GPU | support_image=false | support_audio=false | context=4096 | engine_max_tokens=4096 | max_output_tokens=1536
+
+[2026-08-19 11:29:37.226 +0800] litert.engine_initialize.start | Engine.initialize() started
+memory_java_used_bytes=20755568 | memory_native_allocated_bytes=35594640
+
+[2026-08-19 11:29:37.227 +0800] litert.model_initialize.failure | FAILED
+memory_java_used_bytes=20825952 | memory_native_allocated_bytes=35594688
+detail:
+backend=GPU | vision_backend=GPU | support_image=false | support_audio=false | configured_context=4096 | engine_max_tokens=4096 | max_output_tokens=1536 | model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_experimental/f91f8c5e985350f10bd55e6aebdeb89b7c211fcc/qwen35_2b.litertlm
+exception_class=com.google.ai.edge.litertlm.LiteRtLmJniException
+exception_message=Failed to create engine: INVALID_ARGUMENT: Invalid magic number or failed to read: LTLM
+com.google.ai.edge.litertlm.LiteRtLmJniException: Failed to create engine: INVALID_ARGUMENT: Invalid magic number or failed to read: LTLM
+	at com.google.ai.edge.litertlm.LiteRtLmJni.nativeCreateEngine(Native Method)
+	at com.google.ai.edge.litertlm.Engine.initialize(Engine.kt:75)
+	at com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper.initialize(LlmChatModelHelper.kt:190)
+	at com.google.ai.edge.gallery.runtime.LlmModelHelper.initialize$default(LlmModelHelper.kt:53)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.initializeModelFn$lambda$2(AgentChatTaskModule.kt:117)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.$r8$lambda$mnZ_uorPaDQedOpGf07SQpzMVP8(Unknown Source:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask$$ExternalSyntheticLambda1.invoke(D8$$SyntheticClass:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.SkillManagerViewModel.loadSkills(SkillManagerViewModel.kt:277)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.initializeModelFn(AgentChatTaskModule.kt:87)
+	at com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel$initializeModel$2$initializeTargetModel$1.invokeSuspend(ModelManagerViewModel.kt:602)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:829)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+
+
+[2026-08-19 11:29:37.228 +0800] model_manager.initialize.failure | Model initialization attempt 2 failed
+memory_java_used_bytes=20912720 | memory_native_allocated_bytes=35594624
+detail:
+Failed to create engine: INVALID_ARGUMENT: Invalid magic number or failed to read: LTLM
