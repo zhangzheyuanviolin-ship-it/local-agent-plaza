@@ -66,19 +66,14 @@ PY
 }
 
 if ! check_support; then
-  echo 'Installed wheel lacks the current Qwen3.5 export layer; overlaying Google main pure-Python implementation.'
+  echo 'Installed wheel is incomplete/mismatched for current Qwen3.5; using the complete Google main source tree on PYTHONPATH.'
   rm -rf "${RUNNER_TEMP:-/tmp}/litert-torch-main"
   git clone --depth 1 https://github.com/google-ai-edge/litert-torch.git "${RUNNER_TEMP:-/tmp}/litert-torch-main"
-  PKG_DIR="$($PY - <<'PY'
+  export PYTHONPATH="${RUNNER_TEMP:-/tmp}/litert-torch-main${PYTHONPATH:+:$PYTHONPATH}"
+  $PY - <<'PY'
 import pathlib, litert_torch
-print(pathlib.Path(litert_torch.__file__).resolve().parent)
+print('Using litert_torch from:', pathlib.Path(litert_torch.__file__).resolve())
 PY
-)"
-  SRC="${RUNNER_TEMP:-/tmp}/litert-torch-main/litert_torch/generative/export_hf"
-  rsync -a "$SRC/model_ext/qwen3_5/" "$PKG_DIR/generative/export_hf/model_ext/qwen3_5/"
-  cp "$SRC/model_ext/exportables.py" "$PKG_DIR/generative/export_hf/model_ext/exportables.py"
-  cp "$SRC/model_ext/metadata_builder.py" "$PKG_DIR/generative/export_hf/model_ext/metadata_builder.py"
-  cp "$SRC/core/litert_lm_builder.py" "$PKG_DIR/generative/export_hf/core/litert_lm_builder.py"
   check_support
 fi
 
