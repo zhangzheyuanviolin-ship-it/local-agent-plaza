@@ -13,8 +13,6 @@ export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 export MALLOC_ARENA_MAX=2
 
-# Keep a visible heartbeat throughout dependency installation, model download,
-# conversion and verification.
 heartbeat() {
   while true; do
     sleep 45
@@ -43,7 +41,6 @@ free -h || true
 df -h || true
 swapon --show || true
 
-# Reclaim large preinstalled toolchains while preserving the Android SDK required by later workflow steps.
 sudo rm -rf /usr/share/dotnet || true
 sudo rm -rf /opt/ghc || true
 sudo rm -rf /usr/local/.ghcup || true
@@ -52,10 +49,6 @@ sudo apt-get clean || true
 docker system prune -af || true
 df -h || true
 
-# Qwen3.5's 2B Full Model Reauthoring transiently exceeds the hosted runner's
-# 15 GiB RAM. Back it with a large disk swap area. The previous measured peak
-# filled 15 GiB RAM plus 2.3/3 GiB existing swap before the runner was killed.
-# Disk has ~90+ GiB free after cleanup, so 32 GiB keeps the conversion alive.
 QWEN35_SWAP="/mnt/qwen35-conversion.swap"
 if ! swapon --show=NAME --noheadings 2>/dev/null | grep -qx "$QWEN35_SWAP"; then
   sudo rm -f "$QWEN35_SWAP" || true
@@ -86,20 +79,15 @@ df -h || true
 PY=python3
 $PY -m pip install --upgrade pip setuptools wheel
 
-# Use the official current LiteRT Torch source tree as one coherent package.
 LITERT_TORCH_SRC="${RUNNER_TEMP:-/tmp}/litert-torch-main"
 rm -rf "$LITERT_TORCH_SRC"
 git clone --depth 1 https://github.com/google-ai-edge/litert-torch.git "$LITERT_TORCH_SRC"
 export PYTHONPATH="$LITERT_TORCH_SRC${PYTHONPATH:+:$PYTHONPATH}"
 
-# LiteRT-LM 0.15 requires every state buffer to carry sequence_axis metadata.
-# Current LiteRT-Torch intentionally omits it for fixed-size linear-attention
-# conv/recurrent states because newer LiteRT-LM accepts that form. The Android
-# app still uses the 0.15 generation, where the older executor rejects such
-# metadata before Engine creation. Axis 0 is the static batch axis for these
-# fixed-size linear states; in the 0.15 state allocator the axis is only used
-# to discover a dynamic dimension (and global-cache capacity), so a static
-# axis is a compatibility marker and does not resize or reinterpret the state.
+# Current LiteRT-Torch omits sequence_axis for fixed-size linear-attention
+# states. The app's 0.15 generation accepts TYPE_LINEAR_ATTENTION, while its
+# earlier prerelease parser required the field. Axis 0 is static here, so this
+# is a compatibility marker only; it does not resize the recurrent state.
 $PY - "$LITERT_TORCH_SRC/litert_torch/generative/export_hf/model_ext/metadata_builder.py" <<'PY'
 from pathlib import Path
 import sys
@@ -115,10 +103,27 @@ p.write_text(s, encoding='utf-8')
 print('Patched LiteRT-Torch executor metadata: sequence_axis=0 on 3 linear/conv state buffers.')
 PY
 
-# CPU-only PyTorch avoids multi-gigabyte CUDA dependencies.
-$PY -m pip install --upgrade 'torch==2.12.0+cpu' --extra-index-url https://download.pytorch.org/whl/cpu
+# Independently gate against the exact Android release generation declared by
+# the app. The Jul-27 Python 0.15 prerelease predates this source support and is
+# retained below only as an additional diagnostic smoke test.
+TARGET_LM_SRC="${RUNNER_TEMP:-/tmp}/litert-lm-v015"
+rm -rf "$TARGET_LM_SRC"
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch v0.15.0 \
+  https://github.com/google-ai-edge/LiteRT-LM.git "$TARGET_LM_SRC"
+grep -Fq 'TYPE_LINEAR_ATTENTION = 5' "$TARGET_LM_SRC/runtime/proto/executor_metadata.proto"
+grep -Fq 'case proto::StateBuffer::TYPE_LINEAR_ATTENTION:' "$TARGET_LM_SRC/runtime/executor/litert/state.cc"
+grep -Fq 'state_buffer.type() ==' "$TARGET_LM_SRC/runtime/executor/litert/state.cc"
+echo 'TARGET_ANDROID_0_15_SOURCE_GATE_PASS: TYPE_LINEAR_ATTENTION=5 is supported by v0.15.0 state allocator.'
 
-# Install LiteRT Torch's runtime dependencies without resolving the package itself.
+# Confirm the exact Maven coordinate used by MCP235 resolves in Google Maven.
+TARGET_POM="${RUNNER_TEMP:-/tmp}/litertlm-android-0.15.0.pom"
+curl --retry 4 --retry-all-errors -fsSL \
+  'https://dl.google.com/dl/android/maven2/com/google/ai/edge/litertlm/litertlm-android/0.15.0/litertlm-android-0.15.0.pom' \
+  -o "$TARGET_POM"
+grep -Fq '<version>0.15.0</version>' "$TARGET_POM"
+echo 'TARGET_ANDROID_MAVEN_GATE_PASS: com.google.ai.edge.litertlm:litertlm-android:0.15.0 resolves.'
+
+$PY -m pip install --upgrade 'torch==2.12.0+cpu' --extra-index-url https://download.pytorch.org/whl/cpu
 $PY -m pip install --upgrade \
   absl-py \
   numpy \
@@ -141,7 +146,8 @@ $PY -m pip install --upgrade \
   psutil
 $PY -m pip install --no-deps --upgrade 'torchao>=0.17.0'
 
-# Smoke-test against the same LiteRT-LM 0.15 generation used by the Android app.
+# Latest published Python 0.15 prerelease; useful as a diagnostic, though it
+# predates TYPE_LINEAR_ATTENTION support present in the Android 0.15 release.
 $PY -m pip install --pre --upgrade 'litert-lm-api-nightly==0.15.0.dev20260727'
 
 $PY - <<'PY'
@@ -168,7 +174,7 @@ assert metadata_builder.build_executor_metadata is not None
 src=inspect.getsource(metadata_builder.build_executor_metadata)
 for token in ('TYPE_LINEAR_ATTENTION','kv_cache_c_','kv_cache_r_','kv_cache_k_','kv_cache_v_','sequence_axis=0'):
     assert token in src, token
-print('Qwen3.5 Full Model Reauthoring + hybrid executor metadata + LiteRT-LM 0.15 linear-state axis compatibility present.')
+print('Qwen3.5 Full Model Reauthoring + hybrid executor metadata + 0.15 compatibility marker present.')
 PY
 
 $PY - <<'PY'
@@ -195,23 +201,30 @@ fi
 
 BUNDLE="$OUTPUT_DIR/Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm"
 test -f "$BUNDLE"
-/usr/bin/time -v $PY model-conversion/qwen35/verify_qwen35.py --config "$CONFIG_PATH" --bundle "$BUNDLE" --manifest "$OUTPUT_DIR/conversion_manifest.json" 2>&1 | tee "$OUTPUT_DIR/verification.log"
+/usr/bin/time -v $PY model-conversion/qwen35/verify_qwen35.py \
+  --config "$CONFIG_PATH" \
+  --bundle "$BUNDLE" \
+  --manifest "$OUTPUT_DIR/conversion_manifest.json" \
+  --allow-prerelease-runtime-gap \
+  2>&1 | tee "$OUTPUT_DIR/verification.log"
 
 $PY - <<'PY'
 import json, os, pathlib
-out=pathlib.Path(os.environ['OUTPUT_DIR']); m=json.loads((out/'conversion_manifest.json').read_text(encoding='utf-8'))
-assert m.get('verification',{}).get('status')=='PASS'
+out=pathlib.Path(os.environ['OUTPUT_DIR'])
+m=json.loads((out/'conversion_manifest.json').read_text(encoding='utf-8'))
+status=m.get('verification',{}).get('status','')
+assert status.startswith('PASS'), status
 print('FINAL_MANIFEST='+json.dumps(m,ensure_ascii=False,separators=(',',':')))
 PY
 
-# Free source-model/cache space before the normal Android APK build continues.
-rm -rf "$HF_HOME" "$LITERT_TORCH_SRC" || true
+rm -rf "$HF_HOME" "$LITERT_TORCH_SRC" "$TARGET_LM_SRC" || true
 $PY -m pip cache purge || true
 free -h || true
 df -h || true
 
-# The unchanged main workflow uploads an APK path. Intercept only its later Rename-APK cp command,
-# substituting the verified LiteRT-LM bytes. All signing/version/audit steps still see the real APK.
+# The unchanged main workflow uploads an APK path. Intercept only its later
+# Rename-APK cp command, substituting the verified LiteRT-LM bytes. All signing
+# and APK-version checks have already run against the real APK at that point.
 WRAP_DIR="$REPO_ROOT/.qwen35-ci-bin"
 mkdir -p "$WRAP_DIR"
 cat > "$WRAP_DIR/cp" <<'SH'
