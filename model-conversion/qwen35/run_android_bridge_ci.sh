@@ -92,6 +92,29 @@ rm -rf "$LITERT_TORCH_SRC"
 git clone --depth 1 https://github.com/google-ai-edge/litert-torch.git "$LITERT_TORCH_SRC"
 export PYTHONPATH="$LITERT_TORCH_SRC${PYTHONPATH:+:$PYTHONPATH}"
 
+# LiteRT-LM 0.15 requires every state buffer to carry sequence_axis metadata.
+# Current LiteRT-Torch intentionally omits it for fixed-size linear-attention
+# conv/recurrent states because newer LiteRT-LM accepts that form. The Android
+# app still uses the 0.15 generation, where the older executor rejects such
+# metadata before Engine creation. Axis 0 is the static batch axis for these
+# fixed-size linear states; in the 0.15 state allocator the axis is only used
+# to discover a dynamic dimension (and global-cache capacity), so a static
+# axis is a compatibility marker and does not resize or reinterpret the state.
+$PY - "$LITERT_TORCH_SRC/litert_torch/generative/export_hf/model_ext/metadata_builder.py" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text(encoding='utf-8')
+needle = """            executor_metadata_pb2.StateBuffer.TYPE_LINEAR_ATTENTION,\n        )"""
+replacement = """            executor_metadata_pb2.StateBuffer.TYPE_LINEAR_ATTENTION,\n            sequence_axis=0,\n        )"""
+count = s.count(needle)
+if count != 3:
+    raise SystemExit(f'Expected 3 linear/conv state metadata sites, found {count}')
+s = s.replace(needle, replacement)
+p.write_text(s, encoding='utf-8')
+print('Patched LiteRT-Torch executor metadata: sequence_axis=0 on 3 linear/conv state buffers.')
+PY
+
 # CPU-only PyTorch avoids multi-gigabyte CUDA dependencies.
 $PY -m pip install --upgrade 'torch==2.12.0+cpu' --extra-index-url https://download.pytorch.org/whl/cpu
 
@@ -143,9 +166,9 @@ assert hasattr(exportable_module, 'LiteRTExportableModuleForQwen3_5Generate')
 assert hasattr(modeling_qwen3_5_static, 'Qwen3_5StaticGatedDeltaNet')
 assert metadata_builder.build_executor_metadata is not None
 src=inspect.getsource(metadata_builder.build_executor_metadata)
-for token in ('TYPE_LINEAR_ATTENTION','kv_cache_c_','kv_cache_r_','kv_cache_k_','kv_cache_v_'):
+for token in ('TYPE_LINEAR_ATTENTION','kv_cache_c_','kv_cache_r_','kv_cache_k_','kv_cache_v_','sequence_axis=0'):
     assert token in src, token
-print('Qwen3.5 Full Model Reauthoring + hybrid executor metadata support present.')
+print('Qwen3.5 Full Model Reauthoring + hybrid executor metadata + LiteRT-LM 0.15 linear-state axis compatibility present.')
 PY
 
 $PY - <<'PY'
