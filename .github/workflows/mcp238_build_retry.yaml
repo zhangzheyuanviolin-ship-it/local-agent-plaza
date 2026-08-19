@@ -1,0 +1,210 @@
+name: MCP238 APK Build Retry
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp238_build_retry.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mcp238-apk-build-retry
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build signed MCP238 APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      RELEASE_TAG: 'qwen35-2b-q8-4096-v1'
+      MODEL_NAME: 'Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm'
+      MODEL_SIZE: '4780966112'
+      MODEL_SHA256: 'd5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.238'
+      LOCAL_VERSION_CODE: '338'
+      APPLICATION_ID_SUFFIX: '.mcp'
+    steps:
+      - name: Publish build-retry run marker
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/run.json"
+          import json, os
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp238-apk-retry-run.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'run_number':int(os.environ['GITHUB_RUN_NUMBER']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'html_url':f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          }, indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/run.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp238_apk_retry_run.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message="Update MCP238 APK retry run marker" -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message="Add MCP238 APK retry run marker" -f branch=experimental -f content="$CONTENT"
+          fi
+
+      - name: Checkout MCP238 source
+        uses: actions/checkout@v4
+
+      - name: Verify published model release inventory
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets > "$RUNNER_TEMP/release.json"
+          python - <<'PY'
+          import json, os, pathlib
+          d=json.loads((pathlib.Path(os.environ['RUNNER_TEMP'])/'release.json').read_text())
+          assets={a['name']:a for a in d['assets']}
+          sizes=[480000000]*9+[460966112]
+          for i,size in enumerate(sizes):
+              name=f"{os.environ['MODEL_NAME']}.part{i:02d}"
+              assert name in assets, name
+              assert int(assets[name]['size']) == size, (name, assets[name]['size'], size)
+          assert 'manifest.json' in assets
+          print('Verified stable ten-part model release is available.')
+          PY
+
+      - name: Execute MCP238 model patch visibly
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 - <<'PY'
+          import json, pathlib
+          for p in [pathlib.Path('../../model_allowlists/1_0_14.json'), pathlib.Path('app/src/main/assets/model_allowlists/1_0_14.json')]:
+              models=json.loads(p.read_text())['models']
+              old=[m for m in models if m.get('modelId')=='paulsp94/Qwen3.5-2B-LiteRT-LM' and m.get('modelFile') in {'qwen35_2b.litertlm','qwen35_2b_q4.litertlm'}]
+              new=[m for m in models if m.get('name')=='Qwen3.5-2B LiteRT-LM Q8 4096 Plaza']
+              assert not old, (p, old)
+              assert len(new)==1, (p, len(new))
+              assert new[0]['sizeInBytes']==4780966112
+              assert new[0]['commitHash']=='qwen35-2b-q8-4096-v1'
+              print('allowlist verified', p)
+          PY
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build MCP238 release APK
+        working-directory: ./Android/src
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Verify signed APK identity
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='338'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.238'"
+
+      - name: Rename MCP238 APK
+        id: rename
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          APK="local-agent-plaza-1.0.14-mcp.238.apk"
+          cp "$SRC" "$APK"
+          SHA="$(sha256sum "$APK" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$APK" > "$APK.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP238 APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-238
+          path: |
+            Android/src/local-agent-plaza-1.0.14-mcp.238.apk
+            Android/src/local-agent-plaza-1.0.14-mcp.238.apk.sha256
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Publish MCP238 APK result
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA: ${{ steps.rename.outputs.sha }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/result.json"
+          import json, os
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp238-apk-result.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'run_number':int(os.environ['GITHUB_RUN_NUMBER']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'artifact_id':int(os.environ['ARTIFACT_ID']),
+              'artifact_url':os.environ['ARTIFACT_URL'],
+              'artifact_name':'local-agent-plaza-mcp-238',
+              'apk_name':'local-agent-plaza-1.0.14-mcp.238.apk',
+              'apk_sha256':os.environ['APK_SHA'],
+              'version_name':'1.0.14-mcp.238',
+              'version_code':338,
+              'package':'com.localagent.plaza.mcp',
+              'model_release_tag':os.environ['RELEASE_TAG'],
+              'model_size':int(os.environ['MODEL_SIZE']),
+              'model_sha256':os.environ['MODEL_SHA256'],
+              'model_parts':10
+          }, indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp238_apk_result.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message="Update MCP238 APK result" -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message="Add MCP238 APK result" -f branch=experimental -f content="$CONTENT"
+          fi
