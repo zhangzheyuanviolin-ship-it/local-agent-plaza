@@ -14,14 +14,14 @@ export PYTHONUNBUFFERED=1
 export MALLOC_ARENA_MAX=2
 
 # Keep a visible heartbeat throughout dependency installation, model download,
-# conversion and verification. Some hosted runners can be reclaimed when a
-# nested build produces no visible output for several minutes.
+# conversion and verification.
 heartbeat() {
   while true; do
     sleep 45
     echo "QWEN35_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     df -h "$REPO_ROOT" || true
     free -h || true
+    swapon --show || true
   done
 }
 heartbeat &
@@ -41,6 +41,7 @@ mkdir -p "$OUTPUT_DIR"
 echo '=== Qwen3.5 bridge: initial resources ==='
 free -h || true
 df -h || true
+swapon --show || true
 
 # Reclaim large preinstalled toolchains while preserving the Android SDK required by later workflow steps.
 sudo rm -rf /usr/share/dotnet || true
@@ -51,24 +52,50 @@ sudo apt-get clean || true
 docker system prune -af || true
 df -h || true
 
+# Qwen3.5's 2B Full Model Reauthoring transiently exceeds the hosted runner's
+# 15 GiB RAM. Back it with a large disk swap area. The previous measured peak
+# filled 15 GiB RAM plus 2.3/3 GiB existing swap before the runner was killed.
+# Disk has ~90+ GiB free after cleanup, so 32 GiB keeps the conversion alive.
+QWEN35_SWAP="/mnt/qwen35-conversion.swap"
+if ! swapon --show=NAME --noheadings 2>/dev/null | grep -qx "$QWEN35_SWAP"; then
+  sudo rm -f "$QWEN35_SWAP" || true
+  if sudo fallocate -l 32G "$QWEN35_SWAP"; then
+    sudo chmod 600 "$QWEN35_SWAP"
+    sudo mkswap "$QWEN35_SWAP"
+    if ! sudo swapon "$QWEN35_SWAP"; then
+      echo 'fallocate-backed swap was rejected; retrying with dd allocation.'
+      sudo rm -f "$QWEN35_SWAP"
+      sudo dd if=/dev/zero of="$QWEN35_SWAP" bs=1M count=32768 status=progress
+      sudo chmod 600 "$QWEN35_SWAP"
+      sudo mkswap "$QWEN35_SWAP"
+      sudo swapon "$QWEN35_SWAP"
+    fi
+  else
+    sudo dd if=/dev/zero of="$QWEN35_SWAP" bs=1M count=32768 status=progress
+    sudo chmod 600 "$QWEN35_SWAP"
+    sudo mkswap "$QWEN35_SWAP"
+    sudo swapon "$QWEN35_SWAP"
+  fi
+fi
+sudo sysctl -w vm.swappiness=80 || true
+echo '=== Qwen3.5 bridge: resources after swap expansion ==='
+free -h || true
+swapon --show || true
+df -h || true
+
 PY=python3
 $PY -m pip install --upgrade pip setuptools wheel
 
 # Use the official current LiteRT Torch source tree as one coherent package.
-# This avoids mismatched nightly wheels where model_ext imports files omitted
-# from the wheel (observed with experimental/npu_export).
 LITERT_TORCH_SRC="${RUNNER_TEMP:-/tmp}/litert-torch-main"
 rm -rf "$LITERT_TORCH_SRC"
 git clone --depth 1 https://github.com/google-ai-edge/litert-torch.git "$LITERT_TORCH_SRC"
 export PYTHONPATH="$LITERT_TORCH_SRC${PYTHONPATH:+:$PYTHONPATH}"
 
-# The conversion is CPU-only. Pin Google's currently declared Torch baseline
-# to the official PyTorch CPU wheel so pip does not pull several gigabytes of
-# CUDA 13 libraries onto the hosted runner.
+# CPU-only PyTorch avoids multi-gigabyte CUDA dependencies.
 $PY -m pip install --upgrade 'torch==2.12.0+cpu' --extra-index-url https://download.pytorch.org/whl/cpu
 
-# Install the LiteRT Torch source package's runtime dependencies without asking
-# pip to resolve litert-torch itself (and therefore without replacing CPU Torch).
+# Install LiteRT Torch's runtime dependencies without resolving the package itself.
 $PY -m pip install --upgrade \
   absl-py \
   numpy \
