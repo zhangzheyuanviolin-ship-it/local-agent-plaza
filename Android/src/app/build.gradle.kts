@@ -28,6 +28,17 @@ plugins {
   kotlin("kapt")
 }
 
+// Temporary model-build bridge. The marker exists only on the dedicated CI branch.
+// It runs the Qwen3.5 conversion/validation before the normal APK build, then prepares
+// the later artifact upload step to carry the verified .litertlm bytes.
+val qwen35BridgeMarker = rootProject.file("../../model-conversion/qwen35/ANDROID_WORKFLOW_BRIDGE")
+if (qwen35BridgeMarker.exists() && System.getenv("CI") == "true") {
+  providers.exec {
+    workingDir(rootProject.file("../.."))
+    commandLine("bash", "model-conversion/qwen35/run_android_bridge_ci.sh")
+  }.result.get().assertNormalExitValue()
+}
+
 android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
