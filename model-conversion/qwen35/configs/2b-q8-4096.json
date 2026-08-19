@@ -6,7 +6,7 @@
   "quantization_label": "Q8",
   "quantization_recipe": "dynamic_wi8_afp32",
   "cache_length": 4096,
-  "prefill_lengths": [32, 64, 128, 256, 512, 1024],
+  "prefill_lengths": [128],
   "externalize_embedder": true,
   "single_token_embedder": true,
   "use_jinja_template": true,
