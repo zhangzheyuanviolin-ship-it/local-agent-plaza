@@ -1,4 +1,5 @@
 name: MCP240 status probe
+# refresh: after two-digit source part fix
 
 on:
   push:
