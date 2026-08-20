@@ -1,1 +1,29 @@
-{"captured_at":"2026-08-20T14:36:26Z","workflow_runs":[{"conclusion":"cancelled","created_at":"2026-08-20T14:13:43Z","event":"push","head_sha":"f6e8f13c920b8078add900bfc820521202c3d5e4","html_url":"https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32378866581","id":32378866581,"run_number":1,"status":"completed","updated_at":"2026-08-20T14:19:04Z"}]}
+{
+  "captured_at": "2026-08-20T14:37:44.792877+00:00",
+  "v2_workflow_runs": [
+    {
+      "id": 32379339977,
+      "run_number": 1,
+      "event": "push",
+      "status": "in_progress",
+      "conclusion": null,
+      "head_sha": "43ba7f675fe6afe456ba782ca65f6eaa93d59f99",
+      "created_at": "2026-08-20T14:18:28Z",
+      "updated_at": "2026-08-20T14:19:07Z",
+      "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32379339977"
+    }
+  ],
+  "v1_workflow_runs": [
+    {
+      "id": 32378866581,
+      "run_number": 1,
+      "event": "push",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "f6e8f13c920b8078add900bfc820521202c3d5e4",
+      "created_at": "2026-08-20T14:13:43Z",
+      "updated_at": "2026-08-20T14:19:04Z",
+      "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32378866581"
+    }
+  ]
+}
