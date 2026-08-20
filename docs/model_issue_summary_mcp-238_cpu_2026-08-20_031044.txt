@@ -1,0 +1,59 @@
+=== 模型问题情况说明（MCP-238，Qwen3.5-2B LiteRT-LM Q8 4096，CPU 模式） ===
+
+一、当前状态
+
+在 mcp-238 版本上，我将模型手动切换到 CPU 加速器（accelerator=CPU）进行了多轮测试。与之前 GPU 后端无法加载的情况不同，本次模型能够正常加载、正常输出内容，并且能够成功调用外部工具（如网络搜索 search_web、run_js 等）。即：模型加载与工具调用链路均已打通。
+
+二、测试环境
+
+- 机型：Xiaomi 23117RK66C（manet），Android API 36
+- 版本：1.0.14-mcp.238（app_version_code=338）
+- 模型：Qwen3.5-2B LiteRT-LM Q8 4096 Plaza（model_file_name=Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm）
+- 加速器：CPU（vision_backend=GPU）
+- 上下文窗口：configured_context_window=4096，engine_max_tokens=4096
+- 采样参数：temperature=0.6，top_k=20，top_p=0.8
+- max_output_tokens=1536
+
+三、核心问题：输出无法正常结束，持续重复
+
+经过反复多轮测试，发现模型一旦开始输出内容，就无法正常结束，会一直持续重复生成。具体表现与关键观察如下：
+
+1. 输出的内容表现为大量重复（重复惩罚 / 结束令牌 / 聊天模板 / 采样参数等均可能是诱因，尚未定位到根因）。
+2. 从 MCP207 Agent 对本次会话的性能诊断可看到硬性证据：
+   - continuation_1（第一次续写）的 visible_callback_count 高达 2868 次，visible_chars 有 4476 字符。
+   - continuation_1_total_generation_ms 高达 257117.03 ms（约 4.28 分钟），远远超出正常的单次生成时长。
+   - continuation_1_decode_after_first_token_ms 为 245678.78 ms，说明首个 token 之后的大部分时间都在持续解码（重复输出）。
+   - 整个请求 total_ms=271134.59（约 4.5 分钟），llm_pass_count=2，continuation_count=1。
+3. 模型在超长续写里只实际产生了 1 次工具调用（observed_tool_event_count=1，tool_1_name=tool.run_js，exec 6183.51ms，成功 true），说明是因为"生成没结束"而无法继续后续的多次工具调用与最终收尾，并非业务上需要这么长的文本。
+
+四、模型输出内容中的重复证据
+
+在"模型输出内容"文档（模型生成的一段关于 2026 年美加墨世界杯决赛的回顾）中，可以看到明显的重复：关于"西班牙在常规时间保持零封/控球率领先/技术统治力"、"阿根廷费尔南德斯两黄变红被罚下"、"加时赛托雷斯打入关键进球"、"尼科·威廉斯头球后近距离劲射破门"、"最终比分西班牙 1-0 阿根廷"等段落，在正文、备注、总结等多个位置反复出现，内容高度重复。这正是"输出无法正常结束、持续重复"在文本层面的直接体现。
+
+五、待排查方向（供下一个版本修复参考）
+
+由于定位到最终根因还需要进一步实验，目前列出几个最值得怀疑、需逐一排查的方向：
+
+1. 结束令牌（EOS / stop token）相关：
+   - 模型模板或 LiteRT-LM 推理配置中，EOS 令牌是否被正确识别？Qwen3 系结束符号（如 <|endoftext|> / <|im_end|>）是否在 tokenizer/聊天模板中被正确对齐？
+   - 生成的输出是否一直没有命中 EOS，导致解码器一直继续，直到 context 耗尽或手动截断？
+
+2. 聊天模板（chat template）相关：
+   - 角色标记（system/user/assistant）与终止序列是否对应？若模板里没有正确的停止序列列表，模型可能一直"自说自话"继续扮演 assistant，永远不产出终止标记。
+
+3. 重复惩罚 / 采样参数相关：
+   - 当前 temperature=0.6、top_k=20、top_p=0.8。若未设置重复惩罚（repetition_penalty）或设置不当，低多样性采样下模型容易陷入重复循环。
+   - 检查是否配置了 frequency_penalty / presence_penalty，或 repetition_penalty 是否生效。
+
+4. 上下文 / 继续生成（continuation）相关：
+   - MCP207 显示这不是首次生成，而是发生了 continuation_1（续写）。需要确认 continuation 机制的触发条件——正常应在上一次生成结束（命中 EOS）时才停止；若没有清晰判断"何时该停"，可能错误地反复触发续写。
+   - continuation 的输入是否把历史 assistant 输出错误地再次作为需要接续的文本，导致"重复+继续重复"的循环。
+
+5. max_output_tokens / 单次生成上限相关：
+   - 虽然配置了 max_output_tokens=1536，但在 continuation 场景下是否会重置计数、导致单次被无限拉长，需要核对引擎对"单次生成预算"的处理逻辑。
+
+六、结论
+
+Qwen3.5-2B LiteRT-LM Q8 4096 在 CPU 模式下加载与工具调用均已正常工作（对比 GPU 后端的 LTLM 魔数/KV cache 类初始化失败是明显进步），但当前最突出的缺陷是"生成无法收敛、持续重复输出"，导致一次对话耗时数分钟、输出高度冗余。强烈建议下一个版本优先针对"结束令牌识别 + 聊天模板停止序列 + 采样重复惩罚 + continuation 停止判定"四个方向做针对性修复与验证。
+
+（说明：本小结由 AI 根据测试观察与附带的 MCP224 模型诊断、MCP207 Agent 会话性能诊断、模型输出内容三份文档归纳整理，属于现象描述与待排查方向，非模型官方结论。）
