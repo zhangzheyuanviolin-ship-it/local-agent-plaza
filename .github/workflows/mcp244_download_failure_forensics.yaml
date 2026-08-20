@@ -1,0 +1,118 @@
+name: MCP244 multipart download forensics
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp244_download_failure_forensics.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MODEL_TAG: qwen35-2b-q8-4096-mcp244-official-tool-template-v1
+      MODEL_FILE: Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm
+      EXPECTED_SHA: 7cdf8232b949d184e3cee81694cea7b21bac36a538d495d1a83581a4ce2c5d44
+      EXPECTED_SIZE: '4780966112'
+      SOURCE_SHA: d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73
+      MCP244_MODEL_SIZE: '4780966112'
+      MCP244_MODEL_SHA256: 7cdf8232b949d184e3cee81694cea7b21bac36a538d495d1a83581a4ce2c5d44
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+
+      - name: Apply exact strict APK patch chain and extract embedded multipart metadata
+        working-directory: Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 scripts/patch_mcp239_qwen35_cpu_only.py
+          python3 scripts/patch_mcp244_qwen35_restore_official_template.py
+          python3 - <<'PY' > "$RUNNER_TEMP/embedded.json"
+          import json,re
+          from pathlib import Path
+          p=Path('app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt').read_text()
+          def one(pattern):
+              m=re.search(pattern,p,re.S)
+              if not m: raise SystemExit('missing '+pattern)
+              return m.group(1)
+          urls=one(r'putString\("KEY_MODEL_MULTIPART_URLS", "([^"]+)"\)')
+          sizes=one(r'putString\("KEY_MODEL_MULTIPART_PART_SIZES", "([^"]+)"\)')
+          sha=one(r'putString\("KEY_MODEL_EXPECTED_SHA256", "([0-9a-fA-F]{64})"\)')
+          decoded=urls.replace('\\\\n','\n').replace('\\n','\n').splitlines()
+          print(json.dumps({'raw_urls':urls,'decoded_urls':decoded,'sizes':sizes,'sha':sha},indent=2))
+          PY
+          cat "$RUNNER_TEMP/embedded.json"
+
+      - name: Download all published release parts and reconstruct exact file
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/parts"
+          gh release download "$MODEL_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$MODEL_FILE.part*" --dir "$RUNNER_TEMP/parts"
+          ls -lh "$RUNNER_TEMP/parts"
+          python3 - <<'PY' > "$RUNNER_TEMP/parts.json"
+          import hashlib,json,os
+          from pathlib import Path
+          d=Path(os.environ['RUNNER_TEMP'])/'parts'
+          rows=[]
+          for p in sorted(d.glob(os.environ['MODEL_FILE']+'.part*')):
+              h=hashlib.sha256()
+              with p.open('rb') as f:
+                  for b in iter(lambda:f.read(8*1024*1024),b''): h.update(b)
+              rows.append({'name':p.name,'size':p.stat().st_size,'sha256':h.hexdigest()})
+          print(json.dumps(rows,indent=2))
+          PY
+          cat "$RUNNER_TEMP/parts.json"
+          cat $(find "$RUNNER_TEMP/parts" -type f -name "$MODEL_FILE.part*" | sort) > "$RUNNER_TEMP/reconstructed.litertlm"
+          ACTUAL_SIZE=$(stat -c '%s' "$RUNNER_TEMP/reconstructed.litertlm")
+          ACTUAL_SHA=$(sha256sum "$RUNNER_TEMP/reconstructed.litertlm" | awk '{print $1}')
+          echo "actual_size=$ACTUAL_SIZE"
+          echo "actual_sha=$ACTUAL_SHA"
+          echo "$ACTUAL_SIZE" > "$RUNNER_TEMP/actual_size.txt"
+          echo "$ACTUAL_SHA" > "$RUNNER_TEMP/actual_sha.txt"
+
+      - name: Publish forensic result
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY' > "$RUNNER_TEMP/report.json"
+          import json,os
+          rt=os.environ['RUNNER_TEMP']
+          embedded=json.load(open(rt+'/embedded.json'))
+          parts=json.load(open(rt+'/parts.json'))
+          actual_sha=open(rt+'/actual_sha.txt').read().strip()
+          actual_size=int(open(rt+'/actual_size.txt').read().strip())
+          out={
+            'schema':'mcp244.multipart-forensics.v1',
+            'expected_sha256':os.environ['EXPECTED_SHA'],
+            'expected_size':int(os.environ['EXPECTED_SIZE']),
+            'source_sha256':os.environ['SOURCE_SHA'],
+            'release_reconstructed_sha256':actual_sha,
+            'release_reconstructed_size':actual_size,
+            'release_matches_expected':actual_sha==os.environ['EXPECTED_SHA'] and actual_size==int(os.environ['EXPECTED_SIZE']),
+            'device_reported_sha256':'535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4',
+            'release_matches_device_reported':actual_sha=='535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4',
+            'embedded':embedded,
+            'parts':parts,
+          }
+          print(json.dumps(out,indent=2))
+          PY
+          cat "$RUNNER_TEMP/report.json"
+          b64=$(base64 -w0 "$RUNNER_TEMP/report.json")
+          api="repos/$GITHUB_REPOSITORY/contents/docs/mcp244_multipart_forensics.json"
+          old=$(gh api "$api?ref=experimental" 2>/dev/null || true)
+          sha=$(printf '%s' "$old" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)
+          if [ -n "$sha" ]; then
+            gh api --method PUT "$api" -f branch=experimental -f message='Update MCP244 multipart forensic report' -f sha="$sha" -f content="$b64"
+          else
+            gh api --method PUT "$api" -f branch=experimental -f message='Add MCP244 multipart forensic report' -f content="$b64"
+          fi
