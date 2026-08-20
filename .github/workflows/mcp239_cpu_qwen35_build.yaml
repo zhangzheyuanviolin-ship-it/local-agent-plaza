@@ -1,0 +1,201 @@
+name: MCP239 Qwen3.5 CPU-only validation build
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp239_cpu_qwen35_build.yaml'
+      - 'Android/src/scripts/patch_mcp239_qwen35_cpu_only.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mcp239-qwen35-cpu-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build signed MCP239 CPU-only APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      RELEASE_TAG: 'qwen35-2b-q8-4096-v1'
+      MODEL_NAME: 'Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm'
+      MODEL_SIZE: '4780966112'
+      MODEL_SHA256: 'd5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.239'
+      LOCAL_VERSION_CODE: '339'
+      APPLICATION_ID_SUFFIX: '.mcp'
+
+    steps:
+      - name: Checkout MCP239 source
+        uses: actions/checkout@v4
+
+      - name: Verify published ten-part model release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets > "$RUNNER_TEMP/release.json"
+          python - <<'PY'
+          import json, os, pathlib
+          data=json.loads((pathlib.Path(os.environ['RUNNER_TEMP'])/'release.json').read_text())
+          assets={a['name']:a for a in data['assets']}
+          sizes=[480000000]*9+[460966112]
+          for i,size in enumerate(sizes):
+              name=f"{os.environ['MODEL_NAME']}.part{i:02d}"
+              assert name in assets, name
+              assert int(assets[name]['size']) == size, (name, assets[name]['size'], size)
+          assert 'manifest.json' in assets
+          print('Verified MCP238 ten-part model release for MCP239 reuse.')
+          PY
+
+      - name: Apply MCP238 verified multipart model patch
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 scripts/patch_mcp238_qwen35_model_download_v3.py
+
+      - name: Apply MCP239 CPU-only guard
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile scripts/patch_mcp239_qwen35_cpu_only.py
+          python3 scripts/patch_mcp239_qwen35_cpu_only.py
+          python3 - <<'PY'
+          import json, pathlib
+          name='Qwen3.5-2B LiteRT-LM Q8 4096 Plaza'
+          for p in [pathlib.Path('../../model_allowlists/1_0_14.json'), pathlib.Path('app/src/main/assets/model_allowlists/1_0_14.json')]:
+              models=json.loads(p.read_text())['models']
+              matches=[m for m in models if m.get('name')==name]
+              assert len(matches)==1, (p, len(matches))
+              m=matches[0]
+              assert m['sizeInBytes']==4780966112
+              assert m['commitHash']=='qwen35-2b-q8-4096-v1'
+              assert m['defaultConfig']['accelerators']=='cpu'
+              print('CPU-only allowlist verified', p)
+          helper=pathlib.Path('app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt').read_text()
+          assert '// MCP239_QWEN35_CPU_ONLY' in helper
+          assert 'Accelerator.CPU.label else configuredAccelerator' in helper
+          print('Host CPU guard verified')
+          PY
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build MCP239 release APK
+        working-directory: ./Android/src
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Verify signed MCP239 APK identity
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='339'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.239'"
+
+      - name: Rename MCP239 APK
+        id: rename
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          APK="local-agent-plaza-1.0.14-mcp.239.apk"
+          cp "$SRC" "$APK"
+          SHA="$(sha256sum "$APK" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$APK" > "$APK.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP239 APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-239
+          path: |
+            Android/src/local-agent-plaza-1.0.14-mcp.239.apk
+            Android/src/local-agent-plaza-1.0.14-mcp.239.apk.sha256
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Publish MCP239 APK result
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA: ${{ steps.rename.outputs.sha }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/result.json"
+          import json, os
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp239-apk-result.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'run_number':int(os.environ['GITHUB_RUN_NUMBER']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'artifact_id':int(os.environ['ARTIFACT_ID']),
+              'artifact_url':os.environ['ARTIFACT_URL'],
+              'artifact_name':'local-agent-plaza-mcp-239',
+              'apk_name':'local-agent-plaza-1.0.14-mcp.239.apk',
+              'apk_sha256':os.environ['APK_SHA'],
+              'version_name':'1.0.14-mcp.239',
+              'version_code':339,
+              'package':'com.localagent.plaza.mcp',
+              'model_release_tag':os.environ['RELEASE_TAG'],
+              'model_size':int(os.environ['MODEL_SIZE']),
+              'model_sha256':os.environ['MODEL_SHA256'],
+              'model_parts':10,
+              'qwen35_backend':'CPU_FORCED',
+              'purpose':'isolate Android GPU delegate failure from model conversion/runtime compatibility'
+          }, indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp239_apk_result.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message="Update MCP239 APK result" -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message="Add MCP239 APK result" -f branch=experimental -f content="$CONTENT"
+          fi
