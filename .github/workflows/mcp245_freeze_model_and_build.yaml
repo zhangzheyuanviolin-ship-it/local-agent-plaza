@@ -1,0 +1,392 @@
+name: MCP245 freeze verified Qwen3.5 model and build
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp245_freeze_model_and_build.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp245-frozen-qwen35
+  cancel-in-progress: false
+
+jobs:
+  freeze_model:
+    name: Verify current bytes and publish immutable MCP245 model
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      model_sha256: ${{ steps.meta.outputs.model_sha256 }}
+      model_size: ${{ steps.meta.outputs.model_size }}
+      template_sha256: ${{ steps.meta.outputs.template_sha256 }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SOURCE_MUTABLE_TAG: 'qwen35-2b-q8-4096-mcp244-official-tool-template-v1'
+      SOURCE_MUTABLE_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm'
+      SOURCE_MUTABLE_SHA: '535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4'
+      ORIGINAL_TAG: 'qwen35-2b-q8-4096-v1'
+      ORIGINAL_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm'
+      ORIGINAL_SHA: 'd5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73'
+      TARGET_TAG: 'qwen35-2b-q8-4096-mcp245-frozen-v1'
+      TARGET_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp245.litertlm'
+      MODEL_SIZE: '4780966112'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install official LiteRT-LM packager
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'litert-lm==0.15.0'
+          litert-lm --help >/dev/null
+
+      - name: Reconstruct current release and original tool-proven source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/current_parts" "$RUNNER_TEMP/original_parts"
+          for n in $(seq 0 9); do
+            i=$(printf '%02d' "$n")
+            gh release download "$SOURCE_MUTABLE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$SOURCE_MUTABLE_FILE.part$i" --dir "$RUNNER_TEMP/current_parts"
+            gh release download "$ORIGINAL_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ORIGINAL_FILE.part$i" --dir "$RUNNER_TEMP/original_parts"
+          done
+          cat $(find "$RUNNER_TEMP/current_parts" -type f -name "$SOURCE_MUTABLE_FILE.part*" | sort) > "$RUNNER_TEMP/current.litertlm"
+          cat $(find "$RUNNER_TEMP/original_parts" -type f -name "$ORIGINAL_FILE.part*" | sort) > "$RUNNER_TEMP/original.litertlm"
+          test "$(stat -c '%s' "$RUNNER_TEMP/current.litertlm")" = "$MODEL_SIZE"
+          test "$(stat -c '%s' "$RUNNER_TEMP/original.litertlm")" = "$MODEL_SIZE"
+          test "$(sha256sum "$RUNNER_TEMP/current.litertlm" | awk '{print $1}')" = "$SOURCE_MUTABLE_SHA"
+          test "$(sha256sum "$RUNNER_TEMP/original.litertlm" | awk '{print $1}')" = "$ORIGINAL_SHA"
+
+      - name: Prove current release is semantically the intended model
+        id: semantic
+        shell: bash
+        run: |
+          set -euxo pipefail
+          litert-lm unpack "$RUNNER_TEMP/current.litertlm" --output-dir "$RUNNER_TEMP/current_unpacked" --allow-overwrite
+          litert-lm unpack "$RUNNER_TEMP/original.litertlm" --output-dir "$RUNNER_TEMP/original_unpacked" --allow-overwrite
+          python - <<'PY'
+          from pathlib import Path
+          import ast, hashlib, os, re
+          rt=Path(os.environ['RUNNER_TEMP'])
+          def load(root):
+              pb=(root/'LlmMetadataProto.pbtext').read_text()
+              toml=(root/'model.toml').read_text()
+              m=re.search(r'jinja_prompt_template:\s*"((?:\\.|[^"\\])*)"',pb)
+              if not m: raise SystemExit('jinja template missing')
+              template=ast.literal_eval('"'+m.group(1)+'"')
+              ids=[int(x) for x in re.findall(r'ids:\s*(\d+)',pb)]
+              return pb,toml,template,ids
+          opb,otoml,otpl,oids=load(rt/'original_unpacked')
+          cpb,ctoml,ctpl,cids=load(rt/'current_unpacked')
+          if ctpl != otpl: raise SystemExit('current template differs from original tool-proven template')
+          required=('<tools>','<tool_call>','<function=','<parameter=','<tool_response>','message.tool_calls','message.role == "tool"','multi_step_tool','enable_thinking')
+          missing=[x for x in required if x not in ctpl]
+          if missing: raise SystemExit(f'tool markers missing: {missing}')
+          if 248044 not in oids: raise SystemExit(f'original stop missing: {sorted(set(oids))}')
+          if 248044 not in cids or 248046 not in cids: raise SystemExit(f'current dual stops missing: {sorted(set(cids))}')
+          if 'ExecutorMetadata' not in otoml or 'ExecutorMetadata' not in ctoml: raise SystemExit('ExecutorMetadata missing')
+          def scrub(s):
+              s=re.sub(r'\{ key = "uuid",[^\n]+\n','',s)
+              s=re.sub(r'\{ key = "creation_timestamp",[^\n]+\n','',s)
+              return s
+          if scrub(otoml) != scrub(ctoml): raise SystemExit('model.toml semantic structure drifted')
+          tsha=hashlib.sha256(ctpl.encode()).hexdigest()
+          (rt/'template_sha.txt').write_text(tsha+'\n')
+          print('semantic verification OK; template_sha256='+tsha)
+          PY
+
+      - name: Prepare byte-identical frozen assets and manifest
+        id: meta
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/target_assets"
+          for n in $(seq 0 9); do
+            i=$(printf '%02d' "$n")
+            cp "$RUNNER_TEMP/current_parts/$SOURCE_MUTABLE_FILE.part$i" "$RUNNER_TEMP/target_assets/$TARGET_FILE.part$i"
+          done
+          TEMPLATE_SHA=$(tr -d '\r\n' < "$RUNNER_TEMP/template_sha.txt")
+          export TEMPLATE_SHA
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          d=Path(os.environ['RUNNER_TEMP'])/'target_assets'
+          parts=[]
+          for p in sorted(d.glob(os.environ['TARGET_FILE']+'.part*')):
+              h=hashlib.sha256()
+              with p.open('rb') as f:
+                  for b in iter(lambda:f.read(8*1024*1024),b''): h.update(b)
+              parts.append({'name':p.name,'size':p.stat().st_size,'sha256':h.hexdigest()})
+          manifest={
+              'schema':'local-agent-plaza.qwen35.mcp245-frozen.v1',
+              'model_file':os.environ['TARGET_FILE'],
+              'release_tag':os.environ['TARGET_TAG'],
+              'full_size':int(os.environ['MODEL_SIZE']),
+              'full_sha256':os.environ['SOURCE_MUTABLE_SHA'],
+              'source_mutable_release_tag':os.environ['SOURCE_MUTABLE_TAG'],
+              'source_original_tool_proven_sha256':os.environ['ORIGINAL_SHA'],
+              'template_sha256':os.environ['TEMPLATE_SHA'],
+              'original_tool_template_preserved_byte_for_byte':True,
+              'natural_stop_token_ids':[248044,248046],
+              'executor_metadata_preserved':True,
+              'byte_frozen_without_repack':True,
+              'parts':parts,
+          }
+          (d/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          PY
+          echo "model_sha256=$SOURCE_MUTABLE_SHA" >> "$GITHUB_OUTPUT"
+          echo "model_size=$MODEL_SIZE" >> "$GITHUB_OUTPUT"
+          echo "template_sha256=$TEMPLATE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Publish frozen release exactly once
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if gh release view "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Frozen target release already exists; refusing to clobber.'
+          else
+            gh release create "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title 'Qwen3.5 2B Q8 4096 MCP245 frozen tool model' \
+              --notes 'Byte-frozen verified Qwen3.5 model. Full official tool-aware Jinja template matches the physically tool-proven MCP238 source byte-for-byte; stops 248044 and 248046; no repack after the recorded SHA. Assets are uploaded once without --clobber.' \
+              --prerelease
+            gh release upload "$TARGET_TAG" "$RUNNER_TEMP/target_assets"/* --repo "$GITHUB_REPOSITORY"
+          fi
+
+      - name: Re-download frozen release and independently reconstruct SHA
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/frozen_verify"
+          gh release download "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$TARGET_FILE.part*" --dir "$RUNNER_TEMP/frozen_verify"
+          gh release download "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" --pattern manifest.json --dir "$RUNNER_TEMP/frozen_verify"
+          test "$(find "$RUNNER_TEMP/frozen_verify" -type f -name "$TARGET_FILE.part*" | wc -l)" = '10'
+          cat $(find "$RUNNER_TEMP/frozen_verify" -type f -name "$TARGET_FILE.part*" | sort) > "$RUNNER_TEMP/frozen_verify/full.litertlm"
+          test "$(stat -c '%s' "$RUNNER_TEMP/frozen_verify/full.litertlm")" = "$MODEL_SIZE"
+          test "$(sha256sum "$RUNNER_TEMP/frozen_verify/full.litertlm" | awk '{print $1}')" = "$SOURCE_MUTABLE_SHA"
+          python - <<'PY'
+          import json,os
+          p=os.path.join(os.environ['RUNNER_TEMP'],'frozen_verify','manifest.json')
+          d=json.load(open(p))
+          assert d['full_sha256']==os.environ['SOURCE_MUTABLE_SHA']
+          assert d['full_size']==int(os.environ['MODEL_SIZE'])
+          assert d['byte_frozen_without_repack'] is True
+          assert d['original_tool_template_preserved_byte_for_byte'] is True
+          assert d['natural_stop_token_ids']==[248044,248046]
+          print('FROZEN RELEASE RECONSTRUCTION VERIFIED')
+          PY
+
+  build_apk:
+    name: Build signed MCP245 download-fixed APK
+    needs: freeze_model
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MODEL_RELEASE_TAG: 'qwen35-2b-q8-4096-mcp245-frozen-v1'
+      MODEL_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp245.litertlm'
+      MODEL_NAME: 'Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP245'
+      MCP245_MODEL_SHA256: ${{ needs.freeze_model.outputs.model_sha256 }}
+      MCP245_MODEL_SIZE: ${{ needs.freeze_model.outputs.model_size }}
+      MCP245_TEMPLATE_SHA256: ${{ needs.freeze_model.outputs.template_sha256 }}
+      APK_RELEASE_TAG: 'mcp245-qwen35-frozen-download-fix'
+      LOCAL_VERSION_NAME: '1.0.14-mcp.245'
+      LOCAL_VERSION_CODE: '345'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+
+      - name: Verify frozen release and source boundary
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/manifest"
+          gh release download "$MODEL_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern manifest.json --dir "$RUNNER_TEMP/manifest"
+          python - <<'PY'
+          import json,os
+          d=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'manifest','manifest.json')))
+          assert d['full_sha256']==os.environ['MCP245_MODEL_SHA256']=='535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4'
+          assert d['full_size']==int(os.environ['MCP245_MODEL_SIZE'])==4780966112
+          assert d['template_sha256']==os.environ['MCP245_TEMPLATE_SHA256']
+          assert d['byte_frozen_without_repack'] is True
+          assert d['original_tool_template_preserved_byte_for_byte'] is True
+          assert d['natural_stop_token_ids']==[248044,248046]
+          PY
+          cd Android/src
+          grep -F 'implementation(libs.litertlm)' app/build.gradle.kts
+          grep -F 'litertlm = "0.15.0"' gradle/libs.versions.toml
+          ! grep -q 'litertlm-android-0.15.0-mcp242.aar' app/build.gradle.kts
+          test -f scripts/patch_mcp245_qwen35_frozen_download.py
+
+      - name: Apply only MCP238 MCP239 MCP245 and prove embedded download metadata
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile scripts/patch_mcp238_qwen35_model_download_v3.py scripts/patch_mcp239_qwen35_cpu_only.py scripts/patch_mcp245_qwen35_frozen_download.py
+          python3 scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 scripts/patch_mcp239_qwen35_cpu_only.py
+          python3 scripts/patch_mcp245_qwen35_frozen_download.py
+          python - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          helper=Path('app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt').read_text()
+          repo=Path('app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt').read_text()
+          assert 'MCP239_QWEN35_CPU_ONLY' in helper
+          for x in ('MCP240_QWEN35_RECURRENT_STATE_RESET','MCP241_QWEN35_AGENT_LOGITS_FIX','RepetitionPenaltyConfig','NoRepeatNgramConfig','maxOutputToken ='):
+              assert x not in helper,x
+          assert os.environ['MCP245_MODEL_SHA256'] in repo
+          assert os.environ['MODEL_RELEASE_TAG'] in repo
+          assert os.environ['MODEL_FILE'] in repo
+          urls=re.search(r'putString\("KEY_MODEL_MULTIPART_URLS", "([^"]+)"\)',repo).group(1)
+          for i in range(10):
+              assert f'{os.environ["MODEL_FILE"]}.part{i:02d}' in urls
+          sizes=re.search(r'putString\("KEY_MODEL_MULTIPART_PART_SIZES", "([^"]+)"\)',repo).group(1)
+          assert sizes=='480000000,480000000,480000000,480000000,480000000,480000000,480000000,480000000,480000000,460966112'
+          name=os.environ['MODEL_NAME']
+          for p in (Path('../../model_allowlists/1_0_14.json'),Path('app/src/main/assets/model_allowlists/1_0_14.json')):
+              ms=[m for m in json.loads(p.read_text())['models'] if m.get('name')==name]; assert len(ms)==1
+              m=ms[0]; c=m['defaultConfig']
+              assert m['modelFile']==os.environ['MODEL_FILE'] and m['commitHash']==os.environ['MODEL_RELEASE_TAG']
+              assert m['sizeInBytes']==int(os.environ['MCP245_MODEL_SIZE'])
+              assert (c['topK'],c['topP'],c['temperature'],c['maxTokens'],c['maxContextLength'],c['accelerators'])==(20,0.8,0.6,1536,4096,'cpu')
+          print('MCP245 embedded metadata and strict baseline verified')
+          PY
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"; test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"; test -n "$ANDROID_RELEASE_KEY_ALIAS"; test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        working-directory: ./Android/src
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Verify identity, rename, and hash
+        id: apk
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n1)
+          APK=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK"
+          BADGING=$("$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | head -n1)
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='345'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.245'"
+          OUT=local-agent-plaza-1.0.14-mcp.245.apk
+          cp "$APK" "$OUT"
+          SHA=$(sha256sum "$OUT" | awk '{print $1}')
+          printf '%s  %s\n' "$SHA" "$OUT" > "$OUT.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-245-final
+          path: |
+            Android/src/local-agent-plaza-1.0.14-mcp.245.apk
+            Android/src/local-agent-plaza-1.0.14-mcp.245.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish permanent APK release
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title 'Local Agent Plaza MCP245 frozen download fix' --notes 'Fixes MCP244 multipart SHA mismatch by freezing already semantically verified model bytes under a new release tag and independently reconstructing the published assets before embedding the same SHA in the APK. Official LiteRT-LM 0.15; MCP238/MCP239 app behavior; no custom JNI/AAR or output watchdog.' --prerelease
+          gh release upload "$APK_RELEASE_TAG" local-agent-plaza-1.0.14-mcp.245.apk local-agent-plaza-1.0.14-mcp.245.apk.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish final metadata and checkpoint
+        shell: bash
+        env:
+          APK_SHA: ${{ steps.apk.outputs.sha }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/result.json"
+          import json,os
+          apk='local-agent-plaza-1.0.14-mcp.245.apk'
+          d={
+            'schema':'local-agent-plaza.mcp245-frozen-download-fix.v1',
+            'run_id':int(os.environ['GITHUB_RUN_ID']),
+            'head_sha':os.environ['GITHUB_SHA'],
+            'apk_name':apk,'apk_sha256':os.environ['APK_SHA'],
+            'version_name':'1.0.14-mcp.245','version_code':345,'package':'com.localagent.plaza.mcp',
+            'release_tag':os.environ['APK_RELEASE_TAG'],
+            'release_apk_url':f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['APK_RELEASE_TAG']}/{apk}",
+            'artifact_id':int(os.environ['ARTIFACT_ID']),'artifact_url':os.environ['ARTIFACT_URL'],
+            'runtime':'official Maven LiteRT-LM 0.15.0','app_patch_chain':['MCP238','MCP239','MCP245'],
+            'model_release_tag':os.environ['MODEL_RELEASE_TAG'],'model_file':os.environ['MODEL_FILE'],
+            'model_sha256':os.environ['MCP245_MODEL_SHA256'],'model_size':int(os.environ['MCP245_MODEL_SIZE']),
+            'template_sha256':os.environ['MCP245_TEMPLATE_SHA256'],
+            'frozen_release_reconstructed_after_publish':True,
+            'original_tool_template_preserved_byte_for_byte':True,'natural_stop_token_ids':[248044,248046],
+            'model_redownload_required':True,'backend':'CPU_FORCED',
+            'sampler':{'top_k':20,'top_p':0.8,'temperature':0.6,'max_tokens':1536,'context':4096},
+            'fresh_engine_reset':False,'runtime_repetition_penalty_processor':False,'custom_litertlm_aar':False,'custom_litertlm_jni':False,
+            'root_cause':'MCP244 APK embedded SHA 7cdf8232... but its mutable model release was later clobbered by a nondeterministic repack; current release reconstructed to 535c3296..., exactly matching the physical-device failure hash.'
+          }
+          print(json.dumps(d,indent=2))
+          PY
+          b64=$(base64 -w0 "$RUNNER_TEMP/result.json")
+          api="repos/$GITHUB_REPOSITORY/contents/docs/mcp245_apk_result.json"
+          old=$(gh api "$api?ref=experimental" 2>/dev/null || true)
+          oldsha=$(printf '%s' "$old" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)
+          if [ -n "$oldsha" ]; then gh api --method PUT "$api" -f branch=experimental -f message='Update MCP245 final result' -f sha="$oldsha" -f content="$b64"; else gh api --method PUT "$api" -f branch=experimental -f message='Add MCP245 final result' -f content="$b64"; fi
+          python - <<'PY' > "$RUNNER_TEMP/checkpoint.md"
+          import json,os
+          d=json.load(open(os.environ['RUNNER_TEMP']+'/result.json'))
+          print('# MCP245 frozen download fix — final checkpoint')
+          print('\nBuild/release SUCCESS.')
+          print(f"\nRun `{d['run_id']}`; APK SHA256 `{d['apk_sha256']}`.")
+          print(f"\nAPK: `{d['release_apk_url']}`")
+          print(f"\nArtifact: `{d['artifact_url']}`")
+          print(f"\nFrozen model tag `{d['model_release_tag']}`, SHA256 `{d['model_sha256']}`, size `{d['model_size']}`.")
+          print('\nRoot cause: MCP244 model release assets were mutable and were overwritten by a later nondeterministic repack after the APK had embedded the earlier SHA. Independent GitHub Actions reconstruction produced exactly the same 535c3296... hash reported by the physical device, proving the downloader itself reconstructed the published bytes correctly. MCP245 copies the verified current model bytes without repacking into a new one-time release tag, re-downloads that release, reconstructs it, verifies the exact SHA, and embeds that same SHA in the APK.')
+          print('\nProduct boundary remains MCP238/MCP239 Agent behavior + full original official tool template + dual natural stops; official LiteRT-LM 0.15; no MCP240/MCP241 app patches; no custom runtime.')
+          print('\nNext physical test: install MCP245, download the MCP245 model, then test Agent web-search/tool flow and final natural termination.')
+          PY
+          cb64=$(base64 -w0 "$RUNNER_TEMP/checkpoint.md")
+          capi="repos/$GITHUB_REPOSITORY/contents/docs/checkpoints/QWEN35_MCP245_FROZEN_DOWNLOAD_FIX_2026-08-20.md"
+          cold=$(gh api "$capi?ref=experimental" 2>/dev/null || true)
+          csha=$(printf '%s' "$cold" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)
+          if [ -n "$csha" ]; then gh api --method PUT "$capi" -f branch=experimental -f message='Update MCP245 checkpoint' -f sha="$csha" -f content="$cb64"; else gh api --method PUT "$capi" -f branch=experimental -f message='Add MCP245 checkpoint' -f content="$cb64"; fi
