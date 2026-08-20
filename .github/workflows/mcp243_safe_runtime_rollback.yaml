@@ -1,0 +1,259 @@
+name: MCP243 safe official-runtime rollback
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp243_safe_runtime_rollback.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mcp243-safe-runtime-rollback
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build signed MCP243 safe rollback APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      MCP240_MODEL_SIZE: '4780966112'
+      MCP240_MODEL_SHA256: '119bdfb5464b9c3746b26d43211474fcfcbbe8a8c36693e3c0413b8d5b9d7d0f'
+      MCP240_MODEL_PARTS: '10'
+      MODEL_RELEASE_TAG: 'qwen35-2b-q8-4096-mcp240-natural-v2'
+      MODEL_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.243'
+      LOCAL_VERSION_CODE: '343'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      APK_RELEASE_TAG: 'mcp243-safe-official-runtime-rollback'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+
+      - name: Verify conservative rollback source boundary
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          grep -F 'implementation(libs.litertlm)' app/build.gradle.kts
+          grep -F 'litertlm = "0.15.0"' gradle/libs.versions.toml
+          ! grep -q 'litertlm-android-0.15.0-mcp242.aar' app/build.gradle.kts
+          ! grep -q 'MCP242_LOCAL_LITERTLM_AAR' app/build.gradle.kts
+          test -f scripts/patch_mcp241_qwen35_agent_logits_fix.py
+          echo 'MCP243 boundary verified: official Maven LiteRT-LM 0.15.0 only; no custom AAR/JNI dependency.'
+
+      - name: Verify repaired MCP240 model release remains available
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$MODEL_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets > "$RUNNER_TEMP/model_release.json"
+          python - <<'PY'
+          import json, os
+          d=json.load(open(os.environ['RUNNER_TEMP']+'/model_release.json'))
+          names={a['name'] for a in d['assets']}
+          f=os.environ['MODEL_FILE']
+          for i in range(10):
+              assert f'{f}.part{i:02d}' in names
+          assert 'manifest.json' in names
+          print('Existing repaired MCP240 model release verified; no redownload required when already present.')
+          PY
+
+      - name: Apply only MCP238 MCP239 MCP240 MCP241 patches
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile \
+            scripts/patch_mcp238_qwen35_model_download_v3.py \
+            scripts/patch_mcp239_qwen35_cpu_only.py \
+            scripts/patch_mcp240_qwen35_natural_generation.py \
+            scripts/patch_mcp241_qwen35_agent_logits_fix.py
+          python3 scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 scripts/patch_mcp239_qwen35_cpu_only.py
+          python3 scripts/patch_mcp240_qwen35_natural_generation.py
+          python3 scripts/patch_mcp241_qwen35_agent_logits_fix.py
+
+      - name: Verify MCP243 product invariants before build
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          name='Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP240'
+          helper=Path('app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt').read_text()
+          gradle=Path('app/build.gradle.kts').read_text()
+          versions=Path('gradle/libs.versions.toml').read_text()
+
+          assert 'implementation(libs.litertlm)' in gradle
+          assert 'litertlm = "0.15.0"' in versions
+          assert 'litertlm-android-0.15.0-mcp242.aar' not in gradle
+          assert 'MCP242_LOCAL_LITERTLM_AAR' not in gradle
+          assert 'MCP241_QWEN35_AGENT_LOGITS_FIX' in helper
+          assert 'MCP240_QWEN35_RECURRENT_STATE_RESET' in helper
+          assert 'RepetitionPenaltyConfig' not in helper
+          assert 'presencePenalty = 2.0f' not in helper
+          assert 'repetitionPenalty = 1.0f' not in helper
+          assert 'NoRepeatNgramConfig' not in helper
+          assert 'maxOutputToken =' not in helper
+
+          for p in (Path('../../model_allowlists/1_0_14.json'), Path('app/src/main/assets/model_allowlists/1_0_14.json')):
+              matches=[m for m in json.loads(p.read_text())['models'] if m.get('name')==name]
+              assert len(matches)==1
+              m=matches[0]
+              assert m['modelFile']=='Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm'
+              assert m['commitHash']=='qwen35-2b-q8-4096-mcp240-natural-v2'
+              assert m['sizeInBytes']==4780966112
+              cfg=m['defaultConfig']
+              assert cfg['accelerators']=='cpu'
+              assert (cfg['topK'],cfg['topP'],cfg['temperature'])==(20,1.0,1.0)
+              assert cfg['maxTokens']==4096
+
+          print('MCP243 invariants verified: exact MCP241 behavior on official runtime, no new low-level changes.')
+          PY
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build MCP243 release APK
+        working-directory: ./Android/src
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Verify signed APK identity
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='343'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.243'"
+
+      - name: Rename and hash APK
+        id: apk
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          OUT="local-agent-plaza-1.0.14-mcp.243.apk"
+          cp "$SRC" "$OUT"
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$OUT" > "$OUT.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP243 APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-243-safe-rollback
+          path: |
+            Android/src/local-agent-plaza-1.0.14-mcp.243.apk
+            Android/src/local-agent-plaza-1.0.14-mcp.243.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish permanent MCP243 APK release
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Local Agent Plaza MCP243 safe official-runtime rollback" \
+              --notes "Emergency conservative rollback after MCP242 custom LiteRT-LM JNI/AAR caused real-device process-level instability. MCP243 returns to the official Maven LiteRT-LM 0.15.0 runtime and exact MCP241 Qwen behavior: repaired MCP240 model, CPU, ChatML + dual stop IDs, no RepetitionPenaltyConfig, no hard truncation/watchdog/no-repeat ngram. Existing MCP240 model file is reused; no model redownload required." \
+              --prerelease
+          gh release upload "$APK_RELEASE_TAG" \
+            local-agent-plaza-1.0.14-mcp.243.apk \
+            local-agent-plaza-1.0.14-mcp.243.apk.sha256 \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish MCP243 result metadata
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA: ${{ steps.apk.outputs.sha }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/mcp243_result.json"
+          import json, os
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp243-safe-official-runtime-rollback.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'artifact_id':int(os.environ['ARTIFACT_ID']),
+              'artifact_url':os.environ['ARTIFACT_URL'],
+              'release_tag':os.environ['APK_RELEASE_TAG'],
+              'release_apk_url':f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['APK_RELEASE_TAG']}/local-agent-plaza-1.0.14-mcp.243.apk",
+              'apk_name':'local-agent-plaza-1.0.14-mcp.243.apk',
+              'apk_sha256':os.environ['APK_SHA'],
+              'version_name':'1.0.14-mcp.243',
+              'version_code':343,
+              'package':'com.localagent.plaza.mcp',
+              'runtime':'official Maven LiteRT-LM 0.15.0',
+              'custom_litertlm_aar':False,
+              'custom_litertlm_jni':False,
+              'model_release_tag':os.environ['MODEL_RELEASE_TAG'],
+              'model_file':os.environ['MODEL_FILE'],
+              'model_sha256':os.environ['MCP240_MODEL_SHA256'],
+              'model_redownload_required':False,
+              'backend':'CPU_FORCED',
+              'sampler':{'top_k':20,'top_p':1.0,'temperature':1.0},
+              'runtime_repetition_penalty_processor':False,
+              'model_natural_stop_token_ids':[248044,248046],
+              'hard_output_truncation':False,
+              'repetition_watchdog_cancel':False,
+              'hard_no_repeat_ngram':False,
+              'rollback_reference':'MCP241 behavior; MCP242 custom runtime explicitly excluded'
+          },indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/mcp243_result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp243_apk_result.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          EXISTING_SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP243 APK result' -f branch=experimental -f sha="$EXISTING_SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP243 APK result' -f branch=experimental -f content="$CONTENT"
+          fi
