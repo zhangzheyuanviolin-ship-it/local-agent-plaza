@@ -1,0 +1,47 @@
+{
+  "schema": "local-agent-plaza.mcp242-compatible-repetition.final.v1",
+  "run_id": 32339686383,
+  "head_sha": "7d2b30d51e7a9aeb225e7de08d61a7d0854b119b",
+  "source_runtime_run_id": 32337379513,
+  "artifact_id": 9396127838,
+  "artifact_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32339686383/artifacts/9396127838",
+  "release_tag": "mcp242-qwen35-compatible-repetition",
+  "release_apk_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp242-qwen35-compatible-repetition/local-agent-plaza-1.0.14-mcp.242.apk",
+  "apk_name": "local-agent-plaza-1.0.14-mcp.242.apk",
+  "apk_sha256": "0436dfa0ff530ebad6c804fca81c48d4ea787016dea8675eb503fb9dd3e5c79c",
+  "apk_packaged_litertlm_jni_sha256": "18307a4ac5a986c9b1a1f8d6c7b99fe04a4c2675f73c16ab8fa0bc299b95e385",
+  "patched_aar_sha256": "fb21293e5c32ecede58e87e317e262b2dedc47f52fe8875bbc4b1f08de6b09b7",
+  "version_name": "1.0.14-mcp.242",
+  "version_code": 342,
+  "package": "com.localagent.plaza.mcp",
+  "model_release_tag": "qwen35-2b-q8-4096-mcp240-natural-v2",
+  "model_file": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm",
+  "model_sha256": "119bdfb5464b9c3746b26d43211474fcfcbbe8a8c36693e3c0413b8d5b9d7d0f",
+  "model_redownload_required": false,
+  "backend": "CPU_FORCED",
+  "sampler": {
+    "top_k": 20,
+    "top_p": 1.0,
+    "temperature": 1.0
+  },
+  "repetition_penalty": {
+    "enabled": true,
+    "repetition_penalty": 1.0,
+    "presence_penalty": 2.0,
+    "frequency_penalty": 0.0
+  },
+  "model_natural_stop_token_ids": [
+    248044,
+    248046
+  ],
+  "hard_output_truncation": false,
+  "repetition_watchdog_cancel": false,
+  "hard_no_repeat_ngram": false,
+  "model_decode_logits_shape": [
+    1,
+    1,
+    248320
+  ],
+  "runtime_fix": "LiteRT-LM 0.15 arm64 RepetitionPenaltyProcessor accepts padded model vocab; model-vocab stride with tokenizer-vocab penalty domain",
+  "runtime_provenance_marker_verified_in_final_apk": true
+}
