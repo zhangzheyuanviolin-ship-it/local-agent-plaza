@@ -1,0 +1,415 @@
+name: MCP242 Qwen3.5 compatible repetition runtime
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp242_qwen35_compatible_repetition.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp242-qwen35-compatible-repetition
+  cancel-in-progress: false
+
+jobs:
+  build_runtime:
+    name: Build patched LiteRT-LM 0.15 arm64 runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      aar_sha256: ${{ steps.runtime_meta.outputs.aar_sha256 }}
+      jni_sha256: ${{ steps.runtime_meta.outputs.jni_sha256 }}
+    steps:
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+
+      - name: Checkout LiteRT-LM v0.15.0 source
+        uses: actions/checkout@v4
+        with:
+          repository: google-ai-edge/LiteRT-LM
+          ref: v0.15.0
+          path: LiteRT-LM
+          lfs: true
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Select Android NDK and Bazelisk
+        shell: bash
+        run: |
+          set -euxo pipefail
+          NDK="$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -n "$NDK"
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$NDK" >> "$GITHUB_ENV"
+          echo "Selected NDK: $NDK"
+          if ! command -v bazelisk >/dev/null 2>&1; then
+            curl -L --fail --retry 3 \
+              https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 \
+              -o "$RUNNER_TEMP/bazelisk"
+            chmod +x "$RUNNER_TEMP/bazelisk"
+            echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          fi
+
+      - name: Backport padded-vocabulary repetition-penalty compatibility
+        working-directory: ./LiteRT-LM
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$(cat .bazelversion | tr -d '\n\r')" = '7.6.1'
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('runtime/components/logits_processor/repetition_penalty_processor.cc')
+          s=p.read_text()
+          old='''  if (logits_dims.size() != 3 || logits_dims[0] != batch_states_.size() ||
+      logits_dims[1] != 1 || logits_dims[2] != vocab_size_) {
+    return absl::InvalidArgumentError(
+        "Logits dimensions must be [batch_size, 1, vocab_size].");
+  }
+
+  if (logits.size() != vocab_size_ * batch_states_.size()) {
+    return absl::InvalidArgumentError("Logits span size incorrectly mapped.");
+  }
+
+  for (int batch_idx = 0; batch_idx < batch_states_.size(); ++batch_idx) {
+    BatchState& batch_state = batch_states_[batch_idx];
+    int batch_offset = batch_idx * vocab_size_;
+    for (int vocab_idx = 0; vocab_idx < vocab_size_; ++vocab_idx) {
+'''
+          new='''  // MCP242 backport: some exported models pad the logits vocabulary beyond the
+  // tokenizer vocabulary. LiteRT-LM 0.15 incorrectly required exact equality,
+  // causing RepetitionPenaltyProcessor to abort before the first token. Penalize
+  // only valid tokenizer token IDs while using the actual model-vocab width as
+  // the per-batch stride. The padded logits tail is left unchanged.
+  if (logits_dims.size() != 3 || logits_dims[0] != batch_states_.size() ||
+      logits_dims[1] != 1 || logits_dims[2] < vocab_size_) {
+    return absl::InvalidArgumentError(
+        "Logits dimensions must be [batch_size, 1, model_vocab_size] with "
+        "model_vocab_size >= tokenizer_vocab_size.");
+  }
+
+  const int model_vocab_size = logits_dims[2];
+  if (logits.size() != model_vocab_size * batch_states_.size()) {
+    return absl::InvalidArgumentError("Logits span size incorrectly mapped.");
+  }
+
+  for (int batch_idx = 0; batch_idx < batch_states_.size(); ++batch_idx) {
+    BatchState& batch_state = batch_states_[batch_idx];
+    int batch_offset = batch_idx * model_vocab_size;
+    for (int vocab_idx = 0; vocab_idx < vocab_size_; ++vocab_idx) {
+'''
+          if s.count(old) != 1:
+              raise SystemExit(f'expected exactly one v0.15 processor anchor, found {s.count(old)}')
+          p.write_text(s.replace(old,new,1))
+          print('Patched v0.15 RepetitionPenaltyProcessor for padded model vocabulary.')
+          PY
+          grep -n 'MCP242 backport' runtime/components/logits_processor/repetition_penalty_processor.cc
+          git diff --check
+          git diff -- runtime/components/logits_processor/repetition_penalty_processor.cc
+
+      - name: Build arm64 JNI runtime from patched v0.15 source
+        working-directory: ./LiteRT-LM
+        shell: bash
+        run: |
+          set -euxo pipefail
+          bazelisk version
+          bazelisk build --config=android_arm64 //kotlin/java/com/google/ai/edge/litertlm/jni:litertlm_jni
+          JNI="$(find -L bazel-bin/kotlin/java/com/google/ai/edge/litertlm/jni -type f -name 'liblitertlm_jni.so' | head -n 1)"
+          test -n "$JNI"
+          file "$JNI"
+          readelf -h "$JNI" | grep -E 'Class:|Machine:'
+          mkdir -p "$RUNNER_TEMP/mcp242-runtime"
+          cp -L "$JNI" "$RUNNER_TEMP/mcp242-runtime/liblitertlm_jni.so"
+
+      - name: Replace only arm64 JNI library in official 0.15.0 AAR
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp242-runtime"
+          curl -L --fail --retry 3 \
+            https://dl.google.com/dl/android/maven2/com/google/ai/edge/litertlm/litertlm-android/0.15.0/litertlm-android-0.15.0.aar \
+            -o "$WORK/original.aar"
+          mkdir -p "$WORK/aar"
+          unzip -q "$WORK/original.aar" -d "$WORK/aar"
+          JNI_PATH="$(find "$WORK/aar" -type f -path '*/arm64-v8a/liblitertlm_jni.so' | head -n 1)"
+          test -n "$JNI_PATH"
+          echo "Original JNI: $JNI_PATH"
+          cp "$WORK/liblitertlm_jni.so" "$JNI_PATH"
+          printf '%s\n' \
+            'MCP242: LiteRT-LM v0.15.0 with padded-vocabulary RepetitionPenaltyProcessor backport.' \
+            'Only arm64-v8a liblitertlm_jni.so is replaced; Kotlin API and remaining AAR contents are 0.15.0.' \
+            > "$WORK/aar/MCP242_RUNTIME_PATCH.txt"
+          (cd "$WORK/aar" && zip -q -r "$WORK/litertlm-android-0.15.0-mcp242.aar" .)
+          test -s "$WORK/litertlm-android-0.15.0-mcp242.aar"
+          unzip -l "$WORK/litertlm-android-0.15.0-mcp242.aar" | grep 'MCP242_RUNTIME_PATCH.txt'
+          unzip -p "$WORK/litertlm-android-0.15.0-mcp242.aar" "${JNI_PATH#$WORK/aar/}" > "$WORK/jni_from_aar.so"
+          cmp "$WORK/liblitertlm_jni.so" "$WORK/jni_from_aar.so"
+
+      - name: Record patched runtime hashes
+        id: runtime_meta
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp242-runtime"
+          AAR_SHA="$(sha256sum "$WORK/litertlm-android-0.15.0-mcp242.aar" | awk '{print $1}')"
+          JNI_SHA="$(sha256sum "$WORK/liblitertlm_jni.so" | awk '{print $1}')"
+          echo "aar_sha256=$AAR_SHA" >> "$GITHUB_OUTPUT"
+          echo "jni_sha256=$JNI_SHA" >> "$GITHUB_OUTPUT"
+          printf '%s  %s\n' "$AAR_SHA" litertlm-android-0.15.0-mcp242.aar > "$WORK/litertlm-android-0.15.0-mcp242.aar.sha256"
+          printf '%s  %s\n' "$JNI_SHA" liblitertlm_jni.so > "$WORK/liblitertlm_jni.so.sha256"
+
+      - name: Upload patched runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: litertlm-android-0.15.0-mcp242
+          path: |
+            ${{ runner.temp }}/mcp242-runtime/litertlm-android-0.15.0-mcp242.aar
+            ${{ runner.temp }}/mcp242-runtime/litertlm-android-0.15.0-mcp242.aar.sha256
+            ${{ runner.temp }}/mcp242-runtime/liblitertlm_jni.so.sha256
+          if-no-files-found: error
+          retention-days: 3
+
+  build_apk:
+    name: Build signed MCP242 Agent APK
+    needs: build_runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      MCP240_MODEL_SIZE: '4780966112'
+      MCP240_MODEL_SHA256: '119bdfb5464b9c3746b26d43211474fcfcbbe8a8c36693e3c0413b8d5b9d7d0f'
+      MCP240_MODEL_PARTS: '10'
+      MODEL_RELEASE_TAG: 'qwen35-2b-q8-4096-mcp240-natural-v2'
+      MODEL_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm'
+      PATCHED_AAR_SHA256: ${{ needs.build_runtime.outputs.aar_sha256 }}
+      PATCHED_JNI_SHA256: ${{ needs.build_runtime.outputs.jni_sha256 }}
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.242'
+      LOCAL_VERSION_CODE: '342'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      APK_RELEASE_TAG: 'mcp242-qwen35-compatible-repetition'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout app source
+        uses: actions/checkout@v4
+
+      - name: Download patched LiteRT-LM runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: litertlm-android-0.15.0-mcp242
+          path: Android/src/app/libs
+
+      - name: Verify patched AAR artifact
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          AAR="app/libs/litertlm-android-0.15.0-mcp242.aar"
+          test -f "$AAR"
+          test "$(sha256sum "$AAR" | awk '{print $1}')" = "$PATCHED_AAR_SHA256"
+          unzip -l "$AAR" | grep 'MCP242_RUNTIME_PATCH.txt'
+
+      - name: Apply MCP238 MCP239 MCP240 model and Agent patches
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile \
+            scripts/patch_mcp238_qwen35_model_download_v3.py \
+            scripts/patch_mcp239_qwen35_cpu_only.py \
+            scripts/patch_mcp240_qwen35_natural_generation.py
+          python3 scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 scripts/patch_mcp239_qwen35_cpu_only.py
+          python3 scripts/patch_mcp240_qwen35_natural_generation.py
+
+      - name: Use patched local LiteRT-LM 0.15 AAR
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/build.gradle.kts')
+          s=p.read_text()
+          old='  implementation(libs.litertlm)\n'
+          new='''  // MCP242: stable LiteRT-LM 0.15 API with arm64 padded-vocab repetition-penalty backport.\n  implementation(files("libs/litertlm-android-0.15.0-mcp242.aar"))\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one litertlm dependency anchor, found {s.count(old)}')
+          p.write_text(s.replace(old,new,1))
+          PY
+          grep -n 'MCP242' app/build.gradle.kts
+
+      - name: Verify MCP242 product invariants
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          name='Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP240'
+          helper=Path('app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt').read_text()
+          gradle=Path('app/build.gradle.kts').read_text()
+          assert 'RepetitionPenaltyConfig(' in helper
+          assert 'presencePenalty = 2.0f' in helper
+          assert 'repetitionPenalty = 1.0f' in helper
+          assert 'MCP240_QWEN35_RECURRENT_STATE_RESET' in helper
+          assert 'NoRepeatNgramConfig' not in helper
+          assert 'maxOutputToken =' not in helper
+          assert 'litertlm-android-0.15.0-mcp242.aar' in gradle
+          assert 'implementation(libs.litertlm)' not in gradle
+          for p in (Path('../../model_allowlists/1_0_14.json'), Path('app/src/main/assets/model_allowlists/1_0_14.json')):
+              matches=[m for m in json.loads(p.read_text())['models'] if m.get('name')==name]
+              assert len(matches)==1
+              m=matches[0]
+              assert m['modelFile']=='Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm'
+              assert m['commitHash']=='qwen35-2b-q8-4096-mcp240-natural-v2'
+              assert m['sizeInBytes']==4780966112
+              cfg=m['defaultConfig']
+              assert cfg['accelerators']=='cpu'
+              assert (cfg['topK'],cfg['topP'],cfg['temperature'])==(20,1.0,1.0)
+              assert cfg['maxTokens']==4096
+          print('MCP242 invariants verified: natural EOS/ChatML retained and real soft penalty re-enabled through patched v0.15 runtime.')
+          PY
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build MCP242 release APK
+        working-directory: ./Android/src
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Verify APK identity and patched JNI provenance
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='342'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.242'"
+          JNI_ENTRY="$(unzip -Z1 "$APK" | grep -E '^lib/arm64-v8a/liblitertlm_jni\.so$' | head -n1)"
+          test -n "$JNI_ENTRY"
+          unzip -p "$APK" "$JNI_ENTRY" > "$RUNNER_TEMP/apk_litertlm_jni.so"
+          ACTUAL_JNI_SHA="$(sha256sum "$RUNNER_TEMP/apk_litertlm_jni.so" | awk '{print $1}')"
+          echo "APK LiteRT-LM JNI SHA256: $ACTUAL_JNI_SHA"
+          test "$ACTUAL_JNI_SHA" = "$PATCHED_JNI_SHA256"
+
+      - name: Rename and hash APK
+        id: apk
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          OUT="local-agent-plaza-1.0.14-mcp.242.apk"
+          cp "$SRC" "$OUT"
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$OUT" > "$OUT.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP242 APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-242
+          path: |
+            Android/src/local-agent-plaza-1.0.14-mcp.242.apk
+            Android/src/local-agent-plaza-1.0.14-mcp.242.apk.sha256
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Publish permanent MCP242 APK release
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Local Agent Plaza MCP242 Qwen3.5 compatible repetition" \
+              --notes "Qwen3.5 CPU Agent product build. Keeps the repaired MCP240 model ChatML and natural stop tokens 248044/248046, re-enables official soft presence penalty through a targeted LiteRT-LM 0.15 arm64 runtime backport that supports padded model vocabularies, and retains no host truncation/watchdog. Existing MCP240 model file is reused; no model redownload is required." \
+              --prerelease
+          gh release upload "$APK_RELEASE_TAG" \
+            local-agent-plaza-1.0.14-mcp.242.apk \
+            local-agent-plaza-1.0.14-mcp.242.apk.sha256 \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish MCP242 result metadata
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA: ${{ steps.apk.outputs.sha }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/mcp242_result.json"
+          import json, os
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp242-compatible-repetition.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'artifact_id':int(os.environ['ARTIFACT_ID']),
+              'artifact_url':os.environ['ARTIFACT_URL'],
+              'apk_name':'local-agent-plaza-1.0.14-mcp.242.apk',
+              'apk_sha256':os.environ['APK_SHA'],
+              'version_name':'1.0.14-mcp.242',
+              'version_code':342,
+              'package':'com.localagent.plaza.mcp',
+              'release_tag':os.environ['APK_RELEASE_TAG'],
+              'model_release_tag':os.environ['MODEL_RELEASE_TAG'],
+              'model_file':os.environ['MODEL_FILE'],
+              'model_sha256':os.environ['MCP240_MODEL_SHA256'],
+              'model_redownload_required':False,
+              'backend':'CPU_FORCED',
+              'sampler':{'top_k':20,'top_p':1.0,'temperature':1.0},
+              'repetition_penalty':{'enabled':True,'repetition_penalty':1.0,'presence_penalty':2.0,'implementation':'LiteRT-LM 0.15 arm64 padded-vocab compatibility backport'},
+              'patched_aar_sha256':os.environ['PATCHED_AAR_SHA256'],
+              'patched_jni_sha256':os.environ['PATCHED_JNI_SHA256'],
+              'model_natural_stop_token_ids':[248044,248046],
+              'hard_output_truncation':False,
+              'repetition_watchdog_cancel':False,
+              'model_decode_logits_shape':[1,1,248320],
+              'runtime_fix':'use actual model-vocab stride and penalize only tokenizer token IDs when model vocab is padded'
+          },indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/mcp242_result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp242_apk_result.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          EXISTING_SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ]; then
+            gh api --method PUT "$API" -f message="Update MCP242 APK result" -f branch=experimental -f sha="$EXISTING_SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message="Add MCP242 APK result" -f branch=experimental -f content="$CONTENT"
+          fi
