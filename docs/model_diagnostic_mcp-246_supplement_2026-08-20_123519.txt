@@ -1,0 +1,118 @@
+=== MCP224 模型生命周期诊断 ===
+schema=mcp224.model_lifecycle.v1
+app_version=1.0.14-mcp.246
+app_version_code=346
+litert_lm=0.15.0
+litert=2.1.6
+device=Xiaomi 23117RK66C
+device_code=manet
+android_api=36
+memory_class_mb=256
+task_id=llm_agent_chat
+model_name=Qwen3.5-2B LiteRT-LM Q8 4096 Plaza
+model_display_name=
+model_imported=false
+model_file_name=Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm
+model_file_expected_bytes=4780966112
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_4096_Plaza/qwen35-2b-q8-4096-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm
+model_file_exists=true
+model_file_actual_bytes=480000000
+configured_context_window=4096
+max_output_tokens=1536
+accelerator=CPU
+supports_image=false
+supports_audio=false
+memory_java_used_bytes=23463208 | memory_native_allocated_bytes=33925904
+privacy=no_user_prompt;no_tool_arguments;no_tool_result_content;no_workspace_content;no_secrets
+
+[2026-08-20 20:33:37.635 +0800] model_manager.initialize.attempt | Starting model initialization attempt 1
+memory_java_used_bytes=23513112 | memory_native_allocated_bytes=34056704
+
+[2026-08-20 20:33:37.662 +0800] litert.engine_config | Preparing LiteRT-LM EngineConfig
+memory_java_used_bytes=26291192 | memory_native_allocated_bytes=34286928
+detail:
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_4096_Plaza/qwen35-2b-q8-4096-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm | backend=CPU | vision_backend=GPU | support_image=false | support_audio=false | context=4096 | engine_max_tokens=4096 | max_output_tokens=1536
+
+[2026-08-20 20:33:37.674 +0800] litert.engine_initialize.start | Engine.initialize() started
+memory_java_used_bytes=26716144 | memory_native_allocated_bytes=35836288
+
+[2026-08-20 20:33:39.028 +0800] litert.model_initialize.failure | FAILED
+memory_java_used_bytes=25032624 | memory_native_allocated_bytes=34098576
+detail:
+backend=CPU | vision_backend=GPU | support_image=false | support_audio=false | configured_context=4096 | engine_max_tokens=4096 | max_output_tokens=1536 | model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_4096_Plaza/qwen35-2b-q8-4096-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm
+exception_class=com.google.ai.edge.litertlm.LiteRtLmJniException
+exception_message=Failed to create engine: NOT_FOUND: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:91]
+└ TF_LITE_PREFILL_DECODE not found in the model.
+com.google.ai.edge.litertlm.LiteRtLmJniException: Failed to create engine: NOT_FOUND: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:91]
+└ TF_LITE_PREFILL_DECODE not found in the model.
+	at com.google.ai.edge.litertlm.LiteRtLmJni.nativeCreateEngine(Native Method)
+	at com.google.ai.edge.litertlm.Engine.initialize(Engine.kt:75)
+	at com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper.initialize(LlmChatModelHelper.kt:204)
+	at com.google.ai.edge.gallery.runtime.LlmModelHelper.initialize$default(LlmModelHelper.kt:53)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.initializeModelFn$lambda$2(AgentChatTaskModule.kt:117)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.$r8$lambda$mnZ_uorPaDQedOpGf07SQpzMVP8(Unknown Source:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask$$ExternalSyntheticLambda1.invoke(D8$$SyntheticClass:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.SkillManagerViewModel$loadSkills$1$7.invokeSuspend(SkillManagerViewModel.kt:274)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:829)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+
+
+[2026-08-20 20:33:39.029 +0800] model_manager.initialize.failure | Model initialization attempt 1 failed
+memory_java_used_bytes=25082528 | memory_native_allocated_bytes=34097696
+detail:
+Failed to create engine: NOT_FOUND: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:91]
+└ TF_LITE_PREFILL_DECODE not found in the model.
+
+[2026-08-20 20:33:40.908 +0800] model_manager.initialize.attempt | Starting model initialization attempt 2
+memory_java_used_bytes=17794056 | memory_native_allocated_bytes=34098672
+
+[2026-08-20 20:33:40.913 +0800] litert.engine_config | Preparing LiteRT-LM EngineConfig
+memory_java_used_bytes=17929992 | memory_native_allocated_bytes=34098672
+detail:
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_4096_Plaza/qwen35-2b-q8-4096-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm | backend=CPU | vision_backend=GPU | support_image=false | support_audio=false | context=4096 | engine_max_tokens=4096 | max_output_tokens=1536
+
+[2026-08-20 20:33:40.915 +0800] litert.engine_initialize.start | Engine.initialize() started
+memory_java_used_bytes=17983992 | memory_native_allocated_bytes=34098672
+
+[2026-08-20 20:33:42.338 +0800] litert.model_initialize.failure | FAILED
+memory_java_used_bytes=20224016 | memory_native_allocated_bytes=34205472
+detail:
+backend=CPU | vision_backend=GPU | support_image=false | support_audio=false | configured_context=4096 | engine_max_tokens=4096 | max_output_tokens=1536 | model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_4096_Plaza/qwen35-2b-q8-4096-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm
+exception_class=com.google.ai.edge.litertlm.LiteRtLmJniException
+exception_message=Failed to create engine: NOT_FOUND: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:91]
+└ TF_LITE_PREFILL_DECODE not found in the model.
+com.google.ai.edge.litertlm.LiteRtLmJniException: Failed to create engine: NOT_FOUND: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:91]
+└ TF_LITE_PREFILL_DECODE not found in the model.
+	at com.google.ai.edge.litertlm.LiteRtLmJni.nativeCreateEngine(Native Method)
+	at com.google.ai.edge.litertlm.Engine.initialize(Engine.kt:75)
+	at com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper.initialize(LlmChatModelHelper.kt:204)
+	at com.google.ai.edge.gallery.runtime.LlmModelHelper.initialize$default(LlmModelHelper.kt:53)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.initializeModelFn$lambda$2(AgentChatTaskModule.kt:117)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.$r8$lambda$mnZ_uorPaDQedOpGf07SQpzMVP8(Unknown Source:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask$$ExternalSyntheticLambda1.invoke(D8$$SyntheticClass:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.SkillManagerViewModel.loadSkills(SkillManagerViewModel.kt:277)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.initializeModelFn(AgentChatTaskModule.kt:87)
+	at com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel$initializeModel$2$initializeTargetModel$1.invokeSuspend(ModelManagerViewModel.kt:602)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:829)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+
+
+[2026-08-20 20:33:42.339 +0800] model_manager.initialize.failure | Model initialization attempt 2 failed
+memory_java_used_bytes=20351744 | memory_native_allocated_bytes=34199056
+detail:
+Failed to create engine: NOT_FOUND: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:91]
+└ TF_LITE_PREFILL_DECODE not found in the model.
