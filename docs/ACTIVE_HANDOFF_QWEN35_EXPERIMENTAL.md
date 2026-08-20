@@ -1,6 +1,6 @@
 # Local Agent Plaza — Qwen3.5 experimental live handoff
 
-Last checkpoint: 2026-08-20 15:40+08:00
+Last checkpoint: 2026-08-20 — MCP243 build/release completed
 Branch: `experimental`
 Default branch `main` must remain untouched.
 Stable product reference branch: `golden/mcp-223-product-stable`.
@@ -66,7 +66,7 @@ MCP241 removed `RepetitionPenaltyConfig` entirely while retaining:
 - MCP240 fresh-Engine Qwen reset.
 
 Build metadata: `docs/mcp241_apk_result.json`.
-MCP241 is the conservative functional rollback reference for the next build.
+MCP241 is the conservative functional rollback reference.
 
 ## MCP242 — REJECTED / DO NOT USE
 
@@ -76,56 +76,68 @@ The user installed MCP242 and observed severe process-level instability: frequen
 
 There is no app diagnostic log because the process dies outright. Do not ask the user for a crash log as a prerequisite.
 
-Given the timing and blast radius, the custom JNI/AAR runtime is now treated as the primary regression suspect. This entire custom-runtime route is rejected for product use. The fact that its APK compiled, signed, and contained the intended binary does not establish runtime safety.
+Given the timing and blast radius, the custom JNI/AAR runtime is treated as the primary regression suspect. This entire custom-runtime route is rejected for product use. The fact that its APK compiled, signed, and contained the intended binary does not establish runtime safety.
 
 MCP242 files may remain in repository history for forensic reference, but no future product workflow should apply `patch_mcp242_qwen35_compatible_repetition.py` or package `litertlm-android-0.15.0-mcp242.aar` unless the user explicitly re-authorizes low-level runtime experimentation.
 
-## Official LiteRT-LM status checked at this checkpoint
+## Official LiteRT-LM status checked before MCP243
 
 Current official upstream `main` still has the same strict check in `runtime/components/logits_processor/repetition_penalty_processor.cc`:
 
 `logits_dims[2] != vocab_size_` -> error `Logits dimensions must be [batch_size, 1, vocab_size].`
 
-Therefore there is no verified official upstream runtime fix available at this checkpoint that can safely restore the repetition processor for this padded-vocab Qwen3.5 export.
+Therefore no verified official upstream runtime fix was available that could safely restore the repetition processor for this padded-vocab Qwen3.5 export.
 
-## Current mandated action — MCP243 safe rollback
+## MCP243 — CURRENT PHYSICAL-TEST CANDIDATE
 
-Create MCP243 as an overwrite-installable rollback (`versionCode` > 342) that is intentionally equivalent in Qwen behavior to MCP241:
-
-- official Maven `libs.litertlm` only;
-- NO custom LiteRT-LM AAR/JNI;
-- apply MCP238 + MCP239 + MCP240 + MCP241 patches only;
-- `RepetitionPenaltyConfig` absent;
-- `presencePenalty`/`repetitionPenalty` runtime injection absent;
-- no `NoRepeatNgramConfig`;
-- no per-call `maxOutputToken` hard cap;
-- no repetition watchdog;
-- retain repaired MCP240 model, CPU, ChatML, stop IDs 248044/248046, top_k=20/top_p=1.0/temp=1.0;
-- reuse the model already downloaded on device;
-- sign with the existing release key;
-- verify package `com.localagent.plaza.mcp`;
-- use versionName `1.0.14-mcp.243`, versionCode `343`;
-- publish permanent GitHub Release APK plus Actions artifact;
-- update this file and a machine-readable `docs/mcp243_apk_result.json` only after the build actually succeeds.
-
-This is a deliberately low-risk rollback. Do not introduce additional fixes into MCP243.
-
-### MCP243 live build checkpoint
+MCP243 was built as an overwrite-installable emergency rollback intentionally equivalent to MCP241 Qwen behavior.
 
 Workflow: `.github/workflows/mcp243_safe_runtime_rollback.yaml`
 Run ID: `32345060689`
-Run URL: `https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32345060689`
 Workflow source commit: `3e1acf4165724b6dffcca567ce08ae4f295ea57b`
+Result metadata: `docs/mcp243_apk_result.json`
 
-At this checkpoint the following gates have already passed:
-- conservative source boundary check: official `implementation(libs.litertlm)` and `litertlm = "0.15.0"`;
-- no MCP242 custom AAR/JNI dependency;
-- repaired MCP240 model release availability;
-- MCP238/MCP239/MCP240/MCP241 patch application;
-- MCP243 product invariants, including complete absence of `RepetitionPenaltyConfig`, presence/frequency injection, no-repeat ngram, and per-call hard output cap;
-- release signing prerequisites.
+Build conclusion: SUCCESS. Every workflow step passed, including source-boundary validation, model-release validation, patch invariants, Gradle release build, APK signing/identity verification, artifact upload, permanent GitHub Release upload, and machine-readable result publication.
 
-Current active step at checkpoint: `Build MCP243 release APK` (Gradle assembleRelease). If the session dies now, inspect run `32345060689`, finish from that run, then update this file and `docs/mcp243_apk_result.json` only after signed APK/release publication succeeds.
+MCP243 product invariants:
+- runtime: official Maven LiteRT-LM `0.15.0`;
+- custom LiteRT-LM AAR: false;
+- custom LiteRT-LM JNI: false;
+- applies MCP238 + MCP239 + MCP240 + MCP241 only;
+- `RepetitionPenaltyConfig`: absent;
+- presence/repetition runtime injection: absent;
+- `NoRepeatNgramConfig`: absent;
+- per-call `maxOutputToken` hard cap: absent;
+- repetition watchdog: absent;
+- model: existing repaired MCP240 Qwen3.5-2B Q8 4096 file;
+- model redownload required: false;
+- backend: CPU forced;
+- sampler: top_k 20, top_p 1.0, temperature 1.0;
+- natural stop IDs: 248044 and 248046;
+- package: `com.localagent.plaza.mcp`;
+- versionName: `1.0.14-mcp.243`;
+- versionCode: `343`.
+
+Final APK:
+`local-agent-plaza-1.0.14-mcp.243.apk`
+
+SHA-256:
+`59762f9794b26d469ebc2a4ddc2b8bb22e5b896d2e362eee28e359c78f69ba8b`
+
+Permanent Release URL:
+`https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp243-safe-official-runtime-rollback/local-agent-plaza-1.0.14-mcp.243.apk`
+
+Actions artifact ID: `9397941131`
+Artifact URL:
+`https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32345060689/artifacts/9397941131`
+
+### Current exact stopping point
+
+Engineering/build work for MCP243 is complete. The next required evidence is the user's physical-device test of MCP243. Do not make another inference-runtime change before that result.
+
+First physical-test goal: verify that the global random process crashes introduced by MCP242 disappear after overwrite-installing MCP243. Then verify ordinary AI chat, Agent first response, tool invocation, tool-result continuation, and whether the original long repetition still occurs.
+
+If MCP243 is globally stable but the old long repetition persists, record that result and continue only with conservative/high-confidence mitigation. Do not reintroduce a custom JNI/AAR runtime.
 
 ## Later work after MCP243 is physically verified stable
 
