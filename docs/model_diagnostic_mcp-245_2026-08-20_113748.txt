@@ -1,0 +1,205 @@
+=== MCP207 Agent 性能诊断 ===
+schema=mcp207.agent_perf.v5
+request_id=bb901454
+status=STOPPED
+started_at=2026-08-20 19:31:24.798 +0800
+app_version=1.0.14-mcp.245
+model_name=Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP245
+tool_mode=COMPAT
+litert_lm_version=0.15.0
+litert_version=2.1.6
+android_sdk=36
+device=Xiaomi 23117RK66C
+available_processors=8
+memory_class_mb=256
+model_file_bytes=4780966112
+configured_context_window=4096
+max_output_tokens=1536
+conversation_max_output_override=none
+top_k=20
+top_p=0.8000
+temperature=0.6000
+accelerator=CPU
+active_skill_count=2
+enabled_mcp_count=0
+original_input_chars=27
+runtime_input_chars=2563
+compat_added_input_chars=2536
+thinking_override=per_pass;see_stream_channels
+
+[runtime_initialization]
+engine_init_ms=10225.02
+conversation_init_ms=2.86
+last_conversation_reset_ms=5.56
+conversation_reset_count_total=2
+conversation_resets_during_request=2
+engine_max_num_tokens=4096
+runtime_max_output_tokens=1536
+runtime_accelerator=CPU
+speculative_decoding=false
+
+[mcp207_runtime]
+session_id=unavailable
+user_turn_index=unavailable
+session_history_turn_count=unavailable
+session_history_chars=unavailable
+session_completed_turn_count=unavailable
+conversation_generation_id=unavailable
+last_fresh_conversation_reason=unavailable
+top_level_reset_count=unavailable
+top_level_prepare_ms_total=unavailable
+last_top_level_prepare_ms=unavailable
+last_top_level_reset_ms=unavailable
+top_level_raw_input_chars=unavailable
+top_level_effective_input_chars=unavailable
+pre_submit_wait_ms_total=unavailable
+continuation_prepare_ms_total=unavailable
+last_continuation_prepare_ms=unavailable
+last_continuation_reset_ms=unavailable
+continuation_raw_input_chars=unavailable
+continuation_effective_input_chars=unavailable
+continuation_session_history_included=false
+compat_history_step_count=unavailable
+compat_history_chars=unavailable
+repeated_tool_call_count=unavailable
+tool_result_prompt_build_ms=unavailable
+audit_write_ms=unavailable
+diagnostic_memory_async=true
+
+[request_timing]
+total_ms=147275.04
+llm_pass_count=2
+continuation_count=1
+initial_input_chars=1145
+initial_ttft_ms=3121.98
+initial_decode_after_first_token_ms=1340.54
+initial_total_generation_ms=4462.53
+initial_output_chars=81
+continuation_1_input_chars=2953
+continuation_1_ttft_ms=8942.79
+continuation_1_decode_after_first_token_ms=unavailable
+continuation_1_total_generation_ms=unavailable
+continuation_1_output_chars=0
+before_continuation_1_gap_ms=5471.45
+retry_count=0
+error_chars=0
+
+[stream_channels]
+initial_thinking_override=disabled_compat_global_template_native_budget0_top_level;render_chars=1214;render_open_thought=false;render_closed_thought_cue=false
+initial_first_callback_ttft_ms=3121.98
+initial_first_visible_ttft_ms=3121.98
+initial_first_thought_ttft_ms=unavailable
+initial_callback_count=21
+initial_visible_callback_count=21
+initial_thought_callback_count=0
+initial_visible_chars=81
+initial_thought_chars=0
+initial_thought_window_ms=unavailable
+initial_visible_window_ms=1286.53
+initial_first_visible_to_done_ms=1340.54
+initial_thought_to_first_visible_gap_ms=unavailable
+continuation_1_thinking_override=disabled_compat_global_template_native_budget0_continuation;render_chars=3022;render_open_thought=false;render_closed_thought_cue=false
+continuation_1_first_callback_ttft_ms=8942.79
+continuation_1_first_visible_ttft_ms=8942.79
+continuation_1_first_thought_ttft_ms=unavailable
+continuation_1_callback_count=1687
+continuation_1_visible_callback_count=1687
+continuation_1_thought_callback_count=0
+continuation_1_visible_chars=10127
+continuation_1_thought_chars=0
+continuation_1_thought_window_ms=unavailable
+continuation_1_visible_window_ms=128426.65
+continuation_1_first_visible_to_done_ms=unavailable
+continuation_1_thought_to_first_visible_gap_ms=unavailable
+
+[tool_timing]
+compat_parser_exact_ms=unavailable
+compat_parser_note=post_generation_to_tool_start_ms includes parser and orchestration overhead
+observed_tool_event_count=1
+observed_tool_exec_total_ms=4573.11
+observed_tool_logged_detail_chars_total=1000
+tool_1_name=tool.run_js
+tool_1_exec_ms=4573.11
+tool_1_post_generation_to_start_ms=1.91
+tool_1_logged_detail_chars=1000
+tool_1_success=true
+
+[memory_snapshots]
+request_start.pss_mb=1095.54
+request_start.java_heap_used_mb=41.08
+request_start.native_heap_allocated_mb=793.15
+request_start.sample_delay_ms=48.02
+first_callback_1.pss_mb=3896.86
+first_callback_1.java_heap_used_mb=36.21
+first_callback_1.native_heap_allocated_mb=863.49
+first_callback_1.sample_delay_ms=189.42
+after_tool_1.pss_mb=3439.44
+after_tool_1.java_heap_used_mb=53.49
+after_tool_1.native_heap_allocated_mb=866.96
+after_tool_1.sample_delay_ms=108.43
+first_callback_2.pss_mb=3922.12
+first_callback_2.java_heap_used_mb=33.20
+first_callback_2.native_heap_allocated_mb=867.39
+first_callback_2.sample_delay_ms=175.13
+final.pss_mb=3657.36
+final.java_heap_used_mb=42.57
+final.native_heap_allocated_mb=866.69
+final.sample_delay_ms=155.84
+
+privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged
+=== MCP207 Agent 性能诊断结束 ===
+=== MCP224 模型生命周期诊断 ===
+schema=mcp224.model_lifecycle.v1
+app_version=1.0.14-mcp.245
+app_version_code=345
+litert_lm=0.15.0
+litert=2.1.6
+device=Xiaomi 23117RK66C
+device_code=manet
+android_api=36
+memory_class_mb=256
+task_id=llm_chat
+model_name=Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP245
+model_display_name=
+model_imported=false
+model_file_name=Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp245.litertlm
+model_file_expected_bytes=4780966112
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_4096_Plaza_MCP245/qwen35-2b-q8-4096-mcp245-frozen-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp245.litertlm
+model_file_exists=true
+model_file_actual_bytes=4780966112
+configured_context_window=4096
+max_output_tokens=1536
+accelerator=CPU
+supports_image=false
+supports_audio=false
+memory_java_used_bytes=28721576 | memory_native_allocated_bytes=45710080
+privacy=no_user_prompt;no_tool_arguments;no_tool_result_content;no_workspace_content;no_secrets
+
+[2026-08-20 19:36:09.359 +0800] model_manager.initialize.attempt | Starting model initialization attempt 1
+memory_java_used_bytes=28771480 | memory_native_allocated_bytes=45652256
+
+[2026-08-20 19:36:09.361 +0800] litert.engine_config | Preparing LiteRT-LM EngineConfig
+memory_java_used_bytes=28788616 | memory_native_allocated_bytes=45650048
+detail:
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_4096_Plaza_MCP245/qwen35-2b-q8-4096-mcp245-frozen-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp245.litertlm | backend=CPU | vision_backend=GPU | support_image=false | support_audio=false | context=4096 | engine_max_tokens=4096 | max_output_tokens=1536
+
+[2026-08-20 19:36:09.364 +0800] litert.engine_initialize.start | Engine.initialize() started
+memory_java_used_bytes=28838520 | memory_native_allocated_bytes=45650048
+
+[2026-08-20 19:36:16.751 +0800] litert.engine_initialize.success | Engine.initialize() succeeded
+memory_java_used_bytes=16600768 | memory_native_allocated_bytes=325393648
+detail:
+elapsed_ms=7387.662914
+
+[2026-08-20 19:36:16.752 +0800] litert.conversation_create.start | Engine.createConversation() started
+memory_java_used_bytes=16617904 | memory_native_allocated_bytes=325393648
+detail:
+tools=0 | constrained_decoding=false
+
+[2026-08-20 19:36:16.758 +0800] litert.model_initialize.success | Model Engine and Conversation are ready
+memory_java_used_bytes=16651424 | memory_native_allocated_bytes=325423616
+detail:
+conversation_elapsed_ms=6.437865
+
+[2026-08-20 19:36:16.759 +0800] model_manager.initialize.success | Model initialized on attempt 1
+memory_java_used_bytes=16684944 | memory_native_allocated_bytes=325428192
