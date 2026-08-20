@@ -1,135 +1,143 @@
 # Local Agent Plaza — Qwen3.5 experimental live handoff
 
-Last checkpoint: 2026-08-20 16:55+08:00 — MCP244 strict final build/release SUCCESS
+Last checkpoint: 2026-08-20 18:47+08:00 — MCP245 frozen model + signed APK build/release SUCCESS
 Branch: `experimental`
 Default branch `main` must remain untouched.
 Stable product reference: `golden/mcp-223-product-stable`.
 
 ## Mandatory collaboration / safety rules
 
-1. This file is the live continuity point. Update it or a timestamped `docs/checkpoints/` file before and after material changes and before long builds, so another agent can resume if the active session dies.
+1. This file is the live continuity point. Keep it current after material changes so a replacement agent can resume without asking the user to reconstruct history.
 2. Do not send intermediate chat reports during builds. Continue to a signed APK + real Release/artifact link, then report once.
 3. Do not touch `main` for experiments.
 4. Any high-risk low-level change (JNI/AAR/native inference engine/runtime replacement, ABI surgery, unproven model-binary surgery) requires ~97% confidence and explicit justification. MCP242 proved that build success does not establish runtime safety.
-5. Do not add host forced truncation, automatic repetition watchdog cancellation, or hard NoRepeatNgram unless the user explicitly authorizes it.
+5. Do not add host forced truncation, automatic repetition watchdog cancellation, or hard NoRepeatNgram unless explicitly authorized.
 6. Large APK/model delivery uses GitHub Release/Actions, not sandbox.
-7. Planned later sequence remains: first stabilize 2B/4096, then exact context `8792`, then 4B, then 9B. Do not normalize 8792 to 8192.
+7. Planned later sequence remains: stabilize 2B/4096, then exact context `8792`, then 4B, then 9B. Do not normalize 8792 to 8192.
 
-## Physically proven historical baseline: MCP238/MCP239
+## Historical baseline that must remain conceptually intact
 
-Original model:
-- display: `Qwen3.5-2B LiteRT-LM Q8 4096 Plaza`
-- file: `Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm`
-- tag: `qwen35-2b-q8-4096-v1`
-- size: `4,780,966,112`
-- SHA256: `d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73`
-- context 4096; maxTokens 1536; topK 20; topP 0.8; temperature 0.6; CPU in MCP239.
+MCP238/MCP239 physically proved Qwen3.5-2B Q8/4096 can load on Android CPU and complete a coherent COMPAT network tool call. Original model:
+- file `Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm`
+- tag `qwen35-2b-q8-4096-v1`
+- size `4,780,966,112`
+- SHA256 `d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73`
+- topK 20 / topP 0.8 / temperature 0.6 / maxTokens 1536 / context 4096 / CPU in MCP239.
 
-Physical-device fact: this bundle completed a coherent COMPAT network tool call and one continuation. The continuation then ran ~257 s / 2868 callbacks / 4476 visible chars and repeated coherent final-answer sections. The bad repetition was one continuation decode after one tool call, not an outer Agent/tool loop.
+Its remaining defect was post-tool final-answer repetition inside one continuation decode. That was separate from later repeated/malformed tool behavior.
 
-Diagnostic: `docs/agent_perf_diagnostic_mcp-238_2026-08-20_031044.txt`.
+## MCP240/MCP243 tool-regression diagnosis
 
-## MCP240/MCP241 findings
+MCP240 replaced the original ~154-line official Qwen3.5 tool-aware Jinja with a ~20-line generic ChatML template. The deleted material included tools schema injection, `<tool_call><function=...><parameter=...>`, `message.tool_calls`, `<tool_response>`, tool-role handling and multi-step tool history. MCP243 exposed repeated/malformed tool behavior with that simplified-template model.
 
-MCP240 repacked the model and replaced its full original Qwen3.5 Jinja template with a simplified ~20-line generic ChatML template, added stop 248046 beside 248044, changed sampler/max output, added fresh-Engine reset, and injected repetition/presence penalty.
+Confidence that this simplified template caused the NEW tool-loop/tool-call-leak regression remains >97%.
 
-The repetition processor failed before token 1 in Agent due LiteRT-LM 0.15 logits-shape constraints. MCP241 removed that processor.
-
-More importantly, later byte-level comparison proved the model-template replacement removed the model's native tool semantics. The original ~154-line template includes tool schema injection, required `<tool_call><function=...><parameter=...>` format, `message.tool_calls`, `<tool_response>` serialization, tool-role handling and multi-step tool history. MCP240's simplified template deleted those mechanisms.
-
-Comparison evidence:
+Evidence:
 - `docs/qwen35_mcp238_vs_mcp240_metadata_compare.json`
 - `docs/checkpoints/QWEN35_MCP243_ROOT_CAUSE_AND_MCP244_PLAN_2026-08-20.md`
 - `docs/checkpoints/QWEN35_MCP244_ISOLATION_CORRECTION_2026-08-20_1636.md`
 
-## MCP242 — rejected permanently for product use
+## MCP242 — rejected product route
 
-MCP242 rebuilt/patched LiteRT-LM 0.15 arm64 JNI to try to retain repetition penalty with padded vocab logits. Physical device showed severe random process-level crashes at app launch, model list, and chat entry. No app diagnostic existed because the process died outright.
+MCP242 custom LiteRT-LM JNI/AAR caused severe random process-level crashes on the physical device. Keep official Maven LiteRT-LM 0.15.0 for this line of work. Do not revive custom runtime surgery without explicit re-authorization.
 
-Do not use MCP242 custom AAR/JNI route again unless explicitly re-authorized under the high-confidence rule.
+## MCP244 model semantics were correct, delivery integrity failed
 
-## MCP243 physical-device result
+MCP244 correctly restored the full original official Qwen3.5 tool-aware template byte-for-byte and added natural stop token 248046 beside 248044. Its strict application boundary also returned to MCP238/MCP239 behavior.
 
-MCP243 restored official Maven LiteRT-LM 0.15 and eliminated the MCP242 global random crashes.
+However the MCP244 model Release tag was mutable. The model-building workflow used `gh release upload --clobber`, and later workflow runs repacked the same semantic model again. LiteRT-LM pack generated different container bytes due regenerated UUID/timestamp metadata, then overwrote the same Release assets.
 
-However it still used the MCP240 simplified-template model. Physical diagnostic:
-`docs/model_diagnostic_mcp-243_2026-08-20_081924.txt`
+The strict MCP244 APK had embedded expected SHA:
+`7cdf8232b949d184e3cee81694cea7b21bac36a538d495d1a83581a4ce2c5d44`
 
-Observed behavior:
-- 9 LLM passes / 8 continuations in one user turn;
-- repeated tool/continuation behavior;
-- user observed search -> file/read failure -> search -> file/read -> ... loops;
-- sometimes raw tool-call function text leaked into final output.
+Physical-device diagnostic:
+`docs/model_diagnostic_mcp-244_2026-08-20_102047.txt`
 
-This was the first meaningful physical Agent test of the MCP240 simplified-template model after the repetition-processor crash was removed.
+Device reconstructed SHA:
+`535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4`
 
-## Root-cause confidence for NEW tool regression
+Independent Actions forensic reconstruction of the ten CURRENT GitHub Release parts produced exactly the same:
+`535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4`
 
-Current confidence that MCP240's simplified template caused the NEW repeated-tool/tool-call-leak regression: **>97%**.
+The size was correct at `4,780,966,112` bytes and all ten part boundaries/URLs were correct. Therefore the multipart downloader reconstructed the published assets correctly; the fault was the Release contents drifting after APK creation.
 
-Evidence chain:
-1. MCP238 same converted weights/package lineage + original full tool-aware template physically completed tool use.
-2. MCP243 with MCP240 simplified template showed repeated/malformed tool behavior.
-3. Direct unpacked bundle diff shows the major functional metadata change is the Jinja template; ExecutorMetadata is present in both, while model.toml semantic structure differs only by packager UUID/timestamp.
-4. The deleted template sections are exactly the sections that define tool schema, tool calls, tool responses, roles and multi-step semantics.
+Forensics:
+- `docs/mcp244_multipart_forensics.json`
+- `docs/mcp244_manifest_and_runs_probe.json`
 
-This high confidence applies to the NEW tool regression. It does not prove that adding stop 248046 will cure the ORIGINAL long final-answer repetition.
+The current MCP244 Release manifest itself now records SHA `535c3296...`, confirming it was overwritten after the APK had captured `7cdf8232...`.
 
-## MCP244 — CURRENT PHYSICAL-TEST CANDIDATE (STRICT FINAL)
+Do not use MCP244 as the next physical-test candidate.
 
-Important: use only the strict-final MCP244 product described here. It supersedes any earlier MCP244 draft APK that may have been built with MCP240/MCP241 app patches.
+## MCP245 — CURRENT PHYSICAL-TEST CANDIDATE
 
-Final run: `32350287008` (successful retry attempt)
-Result: `docs/mcp244_apk_result.json`
-Checkpoint: `docs/checkpoints/QWEN35_MCP244_FINAL_STRICT_2026-08-20.md`
+Workflow run: `32359008843`
+Result: `docs/mcp245_apk_result.json`
+Checkpoint: `docs/checkpoints/QWEN35_MCP245_FROZEN_DOWNLOAD_FIX_2026-08-20.md`
 
-APK:
-- versionName `1.0.14-mcp.244`
-- versionCode `344`
-- package `com.localagent.plaza.mcp`
-- SHA256 `0cd9c114a062a3cbb986f3a0f37d8e23bdb20f408cd09bcba647abb4b1541776`
-- Release: `https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp244-qwen35-official-tool-template/local-agent-plaza-1.0.14-mcp.244.apk`
-- Artifact: `https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32350287008/artifacts/9399915719`
+### Frozen model
 
-MCP244 model:
-- display: `Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP244`
-- file: `Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm`
-- tag: `qwen35-2b-q8-4096-mcp244-official-tool-template-v1`
-- size: `4,780,966,112`
-- SHA256: `7cdf8232b949d184e3cee81694cea7b21bac36a538d495d1a83581a4ce2c5d44`
-- original tool template SHA256: `273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80`
-- stop IDs: `[248044, 248046]`
-- new model download required: YES.
+Display: `Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP245`
+File: `Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp245.litertlm`
+Tag: `qwen35-2b-q8-4096-mcp245-frozen-v1`
+Size: `4,780,966,112`
+SHA256: `535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4`
+Template SHA256: `273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80`
+Stop IDs: `[248044, 248046]`
+New model download required: YES.
 
-Strict app boundary:
-- official Maven LiteRT-LM 0.15.0 only;
-- app patch chain exactly MCP238 + MCP239 + MCP244;
-- MCP240 app patch absent;
-- MCP241 app patch absent;
-- no custom JNI/AAR;
-- no fresh-Engine rebuild;
-- resident Engine + ordinary fresh Conversation, matching the physically tool-working baseline;
+MCP245 freeze procedure completed successfully before APK build:
+1. Reconstructed the current MCP244 Release and verified full SHA `535c3296...`.
+2. Reconstructed the original physically tool-proven MCP238 bundle and verified SHA `d5e975f...`.
+3. Unpacked both with official `litert-lm==0.15.0`.
+4. Proved the current 535c model Jinja is byte-for-byte equal to the original MCP238 official tool-aware Jinja and still contains all required tool markers.
+5. Proved 248044 + 248046 are present and ExecutorMetadata is retained; model.toml functional structure matches after excluding generated UUID/timestamp.
+6. Copied the already-verified 535c model parts byte-for-byte under NEW MCP245 filenames; NO further model repack occurred.
+7. Published a NEW one-time Release tag without `--clobber`.
+8. Re-downloaded the newly published MCP245 assets from GitHub, concatenated all ten parts again, and verified exact size + exact full SHA `535c3296...` after publication.
+
+This closes the MCP244 mutable-release failure mode before the APK embeds the hash.
+
+### MCP245 APK
+
+VersionName: `1.0.14-mcp.245`
+VersionCode: `345`
+Package: `com.localagent.plaza.mcp`
+APK SHA256: `b31851709d6c0e969bbba631ed9748378517cd3c6ea455ea85cf74a7571b47e3`
+Permanent APK Release:
+`https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp245-qwen35-frozen-download-fix/local-agent-plaza-1.0.14-mcp.245.apk`
+Actions artifact ID: `9403353880`
+Artifact:
+`https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32359008843/artifacts/9403353880`
+
+### MCP245 strict product boundary
+
+- official Maven LiteRT-LM `0.15.0`;
+- app patch chain exactly MCP238 + MCP239 + MCP245;
+- no MCP240 app patch;
+- no MCP241 app patch;
+- CPU forced;
+- resident Engine + ordinary fresh Conversation as the known tool-working baseline;
 - topK 20 / topP 0.8 / temperature 0.6;
 - maxTokens 1536 / context 4096;
-- CPU forced;
 - no RepetitionPenaltyConfig;
 - no NoRepeatNgram;
 - no repetition watchdog;
-- no host forced truncation.
+- no host forced truncation;
+- no custom LiteRT-LM JNI/AAR.
 
-Model construction boundary:
-- source is the SHA-verified physically tool-proven MCP238 bundle;
-- original full Qwen3.5 tool-aware Jinja is preserved byte-for-byte;
-- ExecutorMetadata preserved;
-- ONLY functional model-metadata change is adding stop token 248046 beside 248044;
-- weights/executor graph/native runtime are untouched.
+## Exact next physical-device gate
 
-## Exact next step / decision gate
+1. Overwrite-install MCP245 APK.
+2. Download the NEW MCP245 model. The expected full SHA is `535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4`.
+3. First verify model download completes. A repeat of the MCP244 SHA mismatch would contradict the already completed post-publication Release reconstruction and should be diagnosed immediately.
+4. Then run explicit Agent web-search/tool use.
+5. Observe whether tool flow returns to MCP238/MCP239 coherence.
+6. Observe whether dual natural stops also cure the old long final-answer repetition.
 
-User should install the strict-final MCP244 APK, delete/ignore the broken MCP240 model, and download the NEW MCP244 model (~4.78 GB). First test explicit web search/tool use. Then observe final-answer stopping.
+Interpretation:
+- coherent tool flow + natural final stop => 2B/4096 baseline is ready to close;
+- coherent tool flow + old final repetition => current safe tool ceiling is MCP238/MCP239 behavior represented by MCP245, with manual Stop if necessary; do not resume native-runtime surgery;
+- malformed tool flow => preserve diagnostic and compare COMPAT orchestration against the physical MCP238 baseline before any further model/runtime changes.
 
-Expected interpretation:
-- If tool flow returns to MCP238/MCP239 coherence, the NEW tool regression is closed and the template diagnosis is confirmed.
-- If final output also stops naturally, 2B/4096 reaches the intended product baseline.
-- If tools are coherent but the old long final-answer repetition remains, the safe current Qwen3.5-2B tool ceiling is the MCP238/MCP239 behavior represented by MCP244, with manual Stop if needed. Do not resume native-runtime surgery. At that point investigate only low-blast-radius, strongly evidenced options before considering 8792/4B/9B.
-- If tool behavior is still malformed under MCP244, preserve the diagnostic and re-evaluate the COMPAT prompt/orchestration against the physically proven MCP238 run before any new model/runtime change.
+Do not proceed to 8792/4B/9B until this MCP245 physical test is complete.
