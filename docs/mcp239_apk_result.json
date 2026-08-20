@@ -1,0 +1,20 @@
+{
+  "schema": "local-agent-plaza.mcp239-apk-result.v1",
+  "run_id": 32325409627,
+  "run_number": 1,
+  "head_sha": "0dcae8cf0108b1adcb7a8312b288dd6262e792d8",
+  "artifact_id": 9391383947,
+  "artifact_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32325409627/artifacts/9391383947",
+  "artifact_name": "local-agent-plaza-mcp-239",
+  "apk_name": "local-agent-plaza-1.0.14-mcp.239.apk",
+  "apk_sha256": "ea1f8e6dc9a6b9c0e04f7a036b05e2b7791315568121f6d433a5209c706e2a6b",
+  "version_name": "1.0.14-mcp.239",
+  "version_code": 339,
+  "package": "com.localagent.plaza.mcp",
+  "model_release_tag": "qwen35-2b-q8-4096-v1",
+  "model_size": 4780966112,
+  "model_sha256": "d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73",
+  "model_parts": 10,
+  "qwen35_backend": "CPU_FORCED",
+  "purpose": "isolate Android GPU delegate failure from model conversion/runtime compatibility"
+}
