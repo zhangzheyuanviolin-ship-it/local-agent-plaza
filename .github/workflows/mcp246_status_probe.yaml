@@ -1,0 +1,45 @@
+name: MCP246 workflow status probe
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp246_status_probe.yaml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+      - name: Locate MCP246 build run
+        shell: bash
+        run: |
+          set -euxo pipefail
+          for n in $(seq 1 30); do
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow mcp246_qwen35_continuation_engine_reset.yaml --limit 3 --json databaseId,status,conclusion,headSha,createdAt,updatedAt,url > "$RUNNER_TEMP/runs.json"
+            if python - <<'PY'
+          import json,os,sys
+          d=json.load(open(os.environ['RUNNER_TEMP']+'/runs.json'))
+          sys.exit(0 if d else 1)
+          PY
+            then break; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/runs.json"
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/runs.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp246_workflow_probe.json"
+          OLD="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          OLD_SHA="$(printf '%s' "$OLD" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$OLD_SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP246 workflow probe' -f branch=experimental -f sha="$OLD_SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP246 workflow probe' -f branch=experimental -f content="$CONTENT"
+          fi
