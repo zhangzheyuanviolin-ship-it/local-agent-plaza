@@ -7,8 +7,6 @@ import argparse
 import importlib.metadata
 import json
 from pathlib import Path
-import shutil
-import sys
 import tempfile
 import time
 
@@ -45,35 +43,63 @@ def verify_magic(bundle: Path) -> str:
     return magic.decode("ascii")
 
 
-def verify_archive_and_executor_metadata(bundle: Path) -> dict:
+def _parse_executor_metadata(path: Path):
+    from google.protobuf import text_format
+    from litert_lm_builder.runtime.proto import executor_metadata_pb2
+
+    metadata = executor_metadata_pb2.ExecutorMetadata()
+    if path.suffix.lower() in {".pbtext", ".textproto", ".txt"}:
+        text_format.Parse(path.read_text(encoding="utf-8"), metadata)
+    else:
+        metadata.ParseFromString(path.read_bytes())
+    return metadata
+
+
+def verify_archive_and_executor_metadata(bundle: Path, expected_cache_length: int) -> dict:
     import litert_lm_builder
     from litert_lm_builder.runtime.proto import executor_metadata_pb2
 
     with tempfile.TemporaryDirectory(prefix="qwen35-litert-unpack-") as td:
         unpack_dir = Path(td)
-        litert_lm_builder.LitertLmFileBuilder.unpack(str(bundle), str(unpack_dir))
+        # LiteRT-LM 0.15's unpacker emits ExecutorMetadataProto.pbtext.  The
+        # previous verifier looked only for '*executor_metadata*', which misses
+        # the canonical CamelCase filename and produced a false negative after
+        # an otherwise successful conversion.
+        litert_lm_builder.unpack(str(bundle), str(unpack_dir))
 
-        metadata_files = sorted(unpack_dir.rglob("*executor_metadata*"))
-        metadata_files = [p for p in metadata_files if p.is_file()]
+        metadata_files = [
+            p
+            for p in unpack_dir.rglob("*")
+            if p.is_file()
+            and (
+                "executormetadata" in p.name.lower().replace("_", "")
+                or "executor_metadata" in p.name.lower()
+            )
+        ]
+        metadata_files = sorted(metadata_files)
         if not metadata_files:
+            dumped = sorted(p.name for p in unpack_dir.iterdir())
             raise RuntimeError(
-                "Executor metadata gate failed: archive contains no executor_metadata section"
+                "Executor metadata gate failed: archive contains no executor metadata; "
+                f"unpacked_files={dumped}"
             )
 
-        metadata = executor_metadata_pb2.ExecutorMetadata()
+        metadata = None
         parsed_path = None
         last_error = None
         for p in metadata_files:
             try:
-                metadata.ParseFromString(p.read_bytes())
-                if metadata.HasField("llm_executor_metadata"):
+                candidate = _parse_executor_metadata(p)
+                if candidate.HasField("llm_executor_metadata"):
+                    metadata = candidate
                     parsed_path = p
                     break
             except Exception as exc:  # pragma: no cover - diagnostic fallback
                 last_error = exc
-        if parsed_path is None:
+        if metadata is None or parsed_path is None:
             raise RuntimeError(
-                f"Executor metadata gate failed: could not parse {metadata_files}; last_error={last_error}"
+                f"Executor metadata gate failed: could not parse {metadata_files}; "
+                f"last_error={last_error}"
             )
 
         buffers = list(metadata.llm_executor_metadata.state_buffers)
@@ -82,6 +108,9 @@ def verify_archive_and_executor_metadata(bundle: Path) -> dict:
 
         names = []
         type_names = []
+        linear = []
+        full_k = []
+        full_v = []
         for b in buffers:
             name = b.prefill_input_name or b.decode_input_name
             names.append(name)
@@ -89,6 +118,12 @@ def verify_archive_and_executor_metadata(bundle: Path) -> dict:
                 type_names.append(executor_metadata_pb2.StateBuffer.Type.Name(b.type))
             except Exception:
                 type_names.append(str(b.type))
+            if name.startswith(("kv_cache_c_", "kv_cache_r_")):
+                linear.append(b)
+            elif name.startswith("kv_cache_k_"):
+                full_k.append(b)
+            elif name.startswith("kv_cache_v_"):
+                full_v.append(b)
 
         required_prefixes = ("kv_cache_c_", "kv_cache_r_", "kv_cache_k_", "kv_cache_v_")
         missing = [prefix for prefix in required_prefixes if not any(n.startswith(prefix) for n in names)]
@@ -98,20 +133,79 @@ def verify_archive_and_executor_metadata(bundle: Path) -> dict:
                 f"sample_names={names[:24]}"
             )
 
-        linear_count = sum(n.startswith("kv_cache_c_") or n.startswith("kv_cache_r_") for n in names)
-        kv_count = sum(n.startswith("kv_cache_k_") or n.startswith("kv_cache_v_") for n in names)
-        if linear_count == 0 or kv_count == 0:
+        # Qwen3.5-2B has 18 linear-attention layers and 6 full-attention
+        # layers.  Each linear layer owns c+r recurrent states; each full
+        # attention layer owns k+v states.
+        if len(linear) != 36 or len(full_k) != 6 or len(full_v) != 6:
             raise RuntimeError(
-                f"Hybrid-state gate failed: linear_count={linear_count}, kv_count={kv_count}"
+                "Hybrid-state count gate failed: "
+                f"linear={len(linear)}, full_k={len(full_k)}, full_v={len(full_v)}"
             )
+
+        bad_linear_type = [
+            b.prefill_input_name or b.decode_input_name
+            for b in linear
+            if b.type != executor_metadata_pb2.StateBuffer.TYPE_LINEAR_ATTENTION
+        ]
+        if bad_linear_type:
+            raise RuntimeError(f"Linear state type gate failed: {bad_linear_type}")
+
+        bad_linear_axis = [
+            b.prefill_input_name or b.decode_input_name
+            for b in linear
+            if not b.HasField("sequence_axis") or b.sequence_axis != 0
+        ]
+        if bad_linear_axis:
+            raise RuntimeError(f"Linear sequence_axis gate failed: {bad_linear_axis}")
+
+        bad_k = []
+        for b in full_k:
+            name = b.prefill_input_name or b.decode_input_name
+            if b.type != executor_metadata_pb2.StateBuffer.TYPE_GLOBAL_KEY_CACHE:
+                bad_k.append(f"{name}:type={b.type}")
+            if not b.HasField("sequence_axis") or b.sequence_axis != 2:
+                bad_k.append(f"{name}:axis={getattr(b, 'sequence_axis', None)}")
+            if (
+                not b.HasField("maximum_sequence_length")
+                or b.maximum_sequence_length != expected_cache_length
+            ):
+                bad_k.append(
+                    f"{name}:max={getattr(b, 'maximum_sequence_length', None)}"
+                )
+        if bad_k:
+            raise RuntimeError(f"Full-attention K metadata gate failed: {bad_k}")
+
+        bad_v = []
+        for b in full_v:
+            name = b.prefill_input_name or b.decode_input_name
+            if b.type != executor_metadata_pb2.StateBuffer.TYPE_GLOBAL_VALUE_CACHE:
+                bad_v.append(f"{name}:type={b.type}")
+            if not b.HasField("sequence_axis") or b.sequence_axis != 3:
+                bad_v.append(f"{name}:axis={getattr(b, 'sequence_axis', None)}")
+            if (
+                not b.HasField("maximum_sequence_length")
+                or b.maximum_sequence_length != expected_cache_length
+            ):
+                bad_v.append(
+                    f"{name}:max={getattr(b, 'maximum_sequence_length', None)}"
+                )
+        if bad_v:
+            raise RuntimeError(f"Full-attention V metadata gate failed: {bad_v}")
 
         return {
             "executor_metadata_file": parsed_path.name,
             "state_buffer_count": len(buffers),
-            "linear_recurrent_state_buffer_count": linear_count,
-            "full_attention_kv_state_buffer_count": kv_count,
+            "linear_recurrent_state_buffer_count": len(linear),
+            "full_attention_k_state_buffer_count": len(full_k),
+            "full_attention_v_state_buffer_count": len(full_v),
+            "full_attention_kv_state_buffer_count": len(full_k) + len(full_v),
             "state_type_names": sorted(set(type_names)),
             "state_name_sample": names[:24],
+            "sequence_axis_zero_all_linear_states": True,
+            "full_attention_k_sequence_axis": 2,
+            "full_attention_v_sequence_axis": 3,
+            "full_attention_maximum_sequence_length": expected_cache_length,
+            "status": "PASS",
         }
 
 
@@ -172,10 +266,12 @@ def main() -> None:
     print(f"magic={magic}")
 
     print("=== Gate 2/3: archive + Qwen3.5 hybrid executor state metadata ===")
-    state_report = verify_archive_and_executor_metadata(bundle)
+    state_report = verify_archive_and_executor_metadata(
+        bundle, int(cfg["cache_length"])
+    )
     print(json.dumps(state_report, ensure_ascii=False, indent=2))
 
-    print("=== Gate 4/5: LiteRT-LM 0.15-era Engine + Conversation + generation smoke test ===")
+    print("=== Gate 4/5: LiteRT-LM 0.15 Engine + Conversation + generation smoke test ===")
     smoke_report = runtime_smoke(bundle, cfg)
     print(json.dumps(smoke_report, ensure_ascii=False, indent=2))
 
