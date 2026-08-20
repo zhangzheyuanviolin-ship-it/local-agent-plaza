@@ -1,0 +1,44 @@
+name: MCP242 workflow status probe
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp242_status_probe.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture MCP242 workflow status
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mcp242_qwen35_compatible_repetition.yaml/runs?branch=experimental&per_page=5" > "$RUNNER_TEMP/runs.json"
+          python - <<'PY' > "$RUNNER_TEMP/probe.json"
+          import json, os
+          data=json.load(open(os.environ['RUNNER_TEMP']+'/runs.json'))
+          runs=data.get('workflow_runs',[])
+          out={'schema':'mcp242-workflow-probe.v1','runs':[
+            {k:r.get(k) for k in ('id','run_number','event','status','conclusion','head_sha','created_at','updated_at','html_url')}
+            for r in runs
+          ]}
+          print(json.dumps(out,indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/probe.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp242_workflow_probe.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP242 workflow probe' -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP242 workflow probe' -f branch=experimental -f content="$CONTENT"
+          fi
