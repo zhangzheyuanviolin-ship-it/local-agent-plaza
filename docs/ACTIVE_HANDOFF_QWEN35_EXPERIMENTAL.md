@@ -144,3 +144,23 @@ If MCP243 is globally stable but the old long repetition persists, record that r
 Only after the user confirms the app no longer crashes and Agent can respond/call tools should repetition-loop mitigation be revisited. Safe avenues should prioritize model metadata/template behavior, official-runtime capabilities, or other changes with strong evidence. Do not replace the native inference engine/runtime again without explicit authorization and ~97% confidence.
 
 The planned exact longer context value is `8792` (do not normalize it to 8192), and it is a later phase only after the 2B/4096 behavior is stable. Then 4B, then 9B CPU testing.
+
+## MCP244 — CURRENT PHYSICAL-TEST CANDIDATE
+
+MCP244 build/release completed successfully after MCP243 device diagnostics identified the MCP240 simplified Jinja template as the tool-orchestration regression. The original MCP238 bundle was reconstructed and SHA-verified, and its full official Qwen3.5 tool-aware Jinja template was preserved byte-for-byte. Only natural stop ID 248046 was added beside original 248044. ExecutorMetadata was retained.
+
+Runtime remains official Maven LiteRT-LM 0.15.0. No custom JNI/AAR, runtime repetition penalty, hard truncation, repetition watchdog, or NoRepeatNgram is used. CPU and the Qwen fresh-Engine reset remain.
+
+Version: `1.0.14-mcp.244` / versionCode `344`.
+APK SHA256: `98346dc8421846bfd5625e184d1441a3ff0b33eaef82c0301a6cbbbf3a102201`.
+APK Release: `https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp244-qwen35-official-tool-template/local-agent-plaza-1.0.14-mcp.244.apk`.
+Actions artifact: `https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32349526045/artifacts/9399705980` (ID `9399705980`).
+
+Model: `Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm`.
+Model release: `https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/tag/qwen35-2b-q8-4096-mcp244-official-tool-template-v1`.
+Model size: `4780966112` bytes.
+Model SHA256: `7cdf8232b949d184e3cee81694cea7b21bac36a538d495d1a83581a4ce2c5d44`.
+Model redownload is REQUIRED because the MCP240 on-device file contains the wrong simplified template.
+Official tool-template SHA256: `273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80`.
+
+Exact stopping point: engineering/build work is complete. Await physical-device test. First verify model download/load, ordinary chat, then Agent search/tool call, tool-result continuation, absence of search/file-read loops or leaked function syntax, and finally whether long final-answer repetition remains. Do not proceed to 8792/4B/9B until this test result is recorded.
