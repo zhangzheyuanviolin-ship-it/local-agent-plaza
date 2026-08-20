@@ -26,11 +26,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p docs
-          gh api \
-            -H 'Accept: application/vnd.github+json' \
-            "/repos/$GITHUB_REPOSITORY/actions/workflows/qwen35_2b_q8_32k_convert.yaml/runs?branch=experimental&per_page=10" \
-            --jq '{captured_at: now | todate, workflow_runs: [.workflow_runs[] | {id, run_number, event, status, conclusion, head_sha, created_at, updated_at, html_url}]}' \
-            > docs/qwen35_2b_q8_32768_probe.json
+          gh api -H 'Accept: application/vnd.github+json' "/repos/$GITHUB_REPOSITORY/actions/workflows/qwen35_2b_q8_32k_convert_v2.yaml/runs?branch=experimental&per_page=10" > "$RUNNER_TEMP/v2.json"
+          gh api -H 'Accept: application/vnd.github+json' "/repos/$GITHUB_REPOSITORY/actions/workflows/qwen35_2b_q8_32k_convert.yaml/runs?branch=experimental&per_page=10" > "$RUNNER_TEMP/v1.json" || printf '{"workflow_runs":[]}' > "$RUNNER_TEMP/v1.json"
+          python - <<'PY'
+          import json,datetime,os
+          out={'captured_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'v2_workflow_runs':[],'v1_workflow_runs':[]}
+          for key,fn in [('v2_workflow_runs','v2.json'),('v1_workflow_runs','v1.json')]:
+              d=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],fn)))
+              out[key]=[{k:r.get(k) for k in ['id','run_number','event','status','conclusion','head_sha','created_at','updated_at','html_url']} for r in d.get('workflow_runs',[])]
+          open('docs/qwen35_2b_q8_32768_probe.json','w').write(json.dumps(out,indent=2)+'\n')
+          PY
           cat docs/qwen35_2b_q8_32768_probe.json
       - name: Commit probe state without retriggering conversion
         shell: bash
@@ -40,7 +45,7 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add docs/qwen35_2b_q8_32768_probe.json
           git diff --cached --quiet && exit 0
-          git commit -m 'Record Qwen3.5 2B conversion run state [skip ci]'
+          git commit -m 'Record hardened Qwen3.5 2B conversion run state [skip ci]'
           for n in 1 2 3 4 5; do
             git pull --rebase origin experimental && git push origin HEAD:experimental && exit 0
             sleep $((n*3))
