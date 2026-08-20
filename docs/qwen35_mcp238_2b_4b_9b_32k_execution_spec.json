@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "approved_at": "2026-08-20T21:13:00+08:00",
+  "repository": "zhangzheyuanviolin-ship-it/local-agent-plaza",
+  "branch": "experimental",
+  "main_must_remain_untouched": true,
+  "handoff_phase": {
+    "mode": "documentation_only",
+    "code_modified": false,
+    "model_list_modified": false,
+    "model_conversion_started": false,
+    "apk_build_started": false,
+    "release_published": false
+  },
+  "authoritative_documents": [
+    "docs/ACTIVE_HANDOFF_QWEN35_EXPERIMENTAL.md",
+    "docs/checkpoints/QWEN35_MCP238_BASELINE_2B_4B_9B_32K_HANDOFF_2026-08-20.md",
+    "docs/qwen35_mcp238_2b_4b_9b_32k_execution_spec.json"
+  ],
+  "supersedes": [
+    "MCP246_as_current_fix_path",
+    "8792_as_next_context_target",
+    "continue_engine_reset_micro_debugging",
+    "MCP245_frozen_bytes_as_new_canonical_model_lineage"
+  ],
+  "baseline": {
+    "name": "MCP238 behavioral gold baseline",
+    "apk_version_name": "1.0.14-mcp.238",
+    "apk_version_code": 338,
+    "package": "com.localagent.plaza.mcp",
+    "apk_release_tag": "mcp238-qwen35-verified",
+    "model_display_name": "Qwen3.5-2B LiteRT-LM Q8 4096 Plaza",
+    "model_file": "Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm",
+    "model_release_tag": "qwen35-2b-q8-4096-v1",
+    "model_size_bytes": 4780966112,
+    "sha256": "d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73",
+    "template_sha256": "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+    "stop_token_ids": [248044, 248046],
+    "sampler": {
+      "top_k": 20,
+      "top_p": 0.8,
+      "temperature": 0.6,
+      "max_tokens": 1536
+    },
+    "historical_cache_length": 4096,
+    "intended_android_backend": "CPU",
+    "physical_diagnostic": "docs/agent_perf_diagnostic_mcp-238_2026-08-20_031044.txt",
+    "physical_fingerprint": {
+      "llm_pass_count": 2,
+      "continuation_count": 1,
+      "tool_execution_count": 1,
+      "tool_name": "tool.run_js",
+      "tool_success": true,
+      "continuation_callback_count": 2868,
+      "visible_continuation_chars": 4476,
+      "approx_continuation_seconds": 257
+    },
+    "desired_control_flow": [
+      "understand_task",
+      "emit_one_appropriate_tool_call_when_one_is_sufficient",
+      "tool_succeeds",
+      "tool_result_returns",
+      "visible_final_natural_language_answer"
+    ],
+    "known_deferred_defect": "final_answer_repetition_and_natural_termination_failure"
+  },
+  "historical_conversion_lineage": {
+    "source_commit": "ec4d70383a06697f40d79c4a98bfb9428f087e65",
+    "tree_sha": "c02cda72fd4e6032e3e40ac569502d42f9cd6fae",
+    "converter_path": "model-conversion/qwen35/convert_qwen35.py",
+    "bridge_path": "model-conversion/qwen35/run_android_bridge_ci.sh",
+    "historical_source_model": "Qwen/Qwen3.5-2B",
+    "historical_config": {
+      "model_size": "2b",
+      "quantization": "q8",
+      "cache_length": 4096,
+      "prefill_seq_len": 128,
+      "expected_max_rss_mb": 8192
+    },
+    "reproducibility_risk": "historical bridge cloned LiteRT-Torch moving main; fresh execution must identify and pin the validated working revision"
+  },
+  "target_conversion": {
+    "source_policy": "official_Qwen_Hugging_Face_only",
+    "architecture_exporter": "Qwen3_5StaticForCausalLM via Qwen3.5-specific LiteRT-Torch extension",
+    "quantization": "dynamic_int8_q8",
+    "dtype": "int8",
+    "algorithm": "min_max",
+    "linear_only": true,
+    "prefill_seq_len": 128,
+    "max_context_tokens": 32768,
+    "cache_length_target": 32768,
+    "user_adjustable_context_below_max": true,
+    "reuse_existing_context_window_ui": true,
+    "new_context_ui_required": false,
+    "recurrent_state_sequence_axis": 0,
+    "recurrent_state_descriptor_expected_count": 3,
+    "preserve_full_source_hf_chat_template": true,
+    "verify_chat_template_round_trip": true,
+    "verify_state_tensor_ordering": true,
+    "verify_required_litert_lm_signatures": true,
+    "official_cpu_runtime_smoke_load_required": true,
+    "expected_max_rss_mb": "TBD_MEASURE_PER_MODEL"
+  },
+  "target_models": [
+    {
+      "size": "2B",
+      "hf_model_id": "Qwen/Qwen3.5-2B",
+      "quantization": "Q8_dynamic_INT8",
+      "max_context_tokens": 32768,
+      "prefill_seq_len": 128,
+      "expected_max_rss_mb": "TBD_MEASURE"
+    },
+    {
+      "size": "4B",
+      "hf_model_id": "Qwen/Qwen3.5-4B",
+      "quantization": "Q8_dynamic_INT8",
+      "max_context_tokens": 32768,
+      "prefill_seq_len": 128,
+      "expected_max_rss_mb": "TBD_MEASURE"
+    },
+    {
+      "size": "9B",
+      "hf_model_id": "Qwen/Qwen3.5-9B",
+      "quantization": "Q8_dynamic_INT8",
+      "max_context_tokens": 32768,
+      "prefill_seq_len": 128,
+      "expected_max_rss_mb": "TBD_MEASURE"
+    }
+  ],
+  "remove_later_after_new_artifacts_validate": [
+    {
+      "display_name": "Qwen3.5-2B LiteRT-LM Q8 4096 Plaza",
+      "reason": "latest physical lifecycle diagnostic shows only 503316480 bytes present versus 4780966112 expected and LiteRT init fails with missing TF_LITE_PREFILL_DECODE signature",
+      "diagnostic": "docs/model_lifecycle_diagnostic_mcp-246_2026-08-20_125634.txt"
+    },
+    {
+      "display_name": "Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP245",
+      "model_file": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp245.litertlm",
+      "sha256": "535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4",
+      "reason": "loads and tools can run, but physical Agent continuation fails to naturally complete and later MCP246 path regressed into repeated tool loops",
+      "diagnostic": "docs/model_diagnostic_mcp-245_2026-08-20_113748.txt"
+    }
+  ],
+  "legacy_model_list_audit": {
+    "required": true,
+    "patterns": [
+      "Qwen3.5-2B LiteRT-LM Q8 experimental",
+      "paulsp94/Qwen3.5-2B-LiteRT-LM",
+      "legacy Qwen3.5 Q4 experimental child"
+    ],
+    "action_if_present": "remove_or_deprecate_during_later_clean_model_list_integration"
+  },
+  "closed_experiment_routes": [
+    {
+      "id": "MCP240",
+      "reason": "simplified official Qwen3.5 tool-aware Jinja to generic ChatML and introduced malformed tool behavior; repetition processor also failed logits shape validation"
+    },
+    {
+      "id": "MCP241",
+      "reason": "removed repetition processor but remained on altered lineage"
+    },
+    {
+      "id": "MCP242",
+      "reason": "custom LiteRT-LM JNI/AAR caused severe random physical process crashes"
+    },
+    {
+      "id": "MCP243",
+      "reason": "physical 9-pass/8-continuation search-file loops while simplified template remained"
+    },
+    {
+      "id": "MCP244",
+      "reason": "template restoration useful, but mutable repack plus Release clobber caused model SHA drift; preserve only release-integrity lessons"
+    },
+    {
+      "id": "MCP245",
+      "reason": "frozen delivery fixed mutation but physical post-tool continuation still failed natural completion"
+    },
+    {
+      "id": "MCP246",
+      "reason": "one-shot continuation Engine reset physically regressed to 4 LLM passes, 3 continuations and 3 tool executions with repeated search/workspace behavior",
+      "diagnostic": "docs/llm_model_diagnostic_mcp-246_2026-08-20_125407.txt"
+    }
+  ],
+  "forbidden_without_explicit_user_reauthorization": [
+    "custom_JNI_AAR_or_native_LiteRT_runtime_surgery",
+    "generic_simplified_ChatML_replacing_official_Qwen3.5_tool_template",
+    "RepetitionPenaltyConfig_as_primary_fix",
+    "NoRepeatNgram_hard_filter",
+    "host_output_watchdog_cancellation",
+    "forced_output_truncation",
+    "continuation_Engine_reset_as_default_Qwen3.5_fix_path",
+    "silent_context_maximum_reduction_below_32768"
+  ],
+  "release_policy": {
+    "independent_jobs_per_model": true,
+    "pin_validated_external_revisions": true,
+    "record_source_model_revision": true,
+    "record_conversion_config": true,
+    "record_full_size_bytes": true,
+    "record_full_sha256": true,
+    "immutable_distinct_release_tags": true,
+    "release_clobber_for_same_model_identity": false,
+    "multipart_allowed_when_required": true,
+    "post_publish_redownload_required": true,
+    "post_publish_reconstruct_required": true,
+    "post_publish_full_sha_and_size_verification_required": true
+  },
+  "artifact_acceptance_gates": [
+    "official_source_revision_recorded",
+    "validated_pinned_exporter_runtime_revisions_recorded",
+    "dynamic_INT8_Q8_configuration_verified",
+    "actual_32768_context_cache_export_verified",
+    "full_official_tool_aware_chat_template_preserved_and_round_trip_verified",
+    "three_recurrent_state_descriptor_sequence_axis_checks_pass",
+    "state_tensor_ordering_and_metadata_checks_pass",
+    "required_LiteRT_LM_prefill_decode_signatures_exist",
+    "official_CPU_runtime_smoke_load_succeeds",
+    "published_artifact_redownload_reconstruct_size_sha_verification_succeeds"
+  ],
+  "agent_physical_acceptance": {
+    "same_prompt_across_models": true,
+    "one_tool_when_one_is_sufficient": true,
+    "tool_must_succeed": true,
+    "visible_final_answer_required": true,
+    "natural_termination_is_primary_comparison_metric": true,
+    "unsolicited_workspace_writes_allowed": false,
+    "screen_reader_predictability_required": true
+  },
+  "execution_order": [
+    "read_authoritative_handoff_and_this_spec",
+    "refresh_experimental_and_check_for_newer_user_approved_checkpoint",
+    "keep_main_untouched",
+    "reconstruct_exact_MCP238_converter_behavior_from_ec4d70383a06697f40d79c4a98bfb9428f087e65",
+    "identify_and_pin_validated_LiteRT_Torch_and_LiteRT_LM_revisions",
+    "create_independent_2B_4B_9B_conversion_configs_and_jobs_with_cache_length_32768_and_prefill_seq_len_128",
+    "convert_models_first_without_building_APK",
+    "validate_template_state_signatures_CPU_smoke_load_and_prepublication_integrity",
+    "publish_each_model_with_immutable_identity",
+    "redownload_reconstruct_and_verify_each_published_model",
+    "after_model_validation_update_model_list_remove_rejected_and_legacy_entries_add_canonical_2B_4B_9B",
+    "reuse_existing_Context_Window_control_with_max_32768_and_user_adjustable_lower_values",
+    "run_same_physical_Agent_test_on_2B_4B_9B",
+    "interpret_capacity_vs_shared_runtime_behavior",
+    "build_new_APK_only_after_validated_model_integration_and_user_direction"
+  ],
+  "stop_criteria": [
+    "native_runtime_surgery_would_be_required_without_explicit_user_reauthorization",
+    "official_Qwen3.5_tool_template_would_need_to_be_replaced_by_generic_template",
+    "all_three_aligned_models_show_same_failure_and_no_low_risk_strongly_evidenced_fix_exists",
+    "immutable_post_publication_bytes_cannot_be_verified",
+    "32768_context_cannot_physically_load_for_a_target_model_after_reasonable_converter_validation_report_measurements_before_reducing_context"
+  ]
+}
