@@ -1,0 +1,188 @@
+name: Qwen3.5 original vs MCP240 metadata inspection
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/qwen35_compare_original_vs_mcp240_metadata.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qwen35-metadata-compare
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ORIGINAL_TAG: qwen35-2b-q8-4096-v1
+      ORIGINAL_FILE: Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm
+      ORIGINAL_SHA: d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73
+      MCP240_TAG: qwen35-2b-q8-4096-mcp240-natural-v2
+      MCP240_FILE: Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm
+      MCP240_SHA: 119bdfb5464b9c3746b26d43211474fcfcbbe8a8c36693e3c0413b8d5b9d7d0f
+      MODEL_SIZE: '4780966112'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install official LiteRT-LM 0.15 packager
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'litert-lm==0.15.0'
+          litert-lm --help >/dev/null
+
+      - name: Reconstruct, verify and extract metadata sequentially
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/qwen35-compare"
+          mkdir -p "$WORK/extracted"
+
+          extract_one() {
+            LABEL="$1"
+            TAG="$2"
+            FILE="$3"
+            EXPECTED_SHA="$4"
+            DIR="$WORK/$LABEL"
+            mkdir -p "$DIR/parts"
+            MODEL="$DIR/$FILE"
+            : > "$MODEL"
+            for n in $(seq 0 9); do
+              i="$(printf '%02d' "$n")"
+              ASSET="$FILE.part$i"
+              gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir "$DIR/parts"
+              cat "$DIR/parts/$ASSET" >> "$MODEL"
+              rm "$DIR/parts/$ASSET"
+            done
+            test "$(stat -c '%s' "$MODEL")" = "$MODEL_SIZE"
+            test "$(sha256sum "$MODEL" | awk '{print $1}')" = "$EXPECTED_SHA"
+            test "$(head -c 8 "$MODEL")" = 'LITERTLM'
+            litert-lm unpack "$MODEL" --output-dir "$DIR/unpacked" --allow-overwrite
+            test -f "$DIR/unpacked/LlmMetadataProto.pbtext"
+            test -f "$DIR/unpacked/model.toml"
+            cp "$DIR/unpacked/LlmMetadataProto.pbtext" "$WORK/extracted/${LABEL}_LlmMetadataProto.pbtext"
+            cp "$DIR/unpacked/model.toml" "$WORK/extracted/${LABEL}_model.toml"
+            rm -rf "$DIR"
+          }
+
+          extract_one original "$ORIGINAL_TAG" "$ORIGINAL_FILE" "$ORIGINAL_SHA"
+          extract_one mcp240 "$MCP240_TAG" "$MCP240_FILE" "$MCP240_SHA"
+
+      - name: Produce normalized metadata comparison
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import ast, difflib, hashlib, json, os, re
+
+          root=Path(os.environ['RUNNER_TEMP'])/'qwen35-compare'/'extracted'
+          out=Path(os.environ['RUNNER_TEMP'])/'qwen35-compare'
+
+          def decode_template(pb):
+              m=re.search(r'jinja_prompt_template:\s*"((?:\\.|[^"\\])*)"', pb)
+              if not m:
+                  return None
+              raw=m.group(1)
+              try:
+                  return ast.literal_eval('"'+raw+'"')
+              except Exception:
+                  return raw.replace('\\n','\n').replace('\\"','"').replace('\\\\','\\')
+
+          def inspect(label):
+              pb_path=root/f'{label}_LlmMetadataProto.pbtext'
+              toml_path=root/f'{label}_model.toml'
+              pb=pb_path.read_text(errors='replace')
+              toml=toml_path.read_text(errors='replace')
+              tpl=decode_template(pb)
+              stop_ids=[int(x) for x in re.findall(r'ids:\s*(\d+)', pb)]
+              return {
+                  'pb_sha256': hashlib.sha256(pb_path.read_bytes()).hexdigest(),
+                  'toml_sha256': hashlib.sha256(toml_path.read_bytes()).hexdigest(),
+                  'template': tpl,
+                  'stop_ids_all': stop_ids,
+                  'stop_ids_unique': sorted(set(stop_ids)),
+                  'executor_metadata_present': 'ExecutorMetadata' in toml,
+                  'pb': pb,
+                  'toml': toml,
+              }
+
+          a=inspect('original')
+          b=inspect('mcp240')
+          tpl_a=a['template'] or ''
+          tpl_b=b['template'] or ''
+          tpl_diff=''.join(difflib.unified_diff(
+              tpl_a.splitlines(True), tpl_b.splitlines(True),
+              fromfile='original_template', tofile='mcp240_template'))
+          pb_diff=''.join(difflib.unified_diff(
+              a['pb'].splitlines(True), b['pb'].splitlines(True),
+              fromfile='original_LlmMetadataProto.pbtext', tofile='mcp240_LlmMetadataProto.pbtext'))
+          toml_diff=''.join(difflib.unified_diff(
+              a['toml'].splitlines(True), b['toml'].splitlines(True),
+              fromfile='original_model.toml', tofile='mcp240_model.toml'))
+
+          result={
+              'schema':'local-agent-plaza.qwen35.original-vs-mcp240-metadata.v1',
+              'original_model_sha256':os.environ['ORIGINAL_SHA'],
+              'mcp240_model_sha256':os.environ['MCP240_SHA'],
+              'original_metadata_sha256':a['pb_sha256'],
+              'mcp240_metadata_sha256':b['pb_sha256'],
+              'original_model_toml_sha256':a['toml_sha256'],
+              'mcp240_model_toml_sha256':b['toml_sha256'],
+              'original_stop_ids':a['stop_ids_unique'],
+              'mcp240_stop_ids':b['stop_ids_unique'],
+              'original_executor_metadata_present':a['executor_metadata_present'],
+              'mcp240_executor_metadata_present':b['executor_metadata_present'],
+              'template_changed':tpl_a != tpl_b,
+              'model_toml_changed':a['toml'] != b['toml'],
+          }
+          (out/'qwen35_metadata_compare.json').write_text(json.dumps(result,indent=2)+'\n')
+
+          report=[]
+          report.append('# Qwen3.5 original MCP238 bundle vs MCP240 repaired bundle metadata comparison\n\n')
+          report.append('This is an inspection-only report. No runtime or model product artifact is modified here.\n\n')
+          report.append('## Machine summary\n\n```json\n'+json.dumps(result,indent=2)+'\n```\n\n')
+          report.append('## ORIGINAL converted bundle Jinja template\n\n```jinja\n'+tpl_a+'\n```\n\n')
+          report.append('## MCP240 repaired bundle Jinja template\n\n```jinja\n'+tpl_b+'\n```\n\n')
+          report.append('## Template unified diff\n\n```diff\n'+tpl_diff+'\n```\n\n')
+          report.append('## Full LlmMetadataProto unified diff\n\n```diff\n'+pb_diff+'\n```\n\n')
+          report.append('## model.toml unified diff\n\n```diff\n'+toml_diff+'\n```\n')
+          (out/'qwen35_metadata_compare.md').write_text(''.join(report))
+          print(json.dumps(result,indent=2))
+          print('--- TEMPLATE DIFF ---')
+          print(tpl_diff)
+          PY
+
+      - name: Publish comparison reports to experimental branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          publish() {
+            SRC="$1"
+            DEST="$2"
+            MSG="$3"
+            CONTENT="$(base64 -w0 "$SRC")"
+            API="repos/$GITHUB_REPOSITORY/contents/$DEST"
+            RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+            SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+            if [ -n "$SHA" ]; then
+              gh api --method PUT "$API" -f message="$MSG" -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+            else
+              gh api --method PUT "$API" -f message="$MSG" -f branch=experimental -f content="$CONTENT"
+            fi
+          }
+          BASE="$RUNNER_TEMP/qwen35-compare"
+          publish "$BASE/qwen35_metadata_compare.md" docs/qwen35_mcp238_vs_mcp240_metadata_compare.md 'Add Qwen3.5 original vs MCP240 metadata comparison'
+          publish "$BASE/qwen35_metadata_compare.json" docs/qwen35_mcp238_vs_mcp240_metadata_compare.json 'Add Qwen3.5 metadata comparison summary'
