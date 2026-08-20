@@ -1,0 +1,36 @@
+{
+  "schema": "local-agent-plaza.mcp243-safe-official-runtime-rollback.v1",
+  "run_id": 32345060689,
+  "head_sha": "3e1acf4165724b6dffcca567ce08ae4f295ea57b",
+  "artifact_id": 9397941131,
+  "artifact_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32345060689/artifacts/9397941131",
+  "release_tag": "mcp243-safe-official-runtime-rollback",
+  "release_apk_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp243-safe-official-runtime-rollback/local-agent-plaza-1.0.14-mcp.243.apk",
+  "apk_name": "local-agent-plaza-1.0.14-mcp.243.apk",
+  "apk_sha256": "59762f9794b26d469ebc2a4ddc2b8bb22e5b896d2e362eee28e359c78f69ba8b",
+  "version_name": "1.0.14-mcp.243",
+  "version_code": 343,
+  "package": "com.localagent.plaza.mcp",
+  "runtime": "official Maven LiteRT-LM 0.15.0",
+  "custom_litertlm_aar": false,
+  "custom_litertlm_jni": false,
+  "model_release_tag": "qwen35-2b-q8-4096-mcp240-natural-v2",
+  "model_file": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm",
+  "model_sha256": "119bdfb5464b9c3746b26d43211474fcfcbbe8a8c36693e3c0413b8d5b9d7d0f",
+  "model_redownload_required": false,
+  "backend": "CPU_FORCED",
+  "sampler": {
+    "top_k": 20,
+    "top_p": 1.0,
+    "temperature": 1.0
+  },
+  "runtime_repetition_penalty_processor": false,
+  "model_natural_stop_token_ids": [
+    248044,
+    248046
+  ],
+  "hard_output_truncation": false,
+  "repetition_watchdog_cancel": false,
+  "hard_no_repeat_ngram": false,
+  "rollback_reference": "MCP241 behavior; MCP242 custom runtime explicitly excluded"
+}
