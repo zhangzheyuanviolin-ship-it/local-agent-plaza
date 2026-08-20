@@ -1,0 +1,80 @@
+{
+  "schema": "mcp244.multipart-forensics.v1",
+  "expected_sha256": "7cdf8232b949d184e3cee81694cea7b21bac36a538d495d1a83581a4ce2c5d44",
+  "expected_size": 4780966112,
+  "source_sha256": "d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73",
+  "release_reconstructed_sha256": "535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4",
+  "release_reconstructed_size": 4780966112,
+  "release_matches_expected": false,
+  "device_reported_sha256": "535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4",
+  "release_matches_device_reported": true,
+  "embedded": {
+    "raw_urls": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part00\\nhttps://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part01\\nhttps://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part02\\nhttps://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part03\\nhttps://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part04\\nhttps://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part05\\nhttps://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part06\\nhttps://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part07\\nhttps://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part08\\nhttps://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part09",
+    "decoded_urls": [
+      "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part00",
+      "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part01",
+      "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part02",
+      "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part03",
+      "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part04",
+      "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part05",
+      "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part06",
+      "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part07",
+      "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part08",
+      "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/qwen35-2b-q8-4096-mcp244-official-tool-template-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part09"
+    ],
+    "sizes": "480000000,480000000,480000000,480000000,480000000,480000000,480000000,480000000,480000000,460966112",
+    "sha": "7cdf8232b949d184e3cee81694cea7b21bac36a538d495d1a83581a4ce2c5d44"
+  },
+  "parts": [
+    {
+      "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part00",
+      "size": 480000000,
+      "sha256": "af343e2fa60bc37e76353bb47a180e4eb30ec58c78f455f57926e49b12951baf"
+    },
+    {
+      "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part01",
+      "size": 480000000,
+      "sha256": "2985ae453b9790dcf7df74de0ec4978b1b230e9564f79b44b5e224f1bd7c08ba"
+    },
+    {
+      "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part02",
+      "size": 480000000,
+      "sha256": "bcfebe928f8ca48127e6859ac6d8f9c4d287df34c49cb77b68d85c28e149ca57"
+    },
+    {
+      "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part03",
+      "size": 480000000,
+      "sha256": "7b1dcf6f0403d958fcbdb521b3ac6b4ab1cb5e451dca4924f710a74d3c59c65c"
+    },
+    {
+      "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part04",
+      "size": 480000000,
+      "sha256": "2ecb176bce76fa67ecccea1c24fd12aba653a70fcf9c111923f0118c2a4ab309"
+    },
+    {
+      "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part05",
+      "size": 480000000,
+      "sha256": "d6bad1a412293af1fa0bd3feb7b8605012c8c3b9146fbc7799ce40fbe88c594c"
+    },
+    {
+      "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part06",
+      "size": 480000000,
+      "sha256": "0f1d5c74a917e25ca2a3e159eb2fb87424a96bd5d78369c41ea5478471d4a2f2"
+    },
+    {
+      "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part07",
+      "size": 480000000,
+      "sha256": "7ad5678615c427c1b5a10cef3e6053ea5e19bd48585c3c9269af47a6d5663e7d"
+    },
+    {
+      "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part08",
+      "size": 480000000,
+      "sha256": "a3328414e3cd211d24db3de2a771bc38f1ea9a0a807796e5a1bb632489512fea"
+    },
+    {
+      "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part09",
+      "size": 460966112,
+      "sha256": "6bde81f68bc8586afb2b380abde62e4dbe0e640b67050a5625d86f2c102a73ef"
+    }
+  ]
+}
