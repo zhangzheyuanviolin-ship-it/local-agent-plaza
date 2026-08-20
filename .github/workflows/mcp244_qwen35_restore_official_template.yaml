@@ -1,0 +1,549 @@
+name: MCP244 restore official Qwen3.5 tool template
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp244_qwen35_restore_official_template.yaml'
+      - 'Android/src/scripts/patch_mcp244_qwen35_restore_official_template.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp244-qwen35-official-tool-template
+  cancel-in-progress: false
+
+jobs:
+  repair_model:
+    name: Restore official Qwen3.5 tool template and add natural stop
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      model_size: ${{ steps.model_meta.outputs.model_size }}
+      model_sha256: ${{ steps.model_meta.outputs.model_sha256 }}
+      part_count: ${{ steps.model_meta.outputs.part_count }}
+      template_sha256: ${{ steps.model_meta.outputs.template_sha256 }}
+    env:
+      SOURCE_TAG: 'qwen35-2b-q8-4096-v1'
+      SOURCE_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm'
+      SOURCE_SIZE: '4780966112'
+      SOURCE_SHA256: 'd5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73'
+      TARGET_TAG: 'qwen35-2b-q8-4096-mcp244-official-tool-template-v1'
+      TARGET_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install official LiteRT-LM 0.15 packager
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'litert-lm==0.15.0'
+          litert-lm --help >/dev/null
+
+      - name: Reconstruct SHA-verified physically tool-proven MCP238 bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp244"
+          PARTS="$WORK/source_parts"
+          mkdir -p "$PARTS"
+          SRC="$WORK/source.litertlm"
+          : > "$SRC"
+          for n in $(seq 0 9); do
+            i="$(printf '%02d' "$n")"
+            ASSET="$SOURCE_FILE.part$i"
+            gh release download "$SOURCE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir "$PARTS"
+            cat "$PARTS/$ASSET" >> "$SRC"
+            rm "$PARTS/$ASSET"
+          done
+          test "$(head -c 8 "$SRC")" = 'LITERTLM'
+          test "$(stat -c '%s' "$SRC")" = "$SOURCE_SIZE"
+          test "$(sha256sum "$SRC" | awk '{print $1}')" = "$SOURCE_SHA256"
+
+      - name: Unpack original and add only stop token 248046
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp244"
+          SRC="$WORK/source.litertlm"
+          UNPACK="$WORK/unpacked"
+          TARGET="$WORK/$TARGET_FILE"
+          litert-lm unpack "$SRC" --output-dir "$UNPACK" --allow-overwrite
+          rm "$SRC"
+
+          python - <<'PY'
+          from pathlib import Path
+          import ast, hashlib, os, re
+
+          root=Path(os.environ['RUNNER_TEMP'])/'mcp244'/'unpacked'
+          pb_path=root/'LlmMetadataProto.pbtext'
+          toml_path=root/'model.toml'
+          pb=pb_path.read_text()
+          toml=toml_path.read_text()
+
+          if 'ExecutorMetadata' not in toml:
+              raise SystemExit('ExecutorMetadata missing from physically proven source bundle')
+
+          m=re.search(r'jinja_prompt_template:\s*"((?:\\.|[^"\\])*)"', pb)
+          if not m:
+              raise SystemExit('source Jinja template missing')
+          raw=m.group(1)
+          template=ast.literal_eval('"'+raw+'"')
+          required_tool_markers=(
+              '<tools>', '<tool_call>', '<function=', '<parameter=',
+              '<tool_response>', 'message.tool_calls', 'message.role == "tool"',
+              'multi_step_tool', 'enable_thinking'
+          )
+          missing=[x for x in required_tool_markers if x not in template]
+          if missing:
+              raise SystemExit(f'original official tool-aware template markers missing: {missing}')
+
+          template_sha=hashlib.sha256(template.encode()).hexdigest()
+          (Path(os.environ['RUNNER_TEMP'])/'mcp244'/'source_template.txt').write_text(template)
+          (Path(os.environ['RUNNER_TEMP'])/'mcp244'/'source_template.sha256').write_text(template_sha+'\n')
+          (Path(os.environ['RUNNER_TEMP'])/'mcp244'/'source_model.toml').write_text(toml)
+
+          ids=[int(x) for x in re.findall(r'ids:\s*(\d+)', pb)]
+          if 248044 not in ids:
+              raise SystemExit(f'expected original stop 248044, got {sorted(set(ids))}')
+          if 248046 in ids:
+              raise SystemExit('source unexpectedly already contains 248046; refusing ambiguous patch')
+
+          block='stop_tokens {\n  token_ids {\n    ids: 248044\n  }\n}\n'
+          if pb.count(block) != 1:
+              raise SystemExit(f'expected exactly one canonical 248044 stop block, found {pb.count(block)}')
+          patched=pb.replace(
+              block,
+              block+'stop_tokens {\n  token_ids {\n    ids: 248046\n  }\n}\n',
+              1,
+          )
+          if patched.count('ids: 248046') != 1:
+              raise SystemExit('248046 insertion postcondition failed')
+
+          # The template field must remain byte-for-byte identical inside pbtext.
+          m2=re.search(r'jinja_prompt_template:\s*"((?:\\.|[^"\\])*)"', patched)
+          if not m2 or m2.group(1) != raw:
+              raise SystemExit('Jinja template encoding changed while adding stop token')
+          pb_path.write_text(patched)
+          print(f'Original official tool-aware template preserved. template_sha256={template_sha}')
+          PY
+
+          litert-lm pack "$UNPACK" --output "$TARGET" --allow-overwrite
+          rm -rf "$UNPACK"
+          test "$(head -c 8 "$TARGET")" = 'LITERTLM'
+
+      - name: Re-unpack and prove template preservation plus dual natural stops
+        id: verify_model
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp244"
+          TARGET="$WORK/$TARGET_FILE"
+          VERIFY="$WORK/verify"
+          litert-lm unpack "$TARGET" --output-dir "$VERIFY" --allow-overwrite
+          python - <<'PY'
+          from pathlib import Path
+          import ast, hashlib, os, re
+
+          work=Path(os.environ['RUNNER_TEMP'])/'mcp244'
+          root=work/'verify'
+          pb=(root/'LlmMetadataProto.pbtext').read_text()
+          toml=(root/'model.toml').read_text()
+          original_template=(work/'source_template.txt').read_text()
+          original_sha=(work/'source_template.sha256').read_text().strip()
+
+          m=re.search(r'jinja_prompt_template:\s*"((?:\\.|[^"\\])*)"', pb)
+          if not m:
+              raise SystemExit('repacked Jinja template missing')
+          template=ast.literal_eval('"'+m.group(1)+'"')
+          repacked_sha=hashlib.sha256(template.encode()).hexdigest()
+          if template != original_template or repacked_sha != original_sha:
+              raise SystemExit(f'official template preservation failed: {original_sha} != {repacked_sha}')
+
+          ids=[int(x) for x in re.findall(r'ids:\s*(\d+)', pb)]
+          if 248044 not in ids or 248046 not in ids:
+              raise SystemExit(f'dual stop verification failed: {sorted(set(ids))}')
+          if 'ExecutorMetadata' not in toml:
+              raise SystemExit('ExecutorMetadata lost during repack')
+
+          # Semantic model.toml structure must remain intact; packager may regenerate UUID/timestamp.
+          source=(work/'source_model.toml').read_text()
+          def scrub(s):
+              s=re.sub(r'\{ key = "uuid",[^\n]+\n', '', s)
+              s=re.sub(r'\{ key = "creation_timestamp",[^\n]+\n', '', s)
+              return s
+          if scrub(source) != scrub(toml):
+              raise SystemExit('model.toml changed beyond packager UUID/timestamp metadata')
+
+          print(f'MCP244 verification passed: exact official template sha256={repacked_sha}; stops=248044,248046; ExecutorMetadata retained')
+          PY
+          rm -rf "$VERIFY"
+
+      - name: Split, publish model release, and expose metadata
+        id: model_meta
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp244"
+          TARGET="$WORK/$TARGET_FILE"
+          ASSETS="$WORK/assets"
+          mkdir -p "$ASSETS"
+          SIZE="$(stat -c '%s' "$TARGET")"
+          SHA="$(sha256sum "$TARGET" | awk '{print $1}')"
+          TEMPLATE_SHA="$(cat "$WORK/source_template.sha256" | tr -d '\n\r')"
+          split -b 480000000 -d -a 2 "$TARGET" "$ASSETS/$TARGET_FILE.part"
+          COUNT="$(find "$ASSETS" -maxdepth 1 -type f -name "$TARGET_FILE.part*" | wc -l)"
+          export SIZE SHA TEMPLATE_SHA COUNT ASSETS
+          python - <<'PY'
+          from pathlib import Path
+          import json, os
+          assets=Path(os.environ['ASSETS'])
+          files=sorted(assets.glob(os.environ['TARGET_FILE']+'.part*'))
+          manifest={
+              'schema':'local-agent-plaza.qwen35.mcp244-official-tool-template.v1',
+              'source_release_tag':os.environ['SOURCE_TAG'],
+              'source_model_sha256':os.environ['SOURCE_SHA256'],
+              'model_file':os.environ['TARGET_FILE'],
+              'release_tag':os.environ['TARGET_TAG'],
+              'full_size':int(os.environ['SIZE']),
+              'full_sha256':os.environ['SHA'],
+              'context_length':4096,
+              'quantization':'Q8',
+              'backend':'CPU',
+              'chat_template':{
+                  'provenance':'exact original converted Qwen3.5 official tool-aware template',
+                  'sha256':os.environ['TEMPLATE_SHA'],
+                  'preserved_byte_for_byte':True,
+                  'tool_aware':True,
+              },
+              'natural_stop_token_ids':[248044,248046],
+              'executor_metadata_preserved':True,
+              'runtime_repetition_penalty_processor_required':False,
+              'parts':[{'name':p.name,'size':p.stat().st_size} for p in files],
+          }
+          (assets/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          PY
+          echo "model_size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "model_sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "part_count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "template_sha256=$TEMPLATE_SHA" >> "$GITHUB_OUTPUT"
+
+          gh release view "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Qwen3.5 2B Q8 4096 MCP244 official tool template" \
+              --notes "Rebuilt from the physically tool-proven MCP238 Qwen3.5 bundle. Preserves its full official tool-aware Jinja template byte-for-byte and adds only natural stop token 248046 alongside 248044. ExecutorMetadata retained; no native runtime changes." \
+              --prerelease
+          gh release upload "$TARGET_TAG" "$ASSETS"/* --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" --json assets
+          rm "$TARGET"
+
+  build_apk:
+    name: Build signed MCP244 official-template APK
+    needs: repair_model
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      MCP240_MODEL_SIZE: '4780966112'
+      MCP240_MODEL_SHA256: '119bdfb5464b9c3746b26d43211474fcfcbbe8a8c36693e3c0413b8d5b9d7d0f'
+      MCP244_MODEL_SIZE: ${{ needs.repair_model.outputs.model_size }}
+      MCP244_MODEL_SHA256: ${{ needs.repair_model.outputs.model_sha256 }}
+      MCP244_MODEL_PARTS: ${{ needs.repair_model.outputs.part_count }}
+      MCP244_TEMPLATE_SHA256: ${{ needs.repair_model.outputs.template_sha256 }}
+      MODEL_RELEASE_TAG: 'qwen35-2b-q8-4096-mcp244-official-tool-template-v1'
+      MODEL_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm'
+      MODEL_NAME: 'Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP244'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.244'
+      LOCAL_VERSION_CODE: '344'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      APK_RELEASE_TAG: 'mcp244-qwen35-official-tool-template'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+
+      - name: Verify safe official-runtime source boundary
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          grep -F 'implementation(libs.litertlm)' app/build.gradle.kts
+          grep -F 'litertlm = "0.15.0"' gradle/libs.versions.toml
+          ! grep -q 'litertlm-android-0.15.0-mcp242.aar' app/build.gradle.kts
+          ! grep -q 'MCP242_LOCAL_LITERTLM_AAR' app/build.gradle.kts
+          test -f scripts/patch_mcp244_qwen35_restore_official_template.py
+
+      - name: Verify newly published MCP244 model release
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$MODEL_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets > "$RUNNER_TEMP/model_release.json"
+          python - <<'PY'
+          import json, os
+          d=json.load(open(os.environ['RUNNER_TEMP']+'/model_release.json'))
+          names={a['name'] for a in d['assets']}
+          f=os.environ['MODEL_FILE']
+          count=int(os.environ['MCP244_MODEL_PARTS'])
+          for i in range(count):
+              assert f'{f}.part{i:02d}' in names
+          assert 'manifest.json' in names
+          print(f'MCP244 model release contains {count} parts + manifest.')
+          PY
+
+      - name: Apply MCP238 MCP239 MCP240 MCP241 then MCP244 model identity patch
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile \
+            scripts/patch_mcp238_qwen35_model_download_v3.py \
+            scripts/patch_mcp239_qwen35_cpu_only.py \
+            scripts/patch_mcp240_qwen35_natural_generation.py \
+            scripts/patch_mcp241_qwen35_agent_logits_fix.py \
+            scripts/patch_mcp244_qwen35_restore_official_template.py
+          python3 scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 scripts/patch_mcp239_qwen35_cpu_only.py
+          python3 scripts/patch_mcp240_qwen35_natural_generation.py
+          python3 scripts/patch_mcp241_qwen35_agent_logits_fix.py
+          python3 scripts/patch_mcp244_qwen35_restore_official_template.py
+
+      - name: Verify MCP244 product invariants
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          name=os.environ['MODEL_NAME']
+          helper=Path('app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt').read_text()
+          gradle=Path('app/build.gradle.kts').read_text()
+          versions=Path('gradle/libs.versions.toml').read_text()
+
+          assert 'implementation(libs.litertlm)' in gradle
+          assert 'litertlm = "0.15.0"' in versions
+          assert 'litertlm-android-0.15.0-mcp242.aar' not in gradle
+          assert 'MCP242_LOCAL_LITERTLM_AAR' not in gradle
+          assert 'MCP241_QWEN35_AGENT_LOGITS_FIX' in helper
+          assert 'MCP240_QWEN35_RECURRENT_STATE_RESET' in helper
+          assert name in helper
+          assert 'Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP240' not in helper
+          assert 'RepetitionPenaltyConfig' not in helper
+          assert 'presencePenalty = 2.0f' not in helper
+          assert 'repetitionPenalty = 1.0f' not in helper
+          assert 'NoRepeatNgramConfig' not in helper
+          assert 'maxOutputToken =' not in helper
+
+          for p in (Path('../../model_allowlists/1_0_14.json'), Path('app/src/main/assets/model_allowlists/1_0_14.json')):
+              matches=[m for m in json.loads(p.read_text())['models'] if m.get('name')==name]
+              assert len(matches)==1
+              m=matches[0]
+              assert m['modelFile']==os.environ['MODEL_FILE']
+              assert m['commitHash']==os.environ['MODEL_RELEASE_TAG']
+              assert m['sizeInBytes']==int(os.environ['MCP244_MODEL_SIZE'])
+              cfg=m['defaultConfig']
+              assert cfg['accelerators']=='cpu'
+              assert (cfg['topK'],cfg['topP'],cfg['temperature'])==(20,1.0,1.0)
+              assert cfg['maxTokens']==4096
+              assert cfg['maxContextLength']==4096
+          print('MCP244 invariants passed: official runtime; official tool-template model identity; no low-level workaround.')
+          PY
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build MCP244 release APK
+        working-directory: ./Android/src
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Verify signed APK identity
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='344'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.244'"
+
+      - name: Rename and hash APK
+        id: apk
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          OUT="local-agent-plaza-1.0.14-mcp.244.apk"
+          cp "$SRC" "$OUT"
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$OUT" > "$OUT.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP244 APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-244
+          path: |
+            Android/src/local-agent-plaza-1.0.14-mcp.244.apk
+            Android/src/local-agent-plaza-1.0.14-mcp.244.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish permanent MCP244 APK release
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Local Agent Plaza MCP244 Qwen3.5 official tool template" \
+              --notes "Conservative Qwen3.5 Agent correction after MCP243 device diagnostics. Uses official Maven LiteRT-LM 0.15.0 and a newly repacked Qwen3.5 model rebuilt from the physically tool-proven MCP238 bundle: its full official tool-aware Jinja template is preserved byte-for-byte, with only natural stop token 248046 added beside 248044. No custom JNI/AAR, runtime repetition processor, hard truncation, watchdog, or no-repeat ngram." \
+              --prerelease
+          gh release upload "$APK_RELEASE_TAG" \
+            local-agent-plaza-1.0.14-mcp.244.apk \
+            local-agent-plaza-1.0.14-mcp.244.apk.sha256 \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish MCP244 result metadata
+        id: publish_result
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA: ${{ steps.apk.outputs.sha }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/mcp244_result.json"
+          import json, os
+          repo=os.environ['GITHUB_REPOSITORY']
+          apk_tag=os.environ['APK_RELEASE_TAG']
+          model_tag=os.environ['MODEL_RELEASE_TAG']
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp244-official-qwen35-tool-template.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'artifact_id':int(os.environ['ARTIFACT_ID']),
+              'artifact_url':os.environ['ARTIFACT_URL'],
+              'release_tag':apk_tag,
+              'release_apk_url':f'https://github.com/{repo}/releases/download/{apk_tag}/local-agent-plaza-1.0.14-mcp.244.apk',
+              'apk_name':'local-agent-plaza-1.0.14-mcp.244.apk',
+              'apk_sha256':os.environ['APK_SHA'],
+              'version_name':'1.0.14-mcp.244',
+              'version_code':344,
+              'package':'com.localagent.plaza.mcp',
+              'runtime':'official Maven LiteRT-LM 0.15.0',
+              'custom_litertlm_aar':False,
+              'custom_litertlm_jni':False,
+              'model_name':os.environ['MODEL_NAME'],
+              'model_release_tag':model_tag,
+              'model_release_url':f'https://github.com/{repo}/releases/tag/{model_tag}',
+              'model_file':os.environ['MODEL_FILE'],
+              'model_size':int(os.environ['MCP244_MODEL_SIZE']),
+              'model_sha256':os.environ['MCP244_MODEL_SHA256'],
+              'model_redownload_required':True,
+              'source_tool_proven_model_sha256':'d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73',
+              'chat_template':{
+                  'provenance':'original physically tool-proven official Qwen3.5 tool-aware template',
+                  'sha256':os.environ['MCP244_TEMPLATE_SHA256'],
+                  'preserved_byte_for_byte':True,
+                  'tool_aware':True,
+              },
+              'backend':'CPU_FORCED',
+              'sampler':{'top_k':20,'top_p':1.0,'temperature':1.0},
+              'context_length':4096,
+              'max_tokens':4096,
+              'runtime_repetition_penalty_processor':False,
+              'model_natural_stop_token_ids':[248044,248046],
+              'hard_output_truncation':False,
+              'repetition_watchdog_cancel':False,
+              'hard_no_repeat_ngram':False,
+              'fresh_engine_qwen_reset_retained':True,
+          },indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/mcp244_result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp244_apk_result.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          EXISTING_SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP244 APK result' -f branch=experimental -f sha="$EXISTING_SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP244 APK result' -f branch=experimental -f content="$CONTENT"
+          fi
+
+      - name: Update live handoff with exact MCP244 stopping point
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA: ${{ steps.apk.outputs.sha }}
+        run: |
+          set -euxo pipefail
+          API="repos/$GITHUB_REPOSITORY/contents/docs/ACTIVE_HANDOFF_QWEN35_EXPERIMENTAL.md"
+          gh api "$API?ref=experimental" > "$RUNNER_TEMP/handoff_api.json"
+          python - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          d=json.load(open(os.environ['RUNNER_TEMP']+'/handoff_api.json'))
+          text=base64.b64decode(d['content']).decode()
+          heading='## MCP244 — CURRENT PHYSICAL-TEST CANDIDATE'
+          section=f'''\n\n{heading}\n\nMCP244 build/release completed successfully after MCP243 device diagnostics identified the MCP240 simplified Jinja template as the tool-orchestration regression. The original MCP238 bundle was reconstructed and SHA-verified, and its full official Qwen3.5 tool-aware Jinja template was preserved byte-for-byte. Only natural stop ID 248046 was added beside original 248044. ExecutorMetadata was retained.\n\nRuntime remains official Maven LiteRT-LM 0.15.0. No custom JNI/AAR, runtime repetition penalty, hard truncation, repetition watchdog, or NoRepeatNgram is used. CPU and the Qwen fresh-Engine reset remain.\n\nVersion: `1.0.14-mcp.244` / versionCode `344`.\nAPK SHA256: `{os.environ['APK_SHA']}`.\nAPK Release: `https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['APK_RELEASE_TAG']}/local-agent-plaza-1.0.14-mcp.244.apk`.\nActions artifact: `{os.environ['ARTIFACT_URL']}` (ID `{os.environ['ARTIFACT_ID']}`).\n\nModel: `{os.environ['MODEL_FILE']}`.\nModel release: `https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/{os.environ['MODEL_RELEASE_TAG']}`.\nModel size: `{os.environ['MCP244_MODEL_SIZE']}` bytes.\nModel SHA256: `{os.environ['MCP244_MODEL_SHA256']}`.\nModel redownload is REQUIRED because the MCP240 on-device file contains the wrong simplified template.\nOfficial tool-template SHA256: `{os.environ['MCP244_TEMPLATE_SHA256']}`.\n\nExact stopping point: engineering/build work is complete. Await physical-device test. First verify model download/load, ordinary chat, then Agent search/tool call, tool-result continuation, absence of search/file-read loops or leaked function syntax, and finally whether long final-answer repetition remains. Do not proceed to 8792/4B/9B until this test result is recorded.\n'''
+          if heading in text:
+              text=text.split(heading)[0].rstrip()+section
+          else:
+              text=text.rstrip()+section
+          Path(os.environ['RUNNER_TEMP']+'/handoff.md').write_text(text)
+          Path(os.environ['RUNNER_TEMP']+'/handoff_sha.txt').write_text(d['sha'])
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/handoff.md")"
+          CURRENT_SHA="$(cat "$RUNNER_TEMP/handoff_sha.txt")"
+          gh api --method PUT "$API" \
+            -f message='Update live handoff for completed MCP244 build' \
+            -f branch=experimental -f sha="$CURRENT_SHA" -f content="$CONTENT"
