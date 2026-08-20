@@ -1,26 +1,26 @@
 {
-  "schema": "mcp242-workflow-probe.v1",
-  "runs": [
+  "schema": "mcp242-workflow-probe.v3",
+  "main_runs": [
     {
       "id": 32338366732,
       "run_number": 5,
       "event": "push",
-      "status": "pending",
+      "status": "in_progress",
       "conclusion": null,
       "head_sha": "4ec5424d3ecfa182f2642c14694c3ce19666b8e5",
       "created_at": "2026-08-20T06:08:46Z",
-      "updated_at": "2026-08-20T06:08:47Z",
+      "updated_at": "2026-08-20T06:25:34Z",
       "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32338366732"
     },
     {
       "id": 32337379513,
       "run_number": 4,
       "event": "push",
-      "status": "in_progress",
-      "conclusion": null,
+      "status": "completed",
+      "conclusion": "failure",
       "head_sha": "5c5f64054369f652789044abd905e2423ac456c3",
       "created_at": "2026-08-20T05:54:03Z",
-      "updated_at": "2026-08-20T05:54:07Z",
+      "updated_at": "2026-08-20T06:25:31Z",
       "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32337379513"
     },
     {
@@ -55,6 +55,19 @@
       "created_at": "2026-08-20T05:51:34Z",
       "updated_at": "2026-08-20T05:51:34Z",
       "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32337218689"
+    }
+  ],
+  "finalize_runs": [
+    {
+      "id": 32339686383,
+      "run_number": 1,
+      "event": "push",
+      "status": "in_progress",
+      "conclusion": null,
+      "head_sha": "7d2b30d51e7a9aeb225e7de08d61a7d0854b119b",
+      "created_at": "2026-08-20T06:27:41Z",
+      "updated_at": "2026-08-20T06:27:44Z",
+      "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32339686383"
     }
   ]
 }
