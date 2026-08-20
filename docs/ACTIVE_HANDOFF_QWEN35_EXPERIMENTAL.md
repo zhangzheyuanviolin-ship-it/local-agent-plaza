@@ -1,6 +1,6 @@
 # Local Agent Plaza — Qwen3.5 experimental live handoff
 
-Last checkpoint: 2026-08-20 15:37+08:00
+Last checkpoint: 2026-08-20 15:40+08:00
 Branch: `experimental`
 Default branch `main` must remain untouched.
 Stable product reference branch: `golden/mcp-223-product-stable`.
@@ -109,6 +109,23 @@ Create MCP243 as an overwrite-installable rollback (`versionCode` > 342) that is
 - update this file and a machine-readable `docs/mcp243_apk_result.json` only after the build actually succeeds.
 
 This is a deliberately low-risk rollback. Do not introduce additional fixes into MCP243.
+
+### MCP243 live build checkpoint
+
+Workflow: `.github/workflows/mcp243_safe_runtime_rollback.yaml`
+Run ID: `32345060689`
+Run URL: `https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32345060689`
+Workflow source commit: `3e1acf4165724b6dffcca567ce08ae4f295ea57b`
+
+At this checkpoint the following gates have already passed:
+- conservative source boundary check: official `implementation(libs.litertlm)` and `litertlm = "0.15.0"`;
+- no MCP242 custom AAR/JNI dependency;
+- repaired MCP240 model release availability;
+- MCP238/MCP239/MCP240/MCP241 patch application;
+- MCP243 product invariants, including complete absence of `RepetitionPenaltyConfig`, presence/frequency injection, no-repeat ngram, and per-call hard output cap;
+- release signing prerequisites.
+
+Current active step at checkpoint: `Build MCP243 release APK` (Gradle assembleRelease). If the session dies now, inspect run `32345060689`, finish from that run, then update this file and `docs/mcp243_apk_result.json` only after signed APK/release publication succeeds.
 
 ## Later work after MCP243 is physically verified stable
 
