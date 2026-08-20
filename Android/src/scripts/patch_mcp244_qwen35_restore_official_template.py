@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""MCP244: retarget the Qwen3.5 Agent product to the official tool-aware-template bundle.
+"""MCP244: strict single-variable Qwen3.5 tool-template recovery.
 
-Run after MCP238 + MCP239 + MCP240 + MCP241.  The MCP244 model is rebuilt from the
-physically tool-proven MCP238 bundle, preserving its official Qwen3.5 Jinja template
-byte-for-byte and adding only natural stop token 248046 beside 248044.
+Run ONLY after MCP238 + MCP239. The model is rebuilt from the physically tool-proven
+MCP238 bundle, preserving its original full Qwen3.5 tool-aware Jinja template byte-for-byte
+and adding only natural stop token 248046 beside the existing 248044.
 
-This app patch only changes the model identity/download metadata.  It deliberately keeps
-the official Maven LiteRT-LM 0.15 runtime and MCP241's disabled runtime repetition
-processor.  It adds no native runtime, hard truncation, watchdog, or no-repeat constraint.
+The app path deliberately stays at the MCP238/MCP239 behavior: official LiteRT-LM 0.15,
+CPU, resident Engine + ordinary fresh Conversation, topK=20/topP=0.8/temp=0.6,
+maxTokens=1536/context=4096. No MCP240/MCP241 app patch, no repetition processor,
+no native runtime replacement, no watchdog, and no hard no-repeat mechanism.
 """
 
 from __future__ import annotations
@@ -18,14 +19,14 @@ from pathlib import Path
 import re
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]  # Android/src
+ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parents[1]
 
-OLD_NAME = "Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP240"
+OLD_NAME = "Qwen3.5-2B LiteRT-LM Q8 4096 Plaza"
 NEW_NAME = "Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP244"
-OLD_FILE = "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm"
+OLD_FILE = "Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm"
 NEW_FILE = "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm"
-OLD_TAG = "qwen35-2b-q8-4096-mcp240-natural-v2"
+OLD_TAG = "qwen35-2b-q8-4096-v1"
 NEW_TAG = "qwen35-2b-q8-4096-mcp244-official-tool-template-v1"
 NEW_ID = "local-agent-plaza/Qwen3.5-2B-Q8-4096-MCP244"
 PART_BYTES = 480_000_000
@@ -61,8 +62,20 @@ def patch_allowlist(path: Path) -> None:
         fail(f"allowlist models missing: {path}")
     matches = [m for m in models if m.get("name") == OLD_NAME]
     if len(matches) != 1:
-        fail(f"expected one MCP240 source model in {path}, found {len(matches)}")
+        fail(f"expected one MCP238/MCP239 source model in {path}, found {len(matches)}")
     model = matches[0]
+    cfg = model.get("defaultConfig")
+    if not isinstance(cfg, dict):
+        fail(f"defaultConfig missing: {path}")
+
+    # Freeze the physically proven MCP238/MCP239 generation profile before retargeting.
+    expected = (
+        cfg.get("topK"), cfg.get("topP"), cfg.get("temperature"),
+        cfg.get("maxTokens"), cfg.get("maxContextLength"), cfg.get("accelerators")
+    )
+    if expected != (20, 0.8, 0.6, 1536, 4096, "cpu"):
+        fail(f"source generation profile drifted in {path}: {expected}")
+
     model["name"] = NEW_NAME
     model["modelId"] = NEW_ID
     model["modelFile"] = NEW_FILE
@@ -71,17 +84,10 @@ def patch_allowlist(path: Path) -> None:
     model["url"] = PART_URLS[0]
     model["description"] = (
         "Local Agent Plaza MCP244 Qwen3.5 2B Q8/4096 CPU bundle. Rebuilt from the physically "
-        "tool-proven MCP238 conversion while preserving the official Qwen3.5 tool-aware Jinja "
-        "template byte-for-byte; natural stop IDs 248044 and 248046 are declared. Official "
-        "LiteRT-LM 0.15 runtime; no runtime repetition processor or host hard-stop workaround."
+        "tool-proven MCP238 bundle while preserving its full original tool-aware Qwen3.5 Jinja "
+        "template byte-for-byte; only natural stop ID 248046 is added beside 248044. App-side "
+        "generation behavior remains the MCP238/MCP239 baseline."
     )
-    cfg = model.setdefault("defaultConfig", {})
-    cfg["topK"] = 20
-    cfg["topP"] = 1.0
-    cfg["temperature"] = 1.0
-    cfg["maxTokens"] = 4096
-    cfg["accelerators"] = "cpu"
-    cfg["maxContextLength"] = 4096
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -91,7 +97,7 @@ for allowlist in (
 ):
     patch_allowlist(allowlist)
 
-# Retarget MCP238 multipart metadata already rewritten by MCP240.
+# Retarget the MCP238 multipart downloader directly from the known-good model identity.
 repo_path = ROOT / "app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt"
 repo = repo_path.read_text(encoding="utf-8")
 for old, new, label in (
@@ -120,19 +126,20 @@ if count_sizes != 1 or count_sha != 1:
     fail(f"multipart metadata anchors failed: sizes={count_sizes} sha={count_sha}")
 repo_path.write_text(repo, encoding="utf-8")
 
-# Retarget Qwen-specific CPU/reset guards from MCP240 identity to the corrected MCP244 identity.
+# MCP239 has one Qwen-specific CPU guard. Retarget only that identity; do not add reset logic.
 helper_path = ROOT / "app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt"
 helper = helper_path.read_text(encoding="utf-8")
-count_name = helper.count(OLD_NAME)
-if count_name < 1:
-    fail("MCP240 helper model identity anchor missing")
+if helper.count(OLD_NAME) < 1:
+    fail("MCP239 CPU-guard model identity anchor missing")
 helper = helper.replace(OLD_NAME, NEW_NAME)
 helper_path.write_text(helper, encoding="utf-8")
 
-# Fail-fast product invariants.
+# Fail-fast isolation/product invariants.
 final_helper = helper_path.read_text(encoding="utf-8")
 final_repo = repo_path.read_text(encoding="utf-8")
 for forbidden in (
+    "MCP240_QWEN35_RECURRENT_STATE_RESET",
+    "MCP241_QWEN35_AGENT_LOGITS_FIX",
     "RepetitionPenaltyConfig",
     "presencePenalty = 2.0f",
     "repetitionPenalty = 1.0f",
@@ -143,12 +150,8 @@ for forbidden in (
     OLD_TAG,
 ):
     if forbidden in final_helper or forbidden in final_repo:
-        fail(f"forbidden/obsolete value remained after MCP244 patch: {forbidden}")
-for required in (
-    "MCP241_QWEN35_AGENT_LOGITS_FIX",
-    "MCP240_QWEN35_RECURRENT_STATE_RESET",
-    NEW_NAME,
-):
+        fail(f"forbidden/non-baseline value remained after MCP244 patch: {forbidden}")
+for required in ("MCP239_QWEN35_CPU_ONLY", NEW_NAME):
     if required not in final_helper:
         fail(f"helper postcondition missing: {required}")
 for required in (NEW_NAME, NEW_FILE, NEW_TAG, MODEL_SHA256):
@@ -169,17 +172,14 @@ for allowlist in (
         fail(f"new model file/tag mismatch: {allowlist}")
     if m.get("sizeInBytes") != MODEL_SIZE:
         fail(f"new model size mismatch: {allowlist}")
-    if (cfg.get("topK"), cfg.get("topP"), cfg.get("temperature"), cfg.get("accelerators")) != (
-        20,
-        1.0,
-        1.0,
-        "cpu",
-    ):
-        fail(f"sampler/backend mismatch: {allowlist}")
-    if cfg.get("maxTokens") != 4096 or cfg.get("maxContextLength") != 4096:
-        fail(f"4096 config mismatch: {allowlist}")
+    expected = (
+        cfg.get("topK"), cfg.get("topP"), cfg.get("temperature"),
+        cfg.get("maxTokens"), cfg.get("maxContextLength"), cfg.get("accelerators")
+    )
+    if expected != (20, 0.8, 0.6, 1536, 4096, "cpu"):
+        fail(f"MCP238/MCP239 profile was not preserved: {allowlist}: {expected}")
 
 print(
-    f"MCP244 app patch complete: model_bytes={MODEL_SIZE} parts={len(PART_SIZES)} "
-    f"sha256={MODEL_SHA256}; official runtime retained"
+    f"MCP244 strict isolation patch complete: model_bytes={MODEL_SIZE} parts={len(PART_SIZES)} "
+    f"sha256={MODEL_SHA256}; MCP238/MCP239 app behavior retained"
 )
