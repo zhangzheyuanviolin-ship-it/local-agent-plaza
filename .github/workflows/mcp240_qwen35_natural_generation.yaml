@@ -57,7 +57,8 @@ jobs:
           mkdir -p "$WORK"
           SRC="$WORK/source.litertlm"
           : > "$SRC"
-          for i in $(seq -w 0 9); do
+          for n in $(seq 0 9); do
+            i="$(printf '%02d' "$n")"
             ASSET="${SOURCE_FILE}.part${i}"
             gh release download "$SOURCE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir "$WORK"
             cat "$WORK/$ASSET" >> "$SRC"
