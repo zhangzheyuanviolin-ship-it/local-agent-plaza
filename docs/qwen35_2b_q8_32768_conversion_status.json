@@ -1,10 +1,10 @@
 {
   "schema": "qwen35-2b-q8-32768-ci-status.v1",
-  "status": "RUNNING",
-  "stage": "runner_resources",
-  "message": "",
-  "repository_commit": "6f5ca3aeff6cfbdbcf7ed9b0917b13d10777f289",
-  "workflow_run_id": "32382389733",
-  "workflow_run_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32382389733",
-  "updated_at_utc": "2026-08-20T14:49:43.075811+00:00"
+  "status": "FAILED",
+  "stage": "cpu_runtime_validation",
+  "message": "exit_code=1",
+  "repository_commit": "1b4801c390ef43a245809fc586891345e0479e25",
+  "workflow_run_id": "32382528588",
+  "workflow_run_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32382528588",
+  "updated_at_utc": "2026-08-20T15:16:43.731703+00:00"
 }
