@@ -1,0 +1,20 @@
+{
+  "schema": "local-agent-plaza.qwen35.original-vs-mcp240-metadata.v1",
+  "original_model_sha256": "d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73",
+  "mcp240_model_sha256": "119bdfb5464b9c3746b26d43211474fcfcbbe8a8c36693e3c0413b8d5b9d7d0f",
+  "original_metadata_sha256": "ad383c0d104b9719842dc71bfdad7309ea8bf8fb811270de99d46c7e7cee7ca4",
+  "mcp240_metadata_sha256": "31b1c8967c32aa6ab90ad87109af4dcfe2094295c27b4ad2bbfb26bd24c30bee",
+  "original_model_toml_sha256": "84d11fa648059164750be2449680ceb1e75ebdd9079d9be0bbf09a2c993719fc",
+  "mcp240_model_toml_sha256": "986b7f807d0caa8880d3ef87b768c825b7b48019f99d2554847271bb9be4ecbd",
+  "original_stop_ids": [
+    248044
+  ],
+  "mcp240_stop_ids": [
+    248044,
+    248046
+  ],
+  "original_executor_metadata_present": true,
+  "mcp240_executor_metadata_present": true,
+  "template_changed": true,
+  "model_toml_changed": true
+}
