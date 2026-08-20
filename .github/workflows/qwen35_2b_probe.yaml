@@ -51,4 +51,4 @@ jobs:
             sleep $((n*3))
           done
           exit 1
-      # probe revision: 3
+      # probe revision: 4
