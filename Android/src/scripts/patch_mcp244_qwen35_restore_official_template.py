@@ -67,8 +67,6 @@ def patch_allowlist(path: Path) -> None:
     cfg = model.get("defaultConfig")
     if not isinstance(cfg, dict):
         fail(f"defaultConfig missing: {path}")
-
-    # Freeze the physically proven MCP238/MCP239 generation profile before retargeting.
     expected = (
         cfg.get("topK"), cfg.get("topP"), cfg.get("temperature"),
         cfg.get("maxTokens"), cfg.get("maxContextLength"), cfg.get("accelerators")
@@ -97,7 +95,6 @@ for allowlist in (
 ):
     patch_allowlist(allowlist)
 
-# Retarget the MCP238 multipart downloader directly from the known-good model identity.
 repo_path = ROOT / "app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt"
 repo = repo_path.read_text(encoding="utf-8")
 for old, new, label in (
@@ -126,7 +123,6 @@ if count_sizes != 1 or count_sha != 1:
     fail(f"multipart metadata anchors failed: sizes={count_sizes} sha={count_sha}")
 repo_path.write_text(repo, encoding="utf-8")
 
-# MCP239 has one Qwen-specific CPU guard. Retarget only that identity; do not add reset logic.
 helper_path = ROOT / "app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt"
 helper = helper_path.read_text(encoding="utf-8")
 if helper.count(OLD_NAME) < 1:
@@ -134,7 +130,6 @@ if helper.count(OLD_NAME) < 1:
 helper = helper.replace(OLD_NAME, NEW_NAME)
 helper_path.write_text(helper, encoding="utf-8")
 
-# Fail-fast isolation/product invariants.
 final_helper = helper_path.read_text(encoding="utf-8")
 final_repo = repo_path.read_text(encoding="utf-8")
 for forbidden in (
@@ -145,12 +140,14 @@ for forbidden in (
     "repetitionPenalty = 1.0f",
     "NoRepeatNgramConfig",
     "maxOutputToken =",
-    OLD_NAME,
     OLD_FILE,
     OLD_TAG,
 ):
     if forbidden in final_helper or forbidden in final_repo:
         fail(f"forbidden/non-baseline value remained after MCP244 patch: {forbidden}")
+# OLD_NAME is a lexical prefix of NEW_NAME, so test exact quoted old identity instead of substring.
+if f'"{OLD_NAME}"' in final_helper or f'"{OLD_NAME}"' in final_repo:
+    fail("exact old model identity remained after MCP244 retarget")
 for required in ("MCP239_QWEN35_CPU_ONLY", NEW_NAME):
     if required not in final_helper:
         fail(f"helper postcondition missing: {required}")
