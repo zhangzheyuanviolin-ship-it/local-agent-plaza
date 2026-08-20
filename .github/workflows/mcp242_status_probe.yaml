@@ -1,6 +1,6 @@
 name: MCP242 workflow status probe
 
-# Probe refresh 4
+# Probe refresh 5
 on:
   push:
     branches: ["experimental"]
@@ -23,16 +23,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mcp242_qwen35_compatible_repetition.yaml/runs?branch=experimental&per_page=5" > "$RUNNER_TEMP/runs.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mcp242_qwen35_compatible_repetition.yaml/runs?branch=experimental&per_page=5" > "$RUNNER_TEMP/main.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mcp242_finalize_apk.yaml/runs?branch=experimental&per_page=5" > "$RUNNER_TEMP/finalize.json"
           python - <<'PY' > "$RUNNER_TEMP/probe.json"
           import json, os
-          data=json.load(open(os.environ['RUNNER_TEMP']+'/runs.json'))
-          runs=data.get('workflow_runs',[])
-          out={'schema':'mcp242-workflow-probe.v1','runs':[
-            {k:r.get(k) for k in ('id','run_number','event','status','conclusion','head_sha','created_at','updated_at','html_url')}
-            for r in runs
-          ]}
-          print(json.dumps(out,indent=2))
+          def compact(path):
+              data=json.load(open(path))
+              return [{k:r.get(k) for k in ('id','run_number','event','status','conclusion','head_sha','created_at','updated_at','html_url')} for r in data.get('workflow_runs',[])]
+          print(json.dumps({
+              'schema':'mcp242-workflow-probe.v3',
+              'main_runs':compact(os.environ['RUNNER_TEMP']+'/main.json'),
+              'finalize_runs':compact(os.environ['RUNNER_TEMP']+'/finalize.json'),
+          },indent=2))
           PY
           CONTENT="$(base64 -w0 "$RUNNER_TEMP/probe.json")"
           API="repos/$GITHUB_REPOSITORY/contents/docs/mcp242_workflow_probe.json"
