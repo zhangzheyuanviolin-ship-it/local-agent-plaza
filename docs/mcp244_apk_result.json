@@ -1,48 +1,49 @@
 {
-  "schema": "local-agent-plaza.mcp244-official-qwen35-tool-template.v1",
-  "run_id": 32349526045,
-  "head_sha": "8e3f47042cc2a2087df875b92495beccae9a3582",
-  "artifact_id": 9399705980,
-  "artifact_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32349526045/artifacts/9399705980",
-  "release_tag": "mcp244-qwen35-official-tool-template",
+  "schema": "local-agent-plaza.mcp244-strict-tool-recovery.v3",
+  "run_id": 32350287008,
+  "head_sha": "192bd7e51224a8b7449e7be2bdedee99038a6fb6",
+  "artifact_id": 9399915719,
+  "artifact_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32350287008/artifacts/9399915719",
   "release_apk_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp244-qwen35-official-tool-template/local-agent-plaza-1.0.14-mcp.244.apk",
+  "release_tag": "mcp244-qwen35-official-tool-template",
   "apk_name": "local-agent-plaza-1.0.14-mcp.244.apk",
-  "apk_sha256": "98346dc8421846bfd5625e184d1441a3ff0b33eaef82c0301a6cbbbf3a102201",
+  "apk_sha256": "0cd9c114a062a3cbb986f3a0f37d8e23bdb20f408cd09bcba647abb4b1541776",
   "version_name": "1.0.14-mcp.244",
   "version_code": 344,
   "package": "com.localagent.plaza.mcp",
   "runtime": "official Maven LiteRT-LM 0.15.0",
   "custom_litertlm_aar": false,
   "custom_litertlm_jni": false,
-  "model_name": "Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP244",
+  "app_patch_chain": [
+    "MCP238",
+    "MCP239",
+    "MCP244"
+  ],
+  "mcp240_app_patch_applied": false,
+  "mcp241_app_patch_applied": false,
   "model_release_tag": "qwen35-2b-q8-4096-mcp244-official-tool-template-v1",
-  "model_release_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/tag/qwen35-2b-q8-4096-mcp244-official-tool-template-v1",
   "model_file": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm",
-  "model_size": 4780966112,
   "model_sha256": "7cdf8232b949d184e3cee81694cea7b21bac36a538d495d1a83581a4ce2c5d44",
+  "model_size": 4780966112,
   "model_redownload_required": true,
   "source_tool_proven_model_sha256": "d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73",
-  "chat_template": {
-    "provenance": "original physically tool-proven official Qwen3.5 tool-aware template",
-    "sha256": "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
-    "preserved_byte_for_byte": true,
-    "tool_aware": true
-  },
-  "backend": "CPU_FORCED",
-  "sampler": {
-    "top_k": 20,
-    "top_p": 1.0,
-    "temperature": 1.0
-  },
-  "context_length": 4096,
-  "max_tokens": 4096,
-  "runtime_repetition_penalty_processor": false,
-  "model_natural_stop_token_ids": [
+  "template_sha256": "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+  "original_tool_template_preserved_byte_for_byte": true,
+  "natural_stop_token_ids": [
     248044,
     248046
   ],
+  "sampler": {
+    "top_k": 20,
+    "top_p": 0.8,
+    "temperature": 0.6,
+    "max_tokens": 1536,
+    "context": 4096
+  },
+  "backend": "CPU_FORCED",
+  "fresh_engine_reset": false,
+  "runtime_repetition_penalty_processor": false,
   "hard_output_truncation": false,
   "repetition_watchdog_cancel": false,
-  "hard_no_repeat_ngram": false,
-  "fresh_engine_qwen_reset_retained": true
+  "hard_no_repeat_ngram": false
 }
