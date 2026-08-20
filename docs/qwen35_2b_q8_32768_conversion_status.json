@@ -1,0 +1,10 @@
+{
+  "schema": "qwen35-2b-q8-32768-ci-status.v1",
+  "status": "FAILED",
+  "stage": "cpu_runtime_validation",
+  "message": "exit_code=1",
+  "repository_commit": "43ba7f675fe6afe456ba782ca65f6eaa93d59f99",
+  "workflow_run_id": "32379339977",
+  "workflow_run_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32379339977",
+  "updated_at_utc": "2026-08-20T14:45:43.935290+00:00"
+}
