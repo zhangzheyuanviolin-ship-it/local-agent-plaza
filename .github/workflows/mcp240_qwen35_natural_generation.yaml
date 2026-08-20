@@ -1,0 +1,404 @@
+name: MCP240 Qwen3.5 natural generation product build
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp240_qwen35_natural_generation.yaml'
+      - 'Android/src/scripts/patch_mcp240_qwen35_natural_generation.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp240-qwen35-natural-generation
+  cancel-in-progress: false
+
+jobs:
+  repair_model:
+    name: Repair Qwen3.5 ChatML and natural stop metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      model_size: ${{ steps.model_meta.outputs.model_size }}
+      model_sha256: ${{ steps.model_meta.outputs.model_sha256 }}
+      part_count: ${{ steps.model_meta.outputs.part_count }}
+    env:
+      SOURCE_TAG: 'qwen35-2b-q8-4096-v1'
+      SOURCE_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm'
+      TARGET_TAG: 'qwen35-2b-q8-4096-mcp240-natural-v2'
+      TARGET_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install LiteRT-LM 0.15 packager
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'litert-lm==0.15.0'
+          litert-lm --help >/dev/null
+
+      - name: Reconstruct verified MCP239 source bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp240"
+          mkdir -p "$WORK"
+          SRC="$WORK/source.litertlm"
+          : > "$SRC"
+          for i in $(seq -w 0 9); do
+            ASSET="${SOURCE_FILE}.part${i}"
+            gh release download "$SOURCE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir "$WORK"
+            cat "$WORK/$ASSET" >> "$SRC"
+            rm "$WORK/$ASSET"
+          done
+          test "$(head -c 8 "$SRC")" = 'LITERTLM'
+          test "$(stat -c '%s' "$SRC")" = '4780966112'
+          test "$(sha256sum "$SRC" | awk '{print $1}')" = 'd5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73'
+
+      - name: Repair stable ChatML and Qwen3.5 stop metadata
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp240"
+          SRC="$WORK/source.litertlm"
+          UNPACK="$WORK/unpacked"
+          TARGET="$WORK/$TARGET_FILE"
+          litert-lm unpack "$SRC" --output-dir "$UNPACK" --allow-overwrite
+          rm "$SRC"
+          python - <<'PY'
+          from pathlib import Path
+          import os, re
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'mcp240' / 'unpacked'
+          pb_path = root / 'LlmMetadataProto.pbtext'
+          toml_path = root / 'model.toml'
+          if not pb_path.exists() or not toml_path.exists():
+              raise SystemExit('missing LlmMetadataProto.pbtext or model.toml after unpack')
+
+          template = '''{%- for message in messages -%}
+          {%- if message.role == 'assistant' -%}
+          <|im_start|>assistant
+          <think>
+
+          </think>
+
+          {{ message.content }}<|im_end|>
+          {% else -%}
+          <|im_start|>{{ message.role }}
+          {{ message.content }}<|im_end|>
+          {% endif -%}
+          {%- endfor -%}
+          {%- if add_generation_prompt -%}
+          <|im_start|>assistant
+          <think>
+
+          </think>
+
+          {% endif -%}
+          '''
+          template = '\n'.join(line[10:] if line.startswith('          ') else line for line in template.splitlines()) + '\n'
+          escaped = template.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+
+          pb = pb_path.read_text()
+          patched, count = re.subn(
+              r'jinja_prompt_template: ".*"',
+              lambda _: 'jinja_prompt_template: "' + escaped + '"',
+              pb,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f'expected exactly one jinja_prompt_template, got {count}')
+
+          if 'ids: 248044' not in patched:
+              raise SystemExit('expected Qwen3.5 config EOS 248044 in source bundle')
+          if 'ids: 248046' not in patched:
+              block = 'stop_tokens {\n  token_ids {\n    ids: 248044\n  }\n}\n'
+              if block not in patched:
+                  raise SystemExit('unable to locate 248044 stop block')
+              patched = patched.replace(
+                  block,
+                  block + 'stop_tokens {\n  token_ids {\n    ids: 248046\n  }\n}\n',
+                  1,
+              )
+          if 'ids: 248044' not in patched or 'ids: 248046' not in patched:
+              raise SystemExit('dual natural stop-token verification failed')
+          pb_path.write_text(patched)
+
+          toml = toml_path.read_text()
+          if 'ExecutorMetadata' not in toml:
+              raise SystemExit('ExecutorMetadata missing; refusing to repack a recurrent-state-broken bundle')
+          print('ChatML repaired; stop tokens 248044+248046 declared; ExecutorMetadata retained.')
+          PY
+          litert-lm pack "$UNPACK" --output "$TARGET" --allow-overwrite
+          rm -rf "$UNPACK"
+          test "$(head -c 8 "$TARGET")" = 'LITERTLM'
+
+      - name: Verify repaired bundle by re-unpack
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp240"
+          TARGET="$WORK/$TARGET_FILE"
+          VERIFY="$WORK/verify"
+          litert-lm unpack "$TARGET" --output-dir "$VERIFY" --allow-overwrite
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          root = Path(os.environ['RUNNER_TEMP']) / 'mcp240' / 'verify'
+          pb = (root / 'LlmMetadataProto.pbtext').read_text()
+          toml = (root / 'model.toml').read_text()
+          checks = {
+              'assistant_chatml': '<|im_start|>assistant' in pb,
+              'stable_empty_think': '<think>' in pb and '</think>' in pb,
+              'stop_248044': 'ids: 248044' in pb,
+              'stop_248046': 'ids: 248046' in pb,
+              'executor_metadata': 'ExecutorMetadata' in toml,
+          }
+          print(checks)
+          if not all(checks.values()):
+              raise SystemExit(f'MCP240 repaired model verification failed: {checks}')
+          PY
+          rm -rf "$VERIFY"
+
+      - name: Split publish and expose model metadata
+        id: model_meta
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp240"
+          TARGET="$WORK/$TARGET_FILE"
+          ASSETS="$WORK/assets"
+          mkdir -p "$ASSETS"
+          SIZE="$(stat -c '%s' "$TARGET")"
+          SHA="$(sha256sum "$TARGET" | awk '{print $1}')"
+          split -b 480000000 -d -a 2 "$TARGET" "$ASSETS/$TARGET_FILE.part"
+          rm "$TARGET"
+          COUNT="$(find "$ASSETS" -maxdepth 1 -type f -name "$TARGET_FILE.part*" | wc -l)"
+          export SIZE SHA COUNT ASSETS
+          python - <<'PY'
+          from pathlib import Path
+          import json, os
+          assets = Path(os.environ['ASSETS'])
+          files = sorted(assets.glob(os.environ['TARGET_FILE'] + '.part*'))
+          manifest = {
+              'schema':'local-agent-plaza.qwen35.mcp240-natural.v2',
+              'model_file':os.environ['TARGET_FILE'],
+              'release_tag':os.environ['TARGET_TAG'],
+              'full_size':int(os.environ['SIZE']),
+              'full_sha256':os.environ['SHA'],
+              'context_length':4096,
+              'quantization':'Q8',
+              'backend':'CPU',
+              'natural_generation':{
+                  'chat_template':'stable_simple_chatml_with_consistent_empty_think_block',
+                  'stop_token_ids':[248044,248046],
+                  'executor_metadata_preserved':True,
+                  'host_output_truncation':False,
+                  'host_repetition_cancel':False,
+              },
+              'parts':[{'name':p.name,'size':p.stat().st_size} for p in files],
+          }
+          (assets/'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+          echo "model_size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "model_sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "part_count=$COUNT" >> "$GITHUB_OUTPUT"
+          gh release view "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" --title "Qwen3.5 2B Q8 4096 MCP240 natural generation" --notes "Corrected LiteRT-LM Qwen3.5 bundle: stable ChatML rendering, natural stop tokens 248044 and 248046, preserved recurrent-state ExecutorMetadata. CPU target." --prerelease
+          gh release upload "$TARGET_TAG" "$ASSETS"/* --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view "$TARGET_TAG" --repo "$GITHUB_REPOSITORY" --json assets
+
+  build_apk:
+    name: Build signed MCP240 CPU Agent APK
+    needs: repair_model
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      MCP240_MODEL_SIZE: ${{ needs.repair_model.outputs.model_size }}
+      MCP240_MODEL_SHA256: ${{ needs.repair_model.outputs.model_sha256 }}
+      MCP240_MODEL_PARTS: ${{ needs.repair_model.outputs.part_count }}
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.240'
+      LOCAL_VERSION_CODE: '340'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      APK_RELEASE_TAG: 'mcp240-qwen35-natural-generation'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Apply MCP238 multipart MCP239 CPU and MCP240 natural-generation patches
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile scripts/patch_mcp238_qwen35_model_download_v3.py scripts/patch_mcp239_qwen35_cpu_only.py scripts/patch_mcp240_qwen35_natural_generation.py
+          python3 scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 scripts/patch_mcp239_qwen35_cpu_only.py
+          python3 scripts/patch_mcp240_qwen35_natural_generation.py
+
+      - name: Verify product behavior invariants
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          name='Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP240'
+          helper=Path('app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt').read_text()
+          assert 'presencePenalty = 2.0f' in helper
+          assert 'repetitionPenalty = 1.0f' in helper
+          assert 'MCP240_QWEN35_RECURRENT_STATE_RESET' in helper
+          assert 'NoRepeatNgramConfig' not in helper
+          assert 'maxOutputToken =' not in helper
+          for p in (Path('../../model_allowlists/1_0_14.json'), Path('app/src/main/assets/model_allowlists/1_0_14.json')):
+              matches=[m for m in json.loads(p.read_text())['models'] if m.get('name')==name]
+              assert len(matches)==1
+              m=matches[0]
+              assert m['sizeInBytes']==int(os.environ['MCP240_MODEL_SIZE'])
+              assert m['commitHash']=='qwen35-2b-q8-4096-mcp240-natural-v2'
+              assert m['modelFile']=='Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm'
+              cfg=m['defaultConfig']
+              assert (cfg['topK'],cfg['topP'],cfg['temperature'],cfg['accelerators'])==(20,1.0,1.0,'cpu')
+          print('MCP240 natural-generation product invariants verified.')
+          PY
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build MCP240 release APK
+        working-directory: ./Android/src
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Verify signed APK identity
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='340'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.240'"
+
+      - name: Rename hash and upload APK artifact
+        id: apk
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          OUT="local-agent-plaza-1.0.14-mcp.240.apk"
+          cp "$SRC" "$OUT"
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$OUT" > "$OUT.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP240 APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-240
+          path: |
+            Android/src/local-agent-plaza-1.0.14-mcp.240.apk
+            Android/src/local-agent-plaza-1.0.14-mcp.240.apk.sha256
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Publish MCP240 APK release
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "Local Agent Plaza MCP240 Qwen3.5 natural generation" --notes "CPU Qwen3.5 Agent build with corrected ChatML and EOS metadata, official non-thinking sampler profile, soft presence penalty, and clean recurrent-state Engine boundaries. No output truncation or repetition watchdog." --prerelease
+          gh release upload "$APK_RELEASE_TAG" local-agent-plaza-1.0.14-mcp.240.apk local-agent-plaza-1.0.14-mcp.240.apk.sha256 --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish MCP240 result metadata
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA: ${{ steps.apk.outputs.sha }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/mcp240_result.json"
+          import json, os
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp240-natural-generation.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'run_number':int(os.environ['GITHUB_RUN_NUMBER']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'artifact_id':int(os.environ['ARTIFACT_ID']),
+              'artifact_url':os.environ['ARTIFACT_URL'],
+              'artifact_name':'local-agent-plaza-mcp-240',
+              'apk_name':'local-agent-plaza-1.0.14-mcp.240.apk',
+              'apk_sha256':os.environ['APK_SHA'],
+              'version_name':'1.0.14-mcp.240',
+              'version_code':340,
+              'package':'com.localagent.plaza.mcp',
+              'model_release_tag':'qwen35-2b-q8-4096-mcp240-natural-v2',
+              'model_file':'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm',
+              'model_size':int(os.environ['MCP240_MODEL_SIZE']),
+              'model_sha256':os.environ['MCP240_MODEL_SHA256'],
+              'model_parts':int(os.environ['MCP240_MODEL_PARTS']),
+              'backend':'CPU_FORCED',
+              'sampling':{'top_k':20,'top_p':1.0,'temperature':1.0,'presence_penalty':2.0,'repetition_penalty':1.0},
+              'natural_stop_token_ids':[248044,248046],
+              'hard_output_truncation':False,
+              'repetition_watchdog_cancel':False,
+              'recurrent_state_boundary':'fresh_engine_on_qwen35_conversation_reset',
+          }, indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/mcp240_result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp240_apk_result.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          EXISTING_SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ]; then
+            gh api --method PUT "$API" -f message="Update MCP240 APK result" -f branch=experimental -f sha="$EXISTING_SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message="Add MCP240 APK result" -f branch=experimental -f content="$CONTENT"
+          fi
