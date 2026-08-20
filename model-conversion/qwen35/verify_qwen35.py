@@ -216,10 +216,23 @@ def runtime_smoke(bundle: Path, cfg: dict) -> dict:
     prompt = str(cfg.get("smoke_prompt", "你好"))
     min_chars = int(cfg.get("smoke_min_output_chars", 1))
 
+    # Preserve the historical MCP238 conversion metadata exactly
+    # (top_k=1/top_p=1/temp=0). LiteRT-LM 0.15 CPU does not implement the
+    # resulting GREEDY sampler enum. The Plaza app supplies its runtime sampler,
+    # so the CPU smoke test uses the same MCP238 runtime values without
+    # modifying or repacking the model bundle.
+    runtime_sampler = {
+        "top_k": 20,
+        "top_p": 0.8,
+        "temperature": 0.6,
+    }
+
     started = time.time()
     with litert_lm.Engine(str(bundle), max_num_tokens=requested_max) as engine:
         engine_ready = time.time()
-        with engine.create_conversation() as conversation:
+        with engine.create_conversation(
+            sampler_config=litert_lm.SamplerConfig(**runtime_sampler)
+        ) as conversation:
             conv_ready = time.time()
             message = conversation.send_message(prompt)
             finished = time.time()
@@ -241,6 +254,7 @@ def runtime_smoke(bundle: Path, cfg: dict) -> dict:
     return {
         "runtime_package_version": runtime_version,
         "max_num_tokens": requested_max,
+        "sampler_override": runtime_sampler,
         "engine_create_seconds": round(engine_ready - started, 3),
         "conversation_create_seconds": round(conv_ready - engine_ready, 3),
         "send_message_seconds": round(finished - conv_ready, 3),
