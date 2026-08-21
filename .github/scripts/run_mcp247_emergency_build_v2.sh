@@ -13,7 +13,8 @@ out = src
 
 anchor3 = "# 3. Apply the narrow Qwen registration patch in the CI workspace only and audit every changed product file.\n"
 baseline = r'''# 2.5. Establish the protected pre-MCP247 unit-test baseline under the exact same JVM test runtime.
-# The protected product tree is still byte-identical to SOURCE_BASE_COMMIT at this point.
+# Run it in an isolated detached worktree so even a mutating legacy test cannot contaminate the
+# release workspace before the narrow MCP247 patch is applied.
 cat > "$RUNNER_TEMP/mcp247-ci-tests.init.gradle" <<'GRADLE'
 allprojects {
   afterEvaluate { p ->
@@ -24,10 +25,19 @@ allprojects {
   }
 }
 GRADLE
-rm -rf Android/src/app/build/test-results/testDebugUnitTest Android/src/app/build/reports/tests/testDebugUnitTest
+BASELINE_WORKTREE="$RUNNER_TEMP/mcp247_baseline_worktree"
+export BASELINE_WORKTREE
+rm -rf "$BASELINE_WORKTREE"
+git worktree add --detach "$BASELINE_WORKTREE" "$SOURCE_BASE_COMMIT"
+mkdir -p "$BASELINE_WORKTREE/Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp"
+rsync -a --delete --exclude='.git' \
+  Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp/ \
+  "$BASELINE_WORKTREE/Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp/"
+rm -rf "$BASELINE_WORKTREE/Android/src/app/build/test-results/testDebugUnitTest" \
+       "$BASELINE_WORKTREE/Android/src/app/build/reports/tests/testDebugUnitTest"
 set +e
 (
-  cd Android/src
+  cd "$BASELINE_WORKTREE/Android/src"
   ./gradlew --init-script "$RUNNER_TEMP/mcp247-ci-tests.init.gradle" --rerun-tasks testDebugUnitTest
 )
 BASE_TEST_RC=$?
@@ -35,8 +45,10 @@ set -e
 export BASE_TEST_RC
 python3 - <<'PYBASE' > "$RUNNER_TEMP/mcp247_baseline_unit_tests.json"
 import glob, json, os, xml.etree.ElementTree as ET
+root_dir=os.environ['BASELINE_WORKTREE']
 cases=[]; failures=[]
-for p in glob.glob('Android/src/app/build/test-results/testDebugUnitTest/TEST-*.xml'):
+pattern=os.path.join(root_dir,'Android/src/app/build/test-results/testDebugUnitTest/TEST-*.xml')
+for p in glob.glob(pattern):
     root=ET.parse(p).getroot()
     for tc in root.iter('testcase'):
         ident=f"{tc.attrib.get('classname','')}#{tc.attrib.get('name','')}"
@@ -48,7 +60,10 @@ assert len(cases) >= 100, f'baseline unit suite incomplete: total={len(cases)} r
 assert (rc == 0) == (len(failures) == 0), (rc, failures)
 print(json.dumps({'total':len(cases),'failures':sorted(set(failures)),'rc':rc}, indent=2))
 PYBASE
-echo MCP247_BASELINE_UNIT_SUITE_CAPTURED
+git worktree remove --force "$BASELINE_WORKTREE"
+git worktree prune
+git diff --quiet "$SOURCE_BASE_COMMIT"...HEAD -- Android model_allowlists
+echo MCP247_BASELINE_UNIT_SUITE_CAPTURED_ISOLATED
 
 # 3. Apply the narrow Qwen registration patch in the CI workspace only and audit every changed product file.
 '''
@@ -140,7 +155,7 @@ PY
 
 chmod +x "$MATERIALIZED"
 bash -n "$MATERIALIZED"
-grep -F 'MCP247_BASELINE_UNIT_SUITE_CAPTURED' "$MATERIALIZED"
+grep -F 'MCP247_BASELINE_UNIT_SUITE_CAPTURED_ISOLATED' "$MATERIALIZED"
 grep -F 'MCP247_UNIT_REGRESSION_NO_NEW_FAILURES_PASS' "$MATERIALIZED"
 grep -F "'unit_regression':{'protected_baseline_compared':True,'no_new_failures':True}" "$MATERIALIZED"
 exec bash "$MATERIALIZED"
