@@ -1,4 +1,5 @@
 name: MCP247 emergency media runtime restore
+# retry 4: CI-only Truth dependency injected; protected Android product source remains immutable.
 
 on:
   push:
