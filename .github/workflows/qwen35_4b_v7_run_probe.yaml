@@ -1,0 +1,38 @@
+name: Qwen3.5 4B v7 Run Probe
+
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/qwen35_4b_v7_run_probe.yaml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+      - name: Query v7 workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/qwen35_4b_q8_32k_convert_v7.yaml/runs?branch=experimental&per_page=5" > docs/qwen35_4b_q8_32768_v7_run_probe.json
+      - name: Persist
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/qwen35_4b_q8_32768_v7_run_probe.json
+          git commit -m 'diagnostics: record Qwen3.5 4B v7 run id'
+          git pull --rebase origin experimental
+          git push origin HEAD:experimental
