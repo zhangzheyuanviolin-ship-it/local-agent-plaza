@@ -45,12 +45,13 @@ jobs:
           arr=raw.view(ml_dtypes.bfloat16)
           assert arr.dtype == ml_dtypes.bfloat16
           assert np.array_equal(arr.view(np.uint16), raw)
-          with ir.Context() as ctx:
+          with ir.Context() as ctx, ir.Location.unknown():
             et=ir.BF16Type.get()
             ty=ir.RankedTensorType.get(t.shape, et)
             attr=ir.DenseElementsAttr.get(np.ascontiguousarray(arr), type=ty)
             assert attr is not None
-          assert str(export_utils.torch_dtype_to_ir_element_type(torch.bfloat16)) == 'bf16'
+          with ir.Context() as ctx, ir.Location.unknown():
+            assert str(export_utils.torch_dtype_to_ir_element_type(torch.bfloat16)) == 'bf16'
 
           root=Path(os.environ['RUNNER_TEMP'])/'litert-torch'/'litert_torch'
           scopes=[root/'backend', root/'_convert', root/'generative'/'export_hf']
