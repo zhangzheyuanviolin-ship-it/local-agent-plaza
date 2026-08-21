@@ -1,0 +1,43 @@
+name: MCP247 release inventory probe
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp247_release_inventory_probe.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+      - name: Capture exact Qwen3.5 2B 32K release inventory
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: qwen35-2b-q8-32768-mcp238lineage-v3
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,name,assets > "$RUNNER_TEMP/inventory.json"
+          python - <<'PY' > "$RUNNER_TEMP/result.json"
+          import json, os
+          p=os.path.join(os.environ['RUNNER_TEMP'],'inventory.json')
+          d=json.load(open(p))
+          print(json.dumps(d,indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp247_release_inventory.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP247 release inventory probe' -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP247 release inventory probe' -f branch=experimental -f content="$CONTENT"
+          fi
