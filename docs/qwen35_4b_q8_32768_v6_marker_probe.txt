@@ -1,0 +1,346 @@
+QWEN35_4B_V6_MARKER_PROBE
+=== LIFETIME MARKERS ===
+175:2026-08-21T02:05:40.7587688Z QWEN35_V6_EMERGENCY_SWAP_TRIGGER swap_free_mb=3071 disk_free_mb=87976 add_gib=4
+1404:2026-08-21T02:10:13.5131574Z QWEN35_V6_TASK_ORDER external_embedder_before_text=true
+1519:2026-08-21T02:10:22.5255448Z QWEN35_V6_UNQUANTIZED_CLEANUP removed=/home/runner/work/_temp/qwen35-4b-output/tmpq8vjblzi/embedder.tflite bytes=1271400696
+7493:2026-08-21T02:53:06.2449733Z QWEN35_V6_PRE_QUANT_RELEASE begin source_model=true export_modules=true
+7494:2026-08-21T02:53:08.9563769Z QWEN35_V6_PRE_QUANT_RELEASE done
+8666:2026-08-21T03:00:09.0178999Z QWEN35_V6_UNQUANTIZED_CLEANUP removed=/home/runner/work/_temp/qwen35-4b-output/tmpq8vjblzi/model.tflite bytes=35787287888
+8884:2026-08-21T03:00:35.2380089Z QWEN35_V6_TASK_ORDER external_embedder_before_text=true
+8988:2026-08-21T03:00:43.2861992Z QWEN35_V6_UNQUANTIZED_CLEANUP removed=/home/runner/work/_temp/qwen35-4b-output/tmptmanim1h/embedder.tflite bytes=1271400696
+=== EXPORT/PTQ MARKERS ===
+19:2026-08-21T02:05:35.4725358Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260816.277
+121:2026-08-21T02:05:39.8606302Z   allow-prereleases: false
+729:2026-08-21T02:08:22.7349227Z HEAD is now at 2117fc43 Updated the README to include v0.15 release.
+731:2026-08-21T02:08:22.8137807Z QWEN35_V6_LIFETIME_PATCH_PASS task_order=embedder_then_text pre_quant_source_release=true unquantized_cleanup=true
+879:2026-08-21T02:08:52.6215079Z Collecting ai-edge-quantizer-nightly
+880:2026-08-21T02:08:52.6303599Z   Downloading ai_edge_quantizer_nightly-0.10.0.dev20260821-py3-none-any.whl.metadata (22 kB)
+939:2026-08-21T02:08:55.1870420Z Collecting flatbuffers (from ai-edge-litert-nightly[model-utils])
+940:2026-08-21T02:08:55.1907458Z   Downloading flatbuffers-25.12.19-py2.py3-none-any.whl.metadata (1.0 kB)
+953:2026-08-21T02:08:55.4430201Z Collecting litert-lm-builder (from ai-edge-quantizer-nightly)
+969:2026-08-21T02:08:55.7272727Z Collecting tomli (from litert-lm-builder->ai-edge-quantizer-nightly)
+1007:2026-08-21T02:08:56.7169327Z Downloading ai_edge_quantizer_nightly-0.10.0.dev20260821-py3-none-any.whl (481 kB)
+1038:2026-08-21T02:08:58.4419620Z Downloading flatbuffers-25.12.19-py2.py3-none-any.whl (26 kB)
+1051:2026-08-21T02:08:59.1940572Z Installing collected packages: multipledispatch, flatbuffers, wadler-lindig, urllib3, typing-extensions, tqdm, tomli, termcolor, tabulate, shellingham, sentencepiece, safetensors, regex, pyyaml, pygments, psutil, protobuf, pillow, ordered-set, opt_einsum, numpy, mdurl, lark, immutabledict, idna, hf-xet, h11, click, charset_normalizer, certifi, backports.strenum, annotated-doc, absl-py, xdsl, scipy, requests, ml_dtypes, markdown-it-py, litert-lm-builder, jaxtyping, httpcore, fire, anyio, rich, litert-converter, kagglesdk, jaxlib, httpx, ai-edge-litert-nightly, typer, kagglehub, jax, huggingface_hub, ai-edge-quantizer-nightly, tokenizers, transformers
+1126:2026-08-21T02:09:21.3513156Z Successfully installed absl-py-2.5.0 ai-edge-litert-nightly-2.3.0.dev20260819 ai-edge-quantizer-nightly-0.10.0.dev20260821 annotated-doc-0.0.5 anyio-4.14.2 backports.strenum-1.2.8 certifi-2026.7.22 charset_normalizer-3.5.1 click-8.4.2 fire-0.7.1 flatbuffers-25.12.19 h11-0.16.0 hf-xet-1.6.0 httpcore-1.0.9 httpx-0.28.1 huggingface_hub-1.28.0 idna-3.19 immutabledict-4.2.1 jax-0.10.2 jaxlib-0.10.2 jaxtyping-0.3.11 kagglehub-1.0.2 kagglesdk-0.1.37 lark-1.3.1 litert-converter-0.4.0.dev20260819 litert-lm-builder-0.16.1 markdown-it-py-4.2.0 mdurl-0.1.2 ml_dtypes-0.6.0 multipledispatch-1.0.0 numpy-2.4.6 opt_einsum-3.4.0 ordered-set-4.1.0 pillow-12.3.0 protobuf-7.36.0 psutil-7.2.2 pygments-2.21.0 pyyaml-6.0.3 regex-2026.7.19 requests-2.34.2 rich-15.0.0 safetensors-0.8.0 scipy-1.17.1 sentencepiece-0.2.2 shellingham-1.5.4 tabulate-0.10.0 termcolor-3.3.0 tokenizers-0.22.2 tomli-2.4.1 tqdm-4.70.0 transformers-5.15.1 typer-0.27.1 typing-extensions-4.12.2 urllib3-2.7.0 wadler-lindig-0.1.7 xdsl-0.28.0
+1148:2026-08-21T02:09:24.0874423Z Requirement already satisfied: flatbuffers in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from litert-lm-builder==0.15.0->litert-lm==0.15.0) (25.12.19)
+1175:2026-08-21T02:09:30.9309643Z W0821 02:09:30.930000 2812 site-packages/torch/utils/_pytree.py:630] <enum 'KernelPreference'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+1316:2026-08-21T02:10:12.1556459Z W0821 02:10:12.154000 2930 site-packages/torch/utils/_pytree.py:630] <enum 'KernelPreference'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+1317:2026-08-21T02:10:12.4856751Z W0821 02:10:12.484000 2930 site-packages/torch/utils/_pytree.py:630] <enum 'ScaleCalculationMode'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+1381:2026-08-21T02:10:13.5123622Z quantization_recipe    : 'dynamic_wi8_afp32'
+1390:2026-08-21T02:10:13.5126360Z static_quantization_recipe : None
+1401:2026-08-21T02:10:13.5130248Z vision_encoder_quantization_recipe : 'dynamic_wi8_afp32'
+1432:2026-08-21T02:10:14.8306495Z Convert > Torch Export: embedder > ExportedProgram Run Decompositions
+1434:2026-08-21T02:10:15.0547883Z Convert > Torch Export: embedder > ExportedProgram Run Decompositions (+00:00)
+1448:2026-08-21T02:10:15.0895826Z Convert > Lower to MLIR: embedder > ExportedProgram Run Decompositions
+1450:2026-08-21T02:10:15.3385693Z Convert > Lower to MLIR: embedder > ExportedProgram Run Decompositions (+00:00)
+1452:2026-08-21T02:10:15.3418235Z Convert > Lower to MLIR: embedder > ExportedProgram Run Decompositions
+1454:2026-08-21T02:10:15.3426546Z Convert > Lower to MLIR: embedder > ExportedProgram Run Decompositions (+00:00)
+1477:2026-08-21T02:10:17.6593923Z I0000 00:00:1787278217.659014    2930 flatbuffer_export.cc:4342] Estimated count of arithmetic ops: 0  ops, equivalently 0  MACs
+1487:2026-08-21T02:10:19.7686855Z I0000 00:00:1787278219.768330    2930 flatbuffer_export.cc:4342] Estimated count of arithmetic ops: 0  ops, equivalently 0  MACs
+1493:2026-08-21T02:10:20.6159121Z Quantized model size: 1.18 GiB
+1494:2026-08-21T02:10:20.6160246Z Quantization Ratio: 1.00 (1.0x smaller)
+1519:2026-08-21T02:10:22.5255448Z QWEN35_V6_UNQUANTIZED_CLEANUP removed=/home/runner/work/_temp/qwen35-4b-output/tmpq8vjblzi/embedder.tflite bytes=1271400696
+5524:2026-08-21T02:38:53.5104094Z I0000 00:00:1787279933.508349    2930 flatbuffer_export.cc:4342] Estimated count of arithmetic ops: 0  ops, equivalently 0  MACs
+5716:2026-08-21T02:40:08.4540048Z Model to /home/runner/work/_temp/qwen35-4b-output/tmpq8vjblzi/model.tflite
+5718:2026-08-21T02:40:08.8000286Z I0000 00:00:1787280008.799727    2930 flatbuffer_export.cc:4342] Estimated count of arithmetic ops: 932.632 G  ops, equivalently 466.316 G  MACs
+7399:2026-08-21T02:52:28.7511687Z Model to /home/runner/work/_temp/qwen35-4b-output/tmpq8vjblzi/model.tflite 
+7493:2026-08-21T02:53:06.2449733Z QWEN35_V6_PRE_QUANT_RELEASE begin source_model=true export_modules=true
+7494:2026-08-21T02:53:08.9563769Z QWEN35_V6_PRE_QUANT_RELEASE done
+7521:2026-08-21T02:53:19.2585008Z Generating Quantization Parameters::   0%|          | 0/30150 [00:00<?, ?it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:53:19Z ===
+7545:2026-08-21T02:53:25.7596930Z Generating Quantization Parameters::   0%|          | 4/30150 [00:12<25:27:04,  3.04s/it]
+7546:2026-08-21T02:53:26.0435459Z Generating Quantization Parameters::   0%|          | 46/30150 [00:12<1:39:54,  5.02it/s]
+7547:2026-08-21T02:53:28.3273632Z Generating Quantization Parameters::   4%|▎         | 1114/30150 [00:12<02:52, 168.40it/s]
+7548:2026-08-21T02:53:28.5668670Z Generating Quantization Parameters::   4%|▍         | 1340/30150 [00:15<03:17, 145.53it/s]
+7549:2026-08-21T02:53:29.2683929Z Generating Quantization Parameters::   7%|▋         | 2223/30150 [00:15<01:29, 313.42it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:53:29Z ===
+7573:2026-08-21T02:53:31.0945579Z Generating Quantization Parameters::   8%|▊         | 2439/30150 [00:17<02:01, 227.99it/s]
+7574:2026-08-21T02:53:35.6858265Z Generating Quantization Parameters::  11%|█         | 3324/30150 [00:17<01:03, 419.38it/s]
+7575:2026-08-21T02:53:35.9529767Z Generating Quantization Parameters::  12%|█▏        | 3534/30150 [00:22<02:17, 194.04it/s]
+7576:2026-08-21T02:53:38.1653705Z Generating Quantization Parameters::  15%|█▍        | 4511/30150 [00:22<01:11, 359.37it/s]
+7577:2026-08-21T02:53:38.4170194Z Generating Quantization Parameters::  16%|█▌        | 4725/30150 [00:24<01:36, 264.57it/s]
+7578:2026-08-21T02:53:39.2869060Z Generating Quantization Parameters::  19%|█▊        | 5612/30150 [00:25<00:55, 445.18it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:53:39Z ===
+7602:2026-08-21T02:53:40.9038610Z Generating Quantization Parameters::  19%|█▉        | 5825/30150 [00:27<01:20, 300.90it/s]
+7603:2026-08-21T02:53:46.1129400Z Generating Quantization Parameters::  22%|██▏       | 6713/30150 [00:27<00:46, 501.62it/s]
+7604:2026-08-21T02:53:46.3784234Z Generating Quantization Parameters::  23%|██▎       | 6924/30150 [00:32<01:54, 202.83it/s]
+7605:2026-08-21T02:53:49.3049558Z Generating Quantization Parameters::  26%|██▌       | 7895/30150 [00:33<01:02, 358.47it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:53:49Z ===
+7629:2026-08-21T02:53:50.1263207Z Generating Quantization Parameters::  27%|██▋       | 8109/30150 [00:36<01:39, 222.02it/s]
+7630:2026-08-21T02:53:52.8450227Z Generating Quantization Parameters::  30%|██▉       | 8996/30150 [00:36<00:57, 370.92it/s]
+7631:2026-08-21T02:53:53.1155070Z Generating Quantization Parameters::  31%|███       | 9209/30150 [00:39<01:23, 250.93it/s]
+7632:2026-08-21T02:53:59.3163996Z Generating Quantization Parameters::  33%|███▎      | 10097/30150 [00:39<00:47, 417.94it/s]
+7633:2026-08-21T02:53:59.3244683Z Generating Quantization Parameters::  34%|███▍      | 10302/30150 [00:46<01:56, 170.32it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:53:59Z ===
+7657:2026-08-21T02:54:02.7749204Z Generating Quantization Parameters::  37%|███▋      | 11279/30150 [00:46<01:02, 301.25it/s]
+7658:2026-08-21T02:54:03.0892451Z Generating Quantization Parameters::  38%|███▊      | 11475/30150 [00:49<01:29, 208.27it/s]
+7659:2026-08-21T02:54:06.3263657Z Generating Quantization Parameters::  41%|████      | 12380/30150 [00:49<00:50, 348.72it/s]
+7660:2026-08-21T02:54:06.6023661Z Generating Quantization Parameters::  42%|████▏     | 12564/30150 [00:53<01:19, 221.39it/s]
+7661:2026-08-21T02:54:09.3425711Z Generating Quantization Parameters::  45%|████▍     | 13481/30150 [00:53<00:44, 377.85it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:54:09Z ===
+7685:2026-08-21T02:54:13.0410153Z Generating Quantization Parameters::  45%|████▌     | 13672/30150 [00:59<01:40, 164.47it/s]
+7686:2026-08-21T02:54:16.1823396Z Generating Quantization Parameters::  49%|████▊     | 14663/30150 [00:59<00:52, 293.61it/s]
+7687:2026-08-21T02:54:16.2793055Z Generating Quantization Parameters::  49%|████▉     | 14854/30150 [01:02<01:14, 204.90it/s]
+7688:2026-08-21T02:54:19.3610064Z Generating Quantization Parameters::  52%|█████▏    | 15730/30150 [01:03<00:41, 350.79it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:54:19Z ===
+7712:2026-08-21T02:54:19.7854977Z Generating Quantization Parameters::  53%|█████▎    | 16088/30150 [01:06<00:58, 239.40it/s]
+7713:2026-08-21T02:54:22.9188410Z Generating Quantization Parameters::  55%|█████▌    | 16626/30150 [01:06<00:40, 335.35it/s]
+7714:2026-08-21T02:54:25.7224623Z Generating Quantization Parameters::  56%|█████▋    | 16965/30150 [01:09<00:56, 231.94it/s]
+7715:2026-08-21T02:54:25.8219994Z Generating Quantization Parameters::  57%|█████▋    | 17206/30150 [01:12<01:12, 178.25it/s]
+7716:2026-08-21T02:54:26.1420231Z Generating Quantization Parameters::  59%|█████▉    | 17741/30150 [01:12<00:45, 273.40it/s]
+7717:2026-08-21T02:54:29.3862545Z Generating Quantization Parameters::  60%|█████▉    | 18047/30150 [01:12<00:37, 326.36it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:54:29Z ===
+7741:2026-08-21T02:54:29.6701897Z Generating Quantization Parameters::  61%|██████    | 18272/30150 [01:16<01:04, 184.86it/s]
+7742:2026-08-21T02:54:29.9906895Z Generating Quantization Parameters::  62%|██████▏   | 18778/30150 [01:16<00:38, 292.70it/s]
+7743:2026-08-21T02:54:32.5524913Z Generating Quantization Parameters::  64%|██████▎   | 19148/30150 [01:16<00:29, 371.91it/s]
+7744:2026-08-21T02:54:32.6530346Z Generating Quantization Parameters::  64%|██████▍   | 19367/30150 [01:19<00:47, 225.19it/s]
+7745:2026-08-21T02:54:33.0410740Z Generating Quantization Parameters::  66%|██████▌   | 19851/30150 [01:19<00:29, 353.33it/s]
+7746:2026-08-21T02:54:38.3628983Z Generating Quantization Parameters::  67%|██████▋   | 20249/30150 [01:19<00:22, 443.10it/s]
+7747:2026-08-21T02:54:38.4616093Z Generating Quantization Parameters::  68%|██████▊   | 20458/30150 [01:25<01:04, 151.01it/s]
+7748:2026-08-21T02:54:38.5618460Z Generating Quantization Parameters::  69%|██████▉   | 20832/30150 [01:25<00:42, 219.37it/s]
+7749:2026-08-21T02:54:39.4093891Z Generating Quantization Parameters::  71%|███████   | 21329/30150 [01:25<00:25, 345.20it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:54:39Z ===
+7773:2026-08-21T02:54:41.4428307Z Generating Quantization Parameters::  72%|███████▏  | 21629/30150 [01:28<00:38, 223.52it/s]
+7774:2026-08-21T02:54:41.7172390Z Generating Quantization Parameters::  74%|███████▎  | 22177/30150 [01:28<00:22, 358.41it/s]
+7775:2026-08-21T02:54:44.3396056Z Generating Quantization Parameters::  75%|███████▍  | 22532/30150 [01:28<00:17, 444.03it/s]
+7776:2026-08-21T02:54:49.4343936Z Generating Quantization Parameters::  76%|███████▌  | 22791/30150 [01:31<00:29, 252.34it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:54:49Z ===
+7800:2026-08-21T02:54:55.2420560Z Generating Quantization Parameters::  77%|███████▋  | 23147/30150 [01:42<00:27, 252.34it/s]
+7801:2026-08-21T02:54:55.5171781Z Generating Quantization Parameters::  77%|███████▋  | 23148/30150 [01:42<01:23, 83.84it/s] 
+7802:2026-08-21T02:54:59.4534465Z Generating Quantization Parameters::  78%|███████▊  | 23633/30150 [01:42<00:50, 129.03it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:54:59Z ===
+7826:2026-08-21T02:55:00.7410543Z Generating Quantization Parameters::  79%|███████▉  | 23815/30150 [01:47<01:09, 91.51it/s] 
+7827:2026-08-21T02:55:03.1676231Z Generating Quantization Parameters::  82%|████████▏ | 24815/30150 [01:47<00:26, 202.58it/s]
+7828:2026-08-21T02:55:03.4644117Z Generating Quantization Parameters::  83%|████████▎ | 25005/30150 [01:49<00:30, 167.32it/s]
+7829:2026-08-21T02:55:05.8604873Z Generating Quantization Parameters::  86%|████████▌ | 25916/30150 [01:50<00:13, 304.34it/s]
+7830:2026-08-21T02:55:06.1734277Z Generating Quantization Parameters::  87%|████████▋ | 26103/30150 [01:52<00:18, 224.56it/s]
+7831:2026-08-21T02:55:09.4729817Z Generating Quantization Parameters::  90%|████████▉ | 27017/30150 [01:52<00:08, 390.99it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:55:09Z ===
+7878:2026-08-21T02:55:21.9248929Z Generating Quantization Parameters::  90%|█████████ | 27198/30150 [02:08<00:36, 81.87it/s] 
+7879:2026-08-21T02:55:27.0391866Z Generating Quantization Parameters::  90%|█████████ | 27207/30150 [02:08<00:36, 81.68it/s]
+7880:2026-08-21T02:55:29.3892232Z Generating Quantization Parameters::  91%|█████████ | 27336/30150 [02:13<00:45, 61.91it/s]
+7881:2026-08-21T02:55:29.5136070Z Generating Quantization Parameters::  91%|█████████ | 27427/30150 [02:16<00:47, 57.57it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:55:29Z ===
+7905:2026-08-21T02:55:32.2056076Z Generating Quantization Parameters::  91%|█████████ | 27492/30150 [02:16<00:44, 60.02it/s]
+7906:2026-08-21T02:55:32.4259871Z Generating Quantization Parameters::  91%|█████████▏| 27540/30150 [02:19<00:51, 51.16it/s]
+7907:2026-08-21T02:55:34.7034392Z Generating Quantization Parameters::  91%|█████████▏| 27575/30150 [02:19<00:46, 54.90it/s]
+7908:2026-08-21T02:55:35.1580025Z Generating Quantization Parameters::  92%|█████████▏| 27604/30150 [02:21<01:02, 40.62it/s]
+7909:2026-08-21T02:55:35.3705304Z Generating Quantization Parameters::  92%|█████████▏| 27625/30150 [02:21<01:01, 41.11it/s]
+7910:2026-08-21T02:55:35.5569620Z Generating Quantization Parameters::  92%|█████████▏| 27675/30150 [02:22<00:47, 51.90it/s]
+7911:2026-08-21T02:55:37.8939324Z Generating Quantization Parameters::  92%|█████████▏| 27694/30150 [02:22<00:44, 55.15it/s]
+7912:2026-08-21T02:55:38.0977431Z Generating Quantization Parameters::  92%|█████████▏| 27710/30150 [02:24<01:23, 29.15it/s]
+7913:2026-08-21T02:55:38.2773846Z Generating Quantization Parameters::  92%|█████████▏| 27775/30150 [02:24<00:50, 47.36it/s]
+7914:2026-08-21T02:55:39.5334098Z Generating Quantization Parameters::  92%|█████████▏| 27793/30150 [02:25<00:46, 51.24it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:55:39Z ===
+7938:2026-08-21T02:55:40.5319602Z Generating Quantization Parameters::  92%|█████████▏| 27809/30150 [02:26<01:19, 29.55it/s]
+7939:2026-08-21T02:55:40.8419867Z Generating Quantization Parameters::  92%|█████████▏| 27820/30150 [02:27<01:21, 28.71it/s]
+7940:2026-08-21T02:55:41.7880809Z Generating Quantization Parameters::  92%|█████████▏| 27866/30150 [02:27<00:51, 44.50it/s]
+7941:2026-08-21T02:55:42.5635334Z Generating Quantization Parameters::  92%|█████████▏| 27877/30150 [02:28<01:09, 32.50it/s]
+7942:2026-08-21T02:55:42.9849522Z Generating Quantization Parameters::  92%|█████████▏| 27885/30150 [02:29<01:27, 25.85it/s]
+7943:2026-08-21T02:55:43.2127513Z Generating Quantization Parameters::  93%|█████████▎| 27891/30150 [02:29<01:35, 23.66it/s]
+7944:2026-08-21T02:55:43.4194869Z Generating Quantization Parameters::  93%|█████████▎| 27952/30150 [02:30<00:40, 54.70it/s]
+7945:2026-08-21T02:55:43.9398799Z Generating Quantization Parameters::  93%|█████████▎| 27965/30150 [02:30<00:39, 55.86it/s]
+7946:2026-08-21T02:55:45.3573569Z Generating Quantization Parameters::  93%|█████████▎| 27975/30150 [02:30<00:49, 43.50it/s]
+7947:2026-08-21T02:55:45.8614008Z Generating Quantization Parameters::  93%|█████████▎| 27983/30150 [02:32<01:38, 22.01it/s]
+7948:2026-08-21T02:55:46.1105186Z Generating Quantization Parameters::  93%|█████████▎| 27989/30150 [02:32<01:49, 19.75it/s]
+7949:2026-08-21T02:55:46.3426767Z Generating Quantization Parameters::  93%|█████████▎| 28052/30150 [02:32<00:40, 51.56it/s]
+7950:2026-08-21T02:55:46.8247817Z Generating Quantization Parameters::  93%|█████████▎| 28065/30150 [02:33<00:39, 52.25it/s]
+7951:2026-08-21T02:55:48.0406209Z Generating Quantization Parameters::  93%|█████████▎| 28074/30150 [02:33<00:49, 41.73it/s]
+7952:2026-08-21T02:55:48.4595109Z Generating Quantization Parameters::  93%|█████████▎| 28081/30150 [02:34<01:31, 22.66it/s]
+7953:2026-08-21T02:55:48.6863594Z Generating Quantization Parameters::  93%|█████████▎| 28087/30150 [02:35<01:38, 20.94it/s]
+7954:2026-08-21T02:55:48.8945399Z Generating Quantization Parameters::  93%|█████████▎| 28152/30150 [02:35<00:34, 57.58it/s]
+7955:2026-08-21T02:55:49.4262618Z Generating Quantization Parameters::  93%|█████████▎| 28165/30150 [02:35<00:34, 58.33it/s]
+7956:2026-08-21T02:55:49.5528376Z Generating Quantization Parameters::  93%|█████████▎| 28175/30150 [02:36<00:44, 44.16it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:55:49Z ===
+7980:2026-08-21T02:55:51.3229118Z Generating Quantization Parameters::  93%|█████████▎| 28183/30150 [02:37<01:29, 21.90it/s]
+7981:2026-08-21T02:55:51.6050193Z Generating Quantization Parameters::  93%|█████████▎| 28189/30150 [02:38<01:38, 19.88it/s]
+7982:2026-08-21T02:55:52.1037325Z Generating Quantization Parameters::  94%|█████████▎| 28243/30150 [02:38<00:41, 46.47it/s]
+7983:2026-08-21T02:55:53.4544566Z Generating Quantization Parameters::  94%|█████████▎| 28252/30150 [02:38<00:49, 38.47it/s]
+7984:2026-08-21T02:55:53.9223239Z Generating Quantization Parameters::  94%|█████████▎| 28259/30150 [02:40<01:29, 21.12it/s]
+7985:2026-08-21T02:55:54.1498627Z Generating Quantization Parameters::  94%|█████████▎| 28264/30150 [02:40<01:39, 18.99it/s]
+7986:2026-08-21T02:55:54.3619931Z Generating Quantization Parameters::  94%|█████████▍| 28329/30150 [02:40<00:34, 52.23it/s]
+7987:2026-08-21T02:55:54.8563423Z Generating Quantization Parameters::  94%|█████████▍| 28342/30150 [02:41<00:33, 53.52it/s]
+7988:2026-08-21T02:55:56.1305946Z Generating Quantization Parameters::  94%|█████████▍| 28352/30150 [02:41<00:41, 42.81it/s]
+7989:2026-08-21T02:55:56.5696655Z Generating Quantization Parameters::  94%|█████████▍| 28360/30150 [02:42<01:17, 23.00it/s]
+7990:2026-08-21T02:55:56.7782380Z Generating Quantization Parameters::  94%|█████████▍| 28366/30150 [02:43<01:24, 21.04it/s]
+7991:2026-08-21T02:55:56.9672470Z Generating Quantization Parameters::  94%|█████████▍| 28429/30150 [02:43<00:30, 56.19it/s]
+7992:2026-08-21T02:55:57.4749671Z Generating Quantization Parameters::  94%|█████████▍| 28442/30150 [02:43<00:29, 57.94it/s]
+7993:2026-08-21T02:55:58.7394201Z Generating Quantization Parameters::  94%|█████████▍| 28453/30150 [02:44<00:37, 45.30it/s]
+7994:2026-08-21T02:55:59.1955288Z Generating Quantization Parameters::  94%|█████████▍| 28461/30150 [02:45<01:11, 23.73it/s]
+7995:2026-08-21T02:55:59.4093206Z Generating Quantization Parameters::  94%|█████████▍| 28467/30150 [02:46<01:18, 21.38it/s]
+7996:2026-08-21T02:55:59.5775615Z Generating Quantization Parameters::  95%|█████████▍| 28529/30150 [02:46<00:28, 56.14it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:55:59Z ===
+8020:2026-08-21T02:56:00.1710448Z Generating Quantization Parameters::  95%|█████████▍| 28542/30150 [02:46<00:28, 57.33it/s]
+8021:2026-08-21T02:56:01.5127691Z Generating Quantization Parameters::  95%|█████████▍| 28553/30150 [02:46<00:36, 43.39it/s]
+8022:2026-08-21T02:56:01.9326641Z Generating Quantization Parameters::  95%|█████████▍| 28561/30150 [02:48<01:10, 22.46it/s]
+8023:2026-08-21T02:56:02.2360312Z Generating Quantization Parameters::  95%|█████████▍| 28567/30150 [02:48<01:16, 20.83it/s]
+8024:2026-08-21T02:56:02.7559599Z Generating Quantization Parameters::  95%|█████████▍| 28620/30150 [02:49<00:32, 47.16it/s]
+8025:2026-08-21T02:56:04.0451313Z Generating Quantization Parameters::  95%|█████████▍| 28629/30150 [02:49<00:39, 38.34it/s]
+8026:2026-08-21T02:56:04.4967688Z Generating Quantization Parameters::  95%|█████████▍| 28636/30150 [02:50<01:10, 21.52it/s]
+8027:2026-08-21T02:56:04.7371305Z Generating Quantization Parameters::  95%|█████████▍| 28641/30150 [02:51<01:17, 19.39it/s]
+8028:2026-08-21T02:56:04.8999594Z Generating Quantization Parameters::  95%|█████████▌| 28706/30150 [02:51<00:27, 53.06it/s]
+8029:2026-08-21T02:56:05.3738898Z Generating Quantization Parameters::  95%|█████████▌| 28719/30150 [02:51<00:25, 56.14it/s]
+8030:2026-08-21T02:56:06.6713795Z Generating Quantization Parameters::  95%|█████████▌| 28729/30150 [02:52<00:31, 44.81it/s]
+8031:2026-08-21T02:56:07.0919884Z Generating Quantization Parameters::  95%|█████████▌| 28737/30150 [02:53<01:00, 23.23it/s]
+8032:2026-08-21T02:56:07.3185407Z Generating Quantization Parameters::  95%|█████████▌| 28743/30150 [02:53<01:05, 21.39it/s]
+8033:2026-08-21T02:56:07.5043260Z Generating Quantization Parameters::  96%|█████████▌| 28806/30150 [02:54<00:23, 56.43it/s]
+8034:2026-08-21T02:56:08.0125928Z Generating Quantization Parameters::  96%|█████████▌| 28819/30150 [02:54<00:22, 58.30it/s]
+8035:2026-08-21T02:56:09.2961861Z Generating Quantization Parameters::  96%|█████████▌| 28830/30150 [02:54<00:29, 45.46it/s]
+8036:2026-08-21T02:56:09.5964364Z Generating Quantization Parameters::  96%|█████████▌| 28838/30150 [02:56<00:55, 23.57it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:56:09Z ===
+8060:2026-08-21T02:56:09.9450924Z Generating Quantization Parameters::  96%|█████████▌| 28844/30150 [02:56<01:00, 21.71it/s]
+8061:2026-08-21T02:56:10.0995420Z Generating Quantization Parameters::  96%|█████████▌| 28906/30150 [02:56<00:22, 56.15it/s]
+8062:2026-08-21T02:56:10.6092765Z Generating Quantization Parameters::  96%|█████████▌| 28919/30150 [02:56<00:20, 59.46it/s]
+8063:2026-08-21T02:56:12.0156176Z Generating Quantization Parameters::  96%|█████████▌| 28930/30150 [02:57<00:26, 45.93it/s]
+8064:2026-08-21T02:56:12.4531276Z Generating Quantization Parameters::  96%|█████████▌| 28938/30150 [02:58<00:54, 22.40it/s]
+8065:2026-08-21T02:56:12.7366572Z Generating Quantization Parameters::  96%|█████████▌| 28944/30150 [02:59<00:58, 20.61it/s]
+8066:2026-08-21T02:56:13.2421611Z Generating Quantization Parameters::  96%|█████████▌| 28997/30150 [02:59<00:24, 47.28it/s]
+8067:2026-08-21T02:56:14.5085124Z Generating Quantization Parameters::  96%|█████████▌| 29006/30150 [03:00<00:29, 38.73it/s]
+8068:2026-08-21T02:56:14.9201056Z Generating Quantization Parameters::  96%|█████████▌| 29013/30150 [03:01<00:52, 21.82it/s]
+8069:2026-08-21T02:56:15.1532831Z Generating Quantization Parameters::  96%|█████████▌| 29018/30150 [03:01<00:56, 19.97it/s]
+8070:2026-08-21T02:56:15.3732669Z Generating Quantization Parameters::  96%|█████████▋| 29083/30150 [03:01<00:19, 54.66it/s]
+8071:2026-08-21T02:56:15.8950216Z Generating Quantization Parameters::  97%|█████████▋| 29096/30150 [03:02<00:19, 55.33it/s]
+8072:2026-08-21T02:56:17.2111963Z Generating Quantization Parameters::  97%|█████████▋| 29106/30150 [03:02<00:24, 42.99it/s]
+8073:2026-08-21T02:56:17.6503949Z Generating Quantization Parameters::  97%|█████████▋| 29114/30150 [03:04<00:45, 22.63it/s]
+8074:2026-08-21T02:56:17.9717704Z Generating Quantization Parameters::  97%|█████████▋| 29120/30150 [03:04<00:49, 20.76it/s]
+8075:2026-08-21T02:56:18.2122450Z Generating Quantization Parameters::  97%|█████████▋| 29183/30150 [03:04<00:18, 52.09it/s]
+8076:2026-08-21T02:56:18.8499386Z Generating Quantization Parameters::  97%|█████████▋| 29196/30150 [03:05<00:18, 52.40it/s]
+8077:2026-08-21T02:56:19.6194214Z Generating Quantization Parameters::  97%|█████████▋| 29205/30150 [03:05<00:24, 37.93it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:56:19Z ===
+8101:2026-08-21T02:56:20.6720489Z Generating Quantization Parameters::  97%|█████████▋| 29211/30150 [03:06<00:46, 20.28it/s]
+8102:2026-08-21T02:56:20.9066927Z Generating Quantization Parameters::  97%|█████████▋| 29218/30150 [03:07<00:49, 18.90it/s]
+8103:2026-08-21T02:56:21.1038949Z Generating Quantization Parameters::  97%|█████████▋| 29283/30150 [03:07<00:16, 52.34it/s]
+8104:2026-08-21T02:56:21.6177565Z Generating Quantization Parameters::  97%|█████████▋| 29296/30150 [03:07<00:15, 54.17it/s]
+8105:2026-08-21T02:56:22.9204226Z Generating Quantization Parameters::  97%|█████████▋| 29306/30150 [03:08<00:19, 42.58it/s]
+8106:2026-08-21T02:56:23.3593127Z Generating Quantization Parameters::  97%|█████████▋| 29314/30150 [03:09<00:36, 22.64it/s]
+8107:2026-08-21T02:56:23.6548504Z Generating Quantization Parameters::  97%|█████████▋| 29320/30150 [03:10<00:39, 20.77it/s]
+8108:2026-08-21T02:56:24.1551634Z Generating Quantization Parameters::  97%|█████████▋| 29374/30150 [03:10<00:16, 47.83it/s]
+8109:2026-08-21T02:56:25.4682755Z Generating Quantization Parameters::  97%|█████████▋| 29383/30150 [03:10<00:19, 39.24it/s]
+8110:2026-08-21T02:56:25.9706540Z Generating Quantization Parameters::  97%|█████████▋| 29390/30150 [03:12<00:35, 21.64it/s]
+8111:2026-08-21T02:56:26.1988389Z Generating Quantization Parameters::  97%|█████████▋| 29395/30150 [03:12<00:39, 19.06it/s]
+8112:2026-08-21T02:56:26.4126666Z Generating Quantization Parameters::  98%|█████████▊| 29460/30150 [03:13<00:13, 52.39it/s]
+8113:2026-08-21T02:56:26.9629269Z Generating Quantization Parameters::  98%|█████████▊| 29473/30150 [03:13<00:12, 53.62it/s]
+8114:2026-08-21T02:56:28.3524402Z Generating Quantization Parameters::  98%|█████████▊| 29483/30150 [03:13<00:16, 41.35it/s]
+8115:2026-08-21T02:56:28.8340936Z Generating Quantization Parameters::  98%|█████████▊| 29491/30150 [03:15<00:30, 21.59it/s]
+8116:2026-08-21T02:56:29.0377552Z Generating Quantization Parameters::  98%|█████████▊| 29497/30150 [03:15<00:33, 19.63it/s]
+8117:2026-08-21T02:56:29.2750233Z Generating Quantization Parameters::  98%|█████████▊| 29560/30150 [03:15<00:11, 53.01it/s]
+8118:2026-08-21T02:56:29.6402114Z Generating Quantization Parameters::  98%|█████████▊| 29573/30150 [03:16<00:10, 53.29it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:56:29Z ===
+8142:2026-08-21T02:56:31.2534889Z Generating Quantization Parameters::  98%|█████████▊| 29584/30150 [03:16<00:13, 41.30it/s]
+8143:2026-08-21T02:56:31.6906871Z Generating Quantization Parameters::  98%|█████████▊| 29592/30150 [03:18<00:26, 21.42it/s]
+8144:2026-08-21T02:56:31.9373222Z Generating Quantization Parameters::  98%|█████████▊| 29598/30150 [03:18<00:27, 19.89it/s]
+8145:2026-08-21T02:56:32.1366898Z Generating Quantization Parameters::  98%|█████████▊| 29660/30150 [03:18<00:09, 51.74it/s]
+8146:2026-08-21T02:56:32.7351213Z Generating Quantization Parameters::  98%|█████████▊| 29673/30150 [03:18<00:08, 53.58it/s]
+8147:2026-08-21T02:56:34.0588801Z Generating Quantization Parameters::  98%|█████████▊| 29683/30150 [03:19<00:11, 39.93it/s]
+8148:2026-08-21T02:56:34.5311448Z Generating Quantization Parameters::  98%|█████████▊| 29691/30150 [03:20<00:21, 21.66it/s]
+8149:2026-08-21T02:56:34.8594136Z Generating Quantization Parameters::  98%|█████████▊| 29697/30150 [03:21<00:22, 19.73it/s]
+8150:2026-08-21T02:56:35.4098855Z Generating Quantization Parameters::  99%|█████████▊| 29751/30150 [03:21<00:08, 45.26it/s]
+8151:2026-08-21T02:56:36.6900527Z Generating Quantization Parameters::  99%|█████████▊| 29759/30150 [03:22<00:10, 36.13it/s]
+8152:2026-08-21T02:56:37.1256532Z Generating Quantization Parameters::  99%|█████████▊| 29765/30150 [03:23<00:18, 20.52it/s]
+8153:2026-08-21T02:56:37.3490355Z Generating Quantization Parameters::  99%|█████████▊| 29772/30150 [03:23<00:19, 19.65it/s]
+8154:2026-08-21T02:56:37.5509513Z Generating Quantization Parameters::  99%|█████████▉| 29837/30150 [03:24<00:05, 53.48it/s]
+8155:2026-08-21T02:56:38.0540473Z Generating Quantization Parameters::  99%|█████████▉| 29850/30150 [03:24<00:05, 55.00it/s]
+8156:2026-08-21T02:56:39.3096868Z Generating Quantization Parameters::  99%|█████████▉| 29860/30150 [03:24<00:06, 43.39it/s]
+8157:2026-08-21T02:56:39.6756147Z Generating Quantization Parameters::  99%|█████████▉| 29868/30150 [03:26<00:12, 23.37it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:56:39Z ===
+8181:2026-08-21T02:56:39.9816522Z Generating Quantization Parameters::  99%|█████████▉| 29874/30150 [03:26<00:12, 21.25it/s]
+8182:2026-08-21T02:56:40.1834646Z Generating Quantization Parameters::  99%|█████████▉| 29937/30150 [03:26<00:03, 55.94it/s]
+8183:2026-08-21T02:56:40.6968190Z Generating Quantization Parameters::  99%|█████████▉| 29950/30150 [03:26<00:03, 57.19it/s]
+8184:2026-08-21T02:56:42.0113462Z Generating Quantization Parameters::  99%|█████████▉| 29960/30150 [03:27<00:04, 44.07it/s]
+8185:2026-08-21T02:56:42.4375903Z Generating Quantization Parameters::  99%|█████████▉| 29968/30150 [03:28<00:07, 22.80it/s]
+8186:2026-08-21T02:56:42.6513330Z Generating Quantization Parameters::  99%|█████████▉| 29974/30150 [03:29<00:08, 21.01it/s]
+8187:2026-08-21T02:56:42.8094571Z Generating Quantization Parameters:: 100%|█████████▉| 30037/30150 [03:29<00:02, 56.20it/s]
+8188:2026-08-21T02:56:43.2832936Z Generating Quantization Parameters:: 100%|█████████▉| 30050/30150 [03:29<00:01, 59.31it/s]
+8189:2026-08-21T02:56:44.5521432Z Generating Quantization Parameters:: 100%|█████████▉| 30061/30150 [03:30<00:01, 47.09it/s]
+8190:2026-08-21T02:56:44.9668359Z Generating Quantization Parameters:: 100%|█████████▉| 30070/30150 [03:31<00:03, 24.52it/s]
+8191:2026-08-21T02:56:45.2473175Z Generating Quantization Parameters:: 100%|█████████▉| 30076/30150 [03:31<00:03, 22.42it/s]
+8192:2026-08-21T02:56:45.7554252Z Generating Quantization Parameters:: 100%|█████████▉| 30128/30150 [03:32<00:00, 49.75it/s]
+8193:2026-08-21T02:56:47.0482665Z Generating Quantization Parameters:: 100%|█████████▉| 30137/30150 [03:32<00:00, 40.06it/s]
+8194:2026-08-21T02:56:49.7002080Z Generating Quantization Parameters:: 100%|█████████▉| 30144/30150 [03:33<00:00, 21.91it/s]=== QWEN35_4B_V6_RESOURCE_MONITOR 2026-08-21T02:56:49Z ===
+8218:2026-08-21T02:56:59.2396236Z Generating Quantization Parameters:: 100%|█████████▉| 30149/30150 [03:46<00:00,  3.08it/s]
+8219:2026-08-21T02:56:59.2397382Z Generating Quantization Parameters:: 100%|██████████| 30150/30150 [03:46<00:00, 133.38it/s]
+8477:2026-08-21T02:58:41.7467540Z Model name: /home/runner/work/_temp/qwen35-4b-output/tmpq8vjblzi/model.tflite
+8479:2026-08-21T02:58:41.7483906Z Quantized model size: 8.39 GiB
+8480:2026-08-21T02:58:41.7484289Z Quantization Ratio: 0.25 (4.0x smaller)
+8666:2026-08-21T03:00:09.0178999Z QWEN35_V6_UNQUANTIZED_CLEANUP removed=/home/runner/work/_temp/qwen35-4b-output/tmpq8vjblzi/model.tflite bytes=35787287888
+8796:2026-08-21T03:00:33.5613780Z W0821 03:00:33.560000 8970 site-packages/torch/utils/_pytree.py:630] <enum 'KernelPreference'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+8797:2026-08-21T03:00:34.0624168Z W0821 03:00:34.061000 8970 site-packages/torch/utils/_pytree.py:630] <enum 'ScaleCalculationMode'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+8861:2026-08-21T03:00:35.2299529Z quantization_recipe    : 'dynamic_wi8_afp32'
+8870:2026-08-21T03:00:35.2327469Z static_quantization_recipe : None
+8881:2026-08-21T03:00:35.2368466Z vision_encoder_quantization_recipe : 'dynamic_wi8_afp32'
+8913:2026-08-21T03:00:36.6586738Z Convert > Torch Export: embedder > ExportedProgram Run Decompositions
+8915:2026-08-21T03:00:36.8808497Z Convert > Torch Export: embedder > ExportedProgram Run Decompositions (+00:00)
+8929:2026-08-21T03:00:36.9436054Z Convert > Lower to MLIR: embedder > ExportedProgram Run Decompositions
+8931:2026-08-21T03:00:37.1910732Z Convert > Lower to MLIR: embedder > ExportedProgram Run Decompositions (+00:00)
+8933:2026-08-21T03:00:37.1952322Z Convert > Lower to MLIR: embedder > ExportedProgram Run Decompositions
+8935:2026-08-21T03:00:37.1975207Z Convert > Lower to MLIR: embedder > ExportedProgram Run Decompositions (+00:00)
+8979:2026-08-21T03:00:41.0154795Z I0000 00:00:1787281241.014825    8970 flatbuffer_export.cc:4342] Estimated count of arithmetic ops: 0  ops, equivalently 0  MACs
+8985:2026-08-21T03:00:41.7273855Z Quantized model size: 1.18 GiB
+8986:2026-08-21T03:00:41.7274657Z Quantization Ratio: 1.00 (1.0x smaller)
+8988:2026-08-21T03:00:43.2861992Z QWEN35_V6_UNQUANTIZED_CLEANUP removed=/home/runner/work/_temp/qwen35-4b-output/tmptmanim1h/embedder.tflite bytes=1271400696
+=== PYTHON PROCESS SAMPLES NEAR END ===
+9930:2026-08-21T03:07:32.2025011Z    8970    8968 14391752 53822744 44.9 87.8 python
+9956:2026-08-21T03:07:42.2217448Z    8970    8968 14328704 53857784 46.0 87.5 python
+9979:2026-08-21T03:07:52.2396220Z    8970    8968 14261236 53886728 47.2 87.0 python
+10002:2026-08-21T03:08:02.2590842Z    8970    8968 14261332 53886728 48.4 87.1 python
+10025:2026-08-21T03:08:12.2798586Z    8970    8968 14258120 53883436 49.5 87.0 python
+10048:2026-08-21T03:08:22.2973037Z    8970    8968 14305428 53931564 50.5 87.3 python
+10071:2026-08-21T03:08:32.3139454Z    8970    8968 14347248 53977644 51.5 87.6 python
+10094:2026-08-21T03:08:42.3316319Z    8970    8968 14395476 54026796 52.5 87.9 python
+10117:2026-08-21T03:08:52.3493514Z    8970    8968 14439320 54070828 53.5 88.1 python
+10140:2026-08-21T03:09:02.3724886Z    8970    8968 14383592 54119980 54.4 87.8 python
+10163:2026-08-21T03:09:12.3907300Z    8970    8968 14353644 54169136 55.2 87.6 python
+10186:2026-08-21T03:09:22.4082935Z    8970    8968 14159532 54704852 56.1 86.4 python
+10209:2026-08-21T03:09:32.4266538Z    8970    8968 14175008 54721236 56.9 86.5 python
+10239:2026-08-21T03:09:42.4450848Z    8970    8968 14159580 54704852 57.7 86.4 python
+10264:2026-08-21T03:09:52.4636606Z    8970    8968 14108800 54673416 58.4 86.1 python
+10294:2026-08-21T03:10:02.4863422Z    8970    8968 14107776 54672376 59.1 86.1 python
+10319:2026-08-21T03:10:12.5046638Z    8970    8968 14108884 54673400 59.8 86.1 python
+10342:2026-08-21T03:10:22.5232751Z    8970    8968 14182780 54749176 60.5 86.6 python
+10365:2026-08-21T03:10:32.5412901Z    8970    8968 14210820 54776824 61.2 86.7 python
+10388:2026-08-21T03:10:42.5622071Z    8970    8968 14164724 54729720 61.8 86.5 python
+10411:2026-08-21T03:10:52.5814540Z    8970    8968 14164724 54729720 62.4 86.5 python
+10434:2026-08-21T03:11:02.6062457Z    8970    8968 14168396 54733832 63.0 86.5 python
+10457:2026-08-21T03:11:12.6242876Z    8970    8968 14224816 54791176 63.6 86.8 python
+10480:2026-08-21T03:11:22.6493806Z    8970    8968 14270568 54837256 64.1 87.1 python
+10503:2026-08-21T03:11:32.6683392Z    8970    8968 14331948 54898696 64.7 87.5 python
+10526:2026-08-21T03:11:42.6858231Z    8970    8968 14393720 54960136 65.2 87.9 python
+10549:2026-08-21T03:11:52.7023504Z    8970    8968 14437884 55004152 65.7 88.1 python
+10572:2026-08-21T03:12:02.7196920Z    8970    8968 14283988 55035896 66.2 87.2 python
+10598:2026-08-21T03:12:12.7375537Z    8970    8968 14290188 55042032 66.7 87.2 python
+10623:2026-08-21T03:12:22.7571364Z    8970    8968 14292212 55043968 67.1 87.2 python
+10646:2026-08-21T03:12:32.7755463Z    8970    8968 14317704 55069568 67.6 87.4 python
+10679:2026-08-21T03:12:42.7935499Z    8970    8968 14351620 55096188 68.0 87.6 python
+10702:2026-08-21T03:12:52.8108438Z    8970    8968 14356388 55100908 68.4 87.6 python
+10725:2026-08-21T03:13:02.8334367Z    8970    8968 14359320 55102912 68.9 87.6 python
+10748:2026-08-21T03:13:12.8521667Z    8970    8968 14359348 55102916 69.3 87.6 python
+10771:2026-08-21T03:13:22.8700246Z    8970    8968 14359364 55102916 69.7 87.6 python
+10794:2026-08-21T03:13:32.8879696Z    8970    8968 14359364 55102916 70.0 87.6 python
+10817:2026-08-21T03:13:42.9061058Z    8970    8968 14359432 55102948 70.4 87.6 python
+10840:2026-08-21T03:13:52.9237589Z    8970    8968 14359436 55102932 70.8 87.6 python
+10863:2026-08-21T03:14:02.9485478Z    8970    8968 14359444 55102932 71.1 87.6 python
+10886:2026-08-21T03:14:12.9681105Z    8970    8968 14364888 55109076 71.5 87.7 python
+10909:2026-08-21T03:14:22.9913129Z    8970    8968 14420652 55165396 71.8 88.0 python
+10932:2026-08-21T03:14:33.0098532Z    8970    8968 14376476 55221716 72.2 87.8 python
+10955:2026-08-21T03:14:43.0283792Z    8970    8968 14412092 55257556 72.5 88.0 python
+10978:2026-08-21T03:14:53.0467576Z    8970    8968 14243180 55280968 72.8 86.9 python
+11001:2026-08-21T03:15:03.0673757Z    8970    8968 14254312 55292116 73.1 87.0 python
+11030:2026-08-21T03:15:13.0851440Z    8970    8968 14405628 55543584 73.4 87.9 python
+11053:2026-08-21T03:15:23.1050966Z    8970    8968 14254620 55390312 73.7 87.0 python
+11076:2026-08-21T03:15:33.1226125Z    8970    8968 14257052 55393524 74.0 87.0 python
+11099:2026-08-21T03:15:43.1413595Z    8970    8968 14165136 55403236 74.3 86.5 python
+11122:2026-08-21T03:15:53.1662969Z    8970    8968 14167152 55405284 74.6 86.5 python
+11145:2026-08-21T03:16:03.1853035Z    8970    8968 14167152 55405284 74.8 86.5 python
+11168:2026-08-21T03:16:13.2051042Z    8970    8968 14167152 55405284 75.1 86.5 python
+11191:2026-08-21T03:16:23.2272112Z    8970    8968 14167156 55405300 75.4 86.5 python
+11214:2026-08-21T03:16:33.2520805Z    8970    8968 14167156 55405284 75.6 86.5 python
+11237:2026-08-21T03:16:43.2706151Z    8970    8968 14201028 55440116 75.9 86.7 python
+11260:2026-08-21T03:16:53.2890964Z    8970    8968 14267976 55507700 76.1 87.1 python
+11283:2026-08-21T03:17:03.3138511Z    8970    8968 14339884 55581428 76.3 87.5 python
+11306:2026-08-21T03:17:13.3319538Z    8970    8968 14377168 55619332 76.6 87.8 python
+11329:2026-08-21T03:17:23.3503795Z    8970    8968 14442292 55685380 76.8 88.2 python
+11352:2026-08-21T03:17:33.3681208Z    8970    8968 14421764 55762180 77.0 88.0 python
+11375:2026-08-21T03:17:43.4014321Z    8970    8968 14470840 55847156 77.3 88.3 python
+11398:2026-08-21T03:17:53.4207036Z    8970    8968 14113812 55847272 77.5 86.1 python
+11426:2026-08-21T03:18:03.4399358Z    8970    8968 14016532 55852516 77.7 85.6 python
+11449:2026-08-21T03:18:13.6599088Z    8970    8968 14349172 57892928 77.5 87.6 python
+11472:2026-08-21T03:18:23.7085895Z    8970    8968 13135900 59423980 77.7 80.2 python
+11495:2026-08-21T03:18:33.8063021Z    8970    8968 12197212 60504428 77.6 74.4 python
+11518:2026-08-21T03:18:43.8905597Z    8970    8968 10615420 61881864 77.8 64.8 python
+11541:2026-08-21T03:18:53.9501677Z    8970    8968 9808752 62952064 77.7 59.9 python
+11564:2026-08-21T03:19:03.9401753Z    8970    8968 8938336 64032512 77.6 54.5 python
+11587:2026-08-21T03:19:13.9678240Z    8970    8968 9931392 64032512 77.1 60.6 python
+11610:2026-08-21T03:19:24.1907414Z    8970    8968 10095516 66515716 76.8 61.6 python
+11633:2026-08-21T03:19:34.1849122Z    8970    8968 9970156 67304240 76.5 60.8 python
+11656:2026-08-21T03:19:44.2140398Z    8970    8968 10080128 68512632 76.2 61.5 python
+11679:2026-08-21T03:19:54.2344237Z    8970    8968 12201252 69680060 75.8 74.5 python
+11702:2026-08-21T03:20:04.2543520Z    8970    8968 12150244 70601712 75.4 74.2 python
+11725:2026-08-21T03:20:14.3180839Z    8970    8968 12064748 71554088 75.0 73.6 python
+11748:2026-08-21T03:20:24.2998603Z    8970    8968 13126344 72619104 74.7 80.1 python
+11771:2026-08-21T03:20:34.3285661Z    8970    8968 13752504 73643168 74.3 83.9 python
+11794:2026-08-21T03:20:44.3835718Z    8970    8968 14778368 74800348 74.0 90.2 python
+=== TERMINAL ERRORS ===
+8699:2026-08-21T03:00:13.6610631Z Traceback (most recent call last):
+11805:2026-08-21T03:20:46.3020992Z ##[error]The runner has received a shutdown signal. This can happen when the runner service is stopped, or a manually started runner is canceled.
+11806:2026-08-21T03:20:46.3049249Z ##[error]Process completed with exit code 143.
