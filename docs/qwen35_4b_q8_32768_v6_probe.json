@@ -1,0 +1,17 @@
+{
+  "captured_at": "2026-08-21T02:05:51.341179+00:00",
+  "workflow_runs": [
+    {
+      "id": 32438617748,
+      "run_number": 1,
+      "run_attempt": 1,
+      "event": "push",
+      "status": "in_progress",
+      "conclusion": null,
+      "head_sha": "1a4770c5197fec2c9b83fb327d341d5b7b3896aa",
+      "created_at": "2026-08-21T02:05:31Z",
+      "updated_at": "2026-08-21T02:05:35Z",
+      "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32438617748"
+    }
+  ]
+}
