@@ -57,7 +57,8 @@ repls = {
     "'schema':'local-agent-plaza.mcp247-emergency-media-runtime-restore.v2'": "'schema':'local-agent-plaza.mcp248-model-pool.v1'",
     "'upgrade_target':'MCP246 versionCode 346'": "'upgrade_target':'MCP247 versionCode 347'",
     '"$RUNNER_TEMP/mcp247_result.json"': '"$RUNNER_TEMP/mcp248_result.json"',
-    'publish_json_to_experimental "$RUNNER_TEMP/mcp247_result.json" docs/mcp247_emergency_media_restore_result.json \'Update MCP247 emergency restore acceptance\'': 'publish_json_to_experimental "$RUNNER_TEMP/mcp248_result.json" docs/mcp248_model_pool_result.json \'Update MCP248 model-pool acceptance\'',
+    'docs/mcp247_emergency_media_restore_result.json': 'docs/mcp248_model_pool_result.json',
+    "'Update MCP247 emergency restore acceptance'": "'Update MCP248 model-pool acceptance'",
     'echo MCP247_FULLY_VERIFIED_PASS': 'echo MCP248_FULLY_VERIFIED_PASS',
 }
 for old,new in repls.items():
