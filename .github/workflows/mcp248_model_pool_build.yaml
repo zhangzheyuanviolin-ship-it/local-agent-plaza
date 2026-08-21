@@ -1,4 +1,5 @@
 name: MCP248 model pool build
+# retry 3: pin the intended root Laguna phone-k4 LiteRT artifact after repository inventory exposed an auxiliary variant.
 
 on:
   push:
