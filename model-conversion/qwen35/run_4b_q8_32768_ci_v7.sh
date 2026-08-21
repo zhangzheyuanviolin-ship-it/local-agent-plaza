@@ -43,16 +43,16 @@ if s.count(old_import) != 1:
     raise SystemExit(f'v7 import anchor mismatch count={s.count(old_import)}')
 s = s.replace(old_import, new_import, 1)
 
-old_release = "    source_model_artifacts.model = None\n    model = None\n"
-new_release = """    _metadata_model = types.SimpleNamespace(\n        config=source_model_artifacts.model.config,\n        generation_config=getattr(source_model_artifacts.model, 'generation_config', None),\n    )\n    source_model_artifacts.model = _metadata_model\n    print('QWEN35_V7_METADATA_PROXY_READY config=true generation_config=' + str(_metadata_model.generation_config is not None).lower())\n    model = None\n"""
+old_release = 'source_model_artifacts.model = None'
+new_release = "source_model_artifacts.model = types.SimpleNamespace(config=source_model_artifacts.model.config, generation_config=getattr(source_model_artifacts.model, 'generation_config', None)); print('QWEN35_V7_METADATA_PROXY_READY config=true generation_config=' + str(source_model_artifacts.model.generation_config is not None).lower())"
 if s.count(old_release) != 1:
     raise SystemExit(f'v7 metadata-proxy anchor mismatch count={s.count(old_release)}')
 s = s.replace(old_release, new_release, 1)
 
 # Tighten the structural acceptance gate so the exact v6 regression cannot
 # silently return.
-needle = "assert ls.count('QWEN35_V7_PRE_QUANT_RELEASE begin') == 1\n"
-insert = needle + "assert ls.count('QWEN35_V7_METADATA_PROXY_READY') == 1\nassert 'source_model_artifacts.model = None' not in ls\n"
+needle = "assert ls.count('QWEN35_V7_PRE_QUANT_RELEASE begin') == 1"
+insert = needle + "\nassert ls.count('QWEN35_V7_METADATA_PROXY_READY') == 1\nassert 'source_model_artifacts.model = None' not in ls"
 if s.count(needle) != 1:
     raise SystemExit(f'v7 acceptance anchor mismatch count={s.count(needle)}')
 s = s.replace(needle, insert, 1)
@@ -64,7 +64,6 @@ if s.count(old_manifest) != 1:
     raise SystemExit(f'v7 manifest anchor mismatch count={s.count(old_manifest)}')
 s = s.replace(old_manifest, new_manifest, 1)
 
-# Update comments/labels that are useful in logs without altering behavior.
 s = s.replace('MCP238-lineage retry v6.', 'MCP238-lineage retry v7.')
 s = s.replace('v6 fixes that lifetime overlap', 'v7 retains the proven lifetime fix')
 s = s.replace('by v6.', 'by v7.')
