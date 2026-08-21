@@ -1,5 +1,6 @@
 name: Qwen3.5 4B v7 Run Probe
 
+# probe revision 2
 on:
   push:
     branches: [experimental]
