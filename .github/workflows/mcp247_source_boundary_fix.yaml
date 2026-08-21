@@ -1,0 +1,46 @@
+name: Repair MCP247 protected baseline gate
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp247_source_boundary_fix.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+      - name: Correct MCP247 baseline SHA and make the gate Android-source scoped
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/mcp247_emergency_media_runtime_restore.yaml')
+          s=p.read_text()
+          old="SOURCE_BASE_COMMIT: '8a6f49e3631606610316399123298996157fe2e5'"
+          new="SOURCE_BASE_COMMIT: '1aa2f87a22a50d9133a1776556201672c1707c77'"
+          if s.count(old)!=1:
+              raise SystemExit(f'baseline SHA anchor count={s.count(old)}')
+          s=s.replace(old,new,1)
+          old_block='''          mapfile -t changed < <(git diff --name-only "$SOURCE_BASE_COMMIT"...HEAD | sort)\n          printf 'Committed changes since protected base:\\n%s\\n' "${changed[*]}"\n          expected=(\n            '.github/scripts/patch_mcp247_qwen35_verified_2b_32k.py'\n            '.github/workflows/mcp247_emergency_media_runtime_restore.yaml'\n          )\n          mapfile -t expected_sorted < <(printf '%s\\n' "${expected[@]}" | sort)\n          test "${changed[*]}" = "${expected_sorted[*]}"\n\n          # No committed Android/product source drift is allowed in this emergency build.\n          git diff --quiet "$SOURCE_BASE_COMMIT"...HEAD -- Android model_allowlists\n'''
+          new_block='''          # Emergency CI/helper documentation commits are allowed after the protected base.\n          # Product source is not: every committed Android/model-allowlist byte must still match\n          # the exact pre-MCP247 baseline before the narrow runtime patch is applied in-workspace.\n          git diff --quiet "$SOURCE_BASE_COMMIT"...HEAD -- Android model_allowlists\n          test -f .github/scripts/patch_mcp247_qwen35_verified_2b_32k.py\n          test -f .github/workflows/mcp247_emergency_media_runtime_restore.yaml\n          echo 'Committed Android/model source matches protected pre-MCP247 baseline.'\n'''
+          if s.count(old_block)!=1:
+              raise SystemExit(f'source-boundary block anchor count={s.count(old_block)}')
+          p.write_text(s.replace(old_block,new_block,1))
+          PY
+          git diff --check
+          git diff -- .github/workflows/mcp247_emergency_media_runtime_restore.yaml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/mcp247_emergency_media_runtime_restore.yaml
+          git commit -m 'MCP247: fix protected source baseline gate'
+          git push origin HEAD:experimental
