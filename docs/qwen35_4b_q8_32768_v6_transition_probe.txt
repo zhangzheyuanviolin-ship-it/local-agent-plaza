@@ -1,0 +1,239 @@
+2026-08-21T02:58:29.9572113Z    2001    1998 98804 1431384 0.2  0.6 provjobd8708899
+2026-08-21T02:58:29.9574001Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T02:58:29.9575066Z    2054    2034 43688 274566828 0.3  0.2 Runner.Worker
+2026-08-21T02:58:29.9576010Z    2034    1982 31264 274411236 0.1  0.1 Runner.Listener
+2026-08-21T02:58:29.9577215Z    1410     977 21840 453208  0.0  0.1 python3
+2026-08-21T02:58:29.9578275Z    1175       1 18744 2127340 0.0  0.1 dockerd
+2026-08-21T02:58:29.9579345Z    1031       1 17464 2042612 0.0  0.1 containerd
+2026-08-21T02:58:29.9580468Z       1       0  8280  22848  0.1  0.0 systemd
+2026-08-21T02:58:29.9581163Z    1982       1  7924 1235684 0.0  0.0 hosted-compute-
+2026-08-21T02:58:29.9581898Z     156       1  6240 116076  0.0  0.0 systemd-journal
+2026-08-21T02:58:39.9643948Z                total        used        free      shared  buff/cache   available
+2026-08-21T02:58:39.9663742Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T02:58:39.9779867Z    2001    1998 99044 1431384 0.2  0.6 provjobd8708899
+2026-08-21T02:58:39.9780693Z    2054    2034 43712 274566812 0.3  0.2 Runner.Worker
+2026-08-21T02:58:39.9781336Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T02:58:39.9782501Z    2034    1982 31320 274411220 0.1  0.1 Runner.Listener
+2026-08-21T02:58:39.9783840Z    1410     977 21804 453208  0.0  0.1 python3
+2026-08-21T02:58:39.9784463Z    1175       1 18744 2127340 0.0  0.1 dockerd
+2026-08-21T02:58:39.9785070Z    1031       1 17064 2042612 0.0  0.1 containerd
+2026-08-21T02:58:39.9785695Z    1982       1  7924 1235684 0.0  0.0 hosted-compute-
+2026-08-21T02:58:39.9786632Z       1       0  7784  22848  0.1  0.0 systemd
+2026-08-21T02:58:39.9787304Z     156       1  6240 116076  0.0  0.0 systemd-journal
+2026-08-21T02:58:41.7467540Z Model name: /home/runner/work/_temp/qwen35-4b-output/tmpq8vjblzi/model.tflite
+2026-08-21T02:58:41.7483511Z Original model size: 33.33 GiB
+2026-08-21T02:58:41.7483906Z Quantized model size: 8.39 GiB
+2026-08-21T02:58:41.7484289Z Quantization Ratio: 0.25 (4.0x smaller)
+2026-08-21T02:58:41.7486512Z Total time: 328.63 s
+2026-08-21T02:58:49.9834299Z                total        used        free      shared  buff/cache   available
+2026-08-21T02:58:49.9851915Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T02:58:49.9966939Z    2001    1998 99112 1431384 0.2  0.6 provjobd8708899
+2026-08-21T02:58:49.9967747Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T02:58:49.9968859Z    2054    2034 43692 274566796 0.3  0.2 Runner.Worker
+2026-08-21T02:58:49.9969533Z    2034    1982 31372 274411220 0.1  0.1 Runner.Listener
+2026-08-21T02:58:49.9969998Z    1410     977 21804 453208  0.0  0.1 python3
+2026-08-21T02:58:49.9970359Z    1175       1 18744 2127340 0.0  0.1 dockerd
+2026-08-21T02:58:49.9970802Z    1031       1 17068 2042612 0.0  0.1 containerd
+2026-08-21T02:58:49.9971287Z    1982       1  7924 1235684 0.0  0.0 hosted-compute-
+2026-08-21T02:58:49.9971732Z       1       0  7784  22848  0.1  0.0 systemd
+2026-08-21T02:58:49.9972247Z     156       1  6240 116076  0.0  0.0 systemd-journal
+2026-08-21T02:59:00.0022754Z                total        used        free      shared  buff/cache   available
+2026-08-21T02:59:00.0040300Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T02:59:00.0152617Z    2001    1998 99280 1431384 0.2  0.6 provjobd8708899
+2026-08-21T02:59:00.0153111Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T02:59:00.0153857Z    2054    2034 43692 274566812 0.3  0.2 Runner.Worker
+2026-08-21T02:59:00.0154392Z    2034    1982 31372 274411220 0.1  0.1 Runner.Listener
+2026-08-21T02:59:00.0154885Z    1410     977 21804 453208  0.0  0.1 python3
+2026-08-21T02:59:00.0155330Z    1175       1 18744 2127340 0.0  0.1 dockerd
+2026-08-21T02:59:00.0155772Z    1031       1 17068 2042612 0.0  0.1 containerd
+2026-08-21T02:59:00.0156247Z    1982       1  7924 1235684 0.0  0.0 hosted-compute-
+2026-08-21T02:59:00.0156706Z       1       0  7784  22848  0.1  0.0 systemd
+2026-08-21T02:59:00.0157151Z     156       1  6240 116076  0.0  0.0 systemd-journal
+2026-08-21T02:59:10.0264342Z                total        used        free      shared  buff/cache   available
+2026-08-21T02:59:10.0301521Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T02:59:10.0436607Z    2001    1998 97212 1431384 0.2  0.5 provjobd8708899
+2026-08-21T02:59:10.0437289Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T02:59:10.0438334Z    2054    2034 40140 274566812 0.3  0.2 Runner.Worker
+2026-08-21T02:59:10.0439331Z    2034    1982 29952 274411220 0.1  0.1 Runner.Listener
+2026-08-21T02:59:10.0440561Z    1410     977 21788 453208  0.0  0.1 python3
+2026-08-21T02:59:10.0441222Z    1175       1 18736 2127340 0.0  0.1 dockerd
+2026-08-21T02:59:10.0441886Z    1031       1 17164 2042612 0.0  0.1 containerd
+2026-08-21T02:59:10.0442595Z    1982       1  7776 1235684 0.0  0.0 hosted-compute-
+2026-08-21T02:59:10.0443281Z       1       0  6700  22848  0.1  0.0 systemd
+2026-08-21T02:59:10.0443932Z     156       1  5760 116076  0.0  0.0 systemd-journal
+2026-08-21T02:59:20.0494832Z                total        used        free      shared  buff/cache   available
+2026-08-21T02:59:20.0514768Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T02:59:20.0639841Z    2001    1998 101640 1431384 0.2  0.6 provjobd8708899
+2026-08-21T02:59:20.0640412Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T02:59:20.0640953Z    2054    2034 40164 274566828 0.3  0.2 Runner.Worker
+2026-08-21T02:59:20.0641495Z    2034    1982 29948 274411220 0.1  0.1 Runner.Listener
+2026-08-21T02:59:20.0641894Z    1410     977 21764 453208  0.0  0.1 python3
+2026-08-21T02:59:20.0642177Z    1175       1 18692 2127340 0.0  0.1 dockerd
+2026-08-21T02:59:20.0642755Z    1031       1 17168 2042612 0.0  0.1 containerd
+2026-08-21T02:59:20.0643112Z    1982       1  7780 1235684 0.0  0.0 hosted-compute-
+2026-08-21T02:59:20.0643501Z       1       0  6440  22848  0.1  0.0 systemd
+2026-08-21T02:59:20.0643888Z     962       1  5228 295272  0.0  0.0 php-fpm8.3
+2026-08-21T02:59:30.1010378Z                total        used        free      shared  buff/cache   available
+2026-08-21T02:59:30.1039438Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T02:59:30.1142453Z    2001    1998 101556 1431384 0.2  0.6 provjobd8708899
+2026-08-21T02:59:30.1143100Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T02:59:30.1143751Z    2054    2034 39352 274566812 0.3  0.2 Runner.Worker
+2026-08-21T02:59:30.1368882Z    2034    1982 29556 274411220 0.1  0.1 Runner.Listener
+2026-08-21T02:59:30.1376406Z    1410     977 21852 453208  0.0  0.1 python3
+2026-08-21T02:59:30.1384780Z    1175       1 18680 2127340 0.0  0.1 dockerd
+2026-08-21T02:59:30.1386583Z    1031       1 17468 2042612 0.0  0.1 containerd
+2026-08-21T02:59:30.1395955Z    1982       1  7192 1235684 0.0  0.0 hosted-compute-
+2026-08-21T02:59:30.1404062Z       1       0  6328  22848  0.1  0.0 systemd
+2026-08-21T02:59:30.1408998Z     962       1  5228 295272  0.0  0.0 php-fpm8.3
+2026-08-21T02:59:40.1329982Z                total        used        free      shared  buff/cache   available
+2026-08-21T02:59:40.1369088Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T02:59:40.1529513Z    2001    1998 101452 1431384 0.2  0.6 provjobd8708899
+2026-08-21T02:59:40.1530404Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T02:59:40.1533843Z    2054    2034 35268 274566796 0.3  0.2 Runner.Worker
+2026-08-21T02:59:40.1537849Z    2034    1982 29060 274411220 0.1  0.1 Runner.Listener
+2026-08-21T02:59:40.1538826Z    1410     977 21852 453208  0.0  0.1 python3
+2026-08-21T02:59:40.1542258Z    1175       1 18192 2127340 0.0  0.1 dockerd
+2026-08-21T02:59:40.1546353Z    1031       1 17420 2042612 0.0  0.1 containerd
+2026-08-21T02:59:40.1553057Z    1982       1  7836 1235684 0.0  0.0 hosted-compute-
+2026-08-21T02:59:40.1556682Z       1       0  6312  22848  0.1  0.0 systemd
+2026-08-21T02:59:40.1557436Z     962       1  5228 295272  0.0  0.0 php-fpm8.3
+2026-08-21T02:59:50.1613250Z                total        used        free      shared  buff/cache   available
+2026-08-21T02:59:50.1666314Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T02:59:50.1809819Z    2001    1998 98160 1431384 0.2  0.5 provjobd8708899
+2026-08-21T02:59:50.1810272Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T02:59:50.1813378Z    2054    2034 33292 274566796 0.3  0.2 Runner.Worker
+2026-08-21T02:59:50.1819277Z    2034    1982 28364 274411236 0.1  0.1 Runner.Listener
+2026-08-21T02:59:50.1822690Z    1410     977 21848 453208  0.0  0.1 python3
+2026-08-21T02:59:50.1826700Z    1175       1 18192 2127340 0.0  0.1 dockerd
+2026-08-21T02:59:50.1831967Z    1031       1 17416 2042612 0.0  0.1 containerd
+2026-08-21T02:59:50.1837418Z    1982       1  8208 1235684 0.0  0.0 hosted-compute-
+2026-08-21T02:59:50.1842908Z       1       0  6248  22848  0.1  0.0 systemd
+2026-08-21T02:59:50.1848546Z     962       1  5224 295272  0.0  0.0 php-fpm8.3
+2026-08-21T03:00:00.1865717Z                total        used        free      shared  buff/cache   available
+2026-08-21T03:00:00.1884023Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T03:00:00.2000268Z    2930    2928 254368 32486524 49.8  1.5 python
+2026-08-21T03:00:00.2000919Z    2001    1998 97816 1431384 0.2  0.5 provjobd8708899
+2026-08-21T03:00:00.2004135Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T03:00:00.2009415Z    2054    2034 33392 274566812 0.3  0.2 Runner.Worker
+2026-08-21T03:00:00.2010178Z    2034    1982 28388 274411236 0.1  0.1 Runner.Listener
+2026-08-21T03:00:00.2017123Z    1410     977 21848 453208  0.0  0.1 python3
+2026-08-21T03:00:00.2021904Z    1175       1 20532 2127340 0.0  0.1 dockerd
+2026-08-21T03:00:00.2027322Z    1031       1 17420 2042612 0.0  0.1 containerd
+2026-08-21T03:00:00.2030330Z    1982       1  8120 1235684 0.0  0.0 hosted-compute-
+2026-08-21T03:00:00.2037478Z       1       0  6248  22848  0.1  0.0 systemd
+2026-08-21T03:00:00.2042813Z     962       1  5224 295272  0.0  0.0 php-fpm8.3
+2026-08-21T03:00:09.0178999Z QWEN35_V6_UNQUANTIZED_CLEANUP removed=/home/runner/work/_temp/qwen35-4b-output/tmpq8vjblzi/model.tflite bytes=35787287888
+2026-08-21T03:00:09.1774680Z (49:55) [ DONE] LiteRT GenAI Export > Export text prefill-decode model > 
+2026-08-21T03:00:09.1780399Z Quantize model (+07:00)
+2026-08-21T03:00:09.6636318Z (49:56) [ DONE] LiteRT GenAI Export > Export text prefill-decode model (+49:46)
+2026-08-21T03:00:10.2049870Z                total        used        free      shared  buff/cache   available
+2026-08-21T03:00:10.2094430Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T03:00:10.2182469Z    2930    2928 731216 32485500 49.8  4.4 python
+2026-08-21T03:00:10.2185995Z    2001    1998 98068 1431384 0.2  0.5 provjobd8708899
+2026-08-21T03:00:10.2186705Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T03:00:10.2190892Z    2054    2034 34204 274566812 0.3  0.2 Runner.Worker
+2026-08-21T03:00:10.2194452Z    2034    1982 28388 274411236 0.1  0.1 Runner.Listener
+2026-08-21T03:00:10.2198301Z    1410     977 21852 453208  0.0  0.1 python3
+2026-08-21T03:00:10.2198959Z    1175       1 20532 2127340 0.0  0.1 dockerd
+2026-08-21T03:00:10.2202329Z    1031       1 17420 2042612 0.0  0.1 containerd
+2026-08-21T03:00:10.2206851Z       1       0  9440  22848  0.1  0.0 systemd
+2026-08-21T03:00:10.2210218Z    1982       1  8120 1235684 0.0  0.0 hosted-compute-
+2026-08-21T03:00:10.2212432Z     156       1  7000 116076  0.0  0.0 systemd-journal
+2026-08-21T03:00:10.6408433Z (49:57) [START] LiteRT GenAI Export > Export tokenizer
+2026-08-21T03:00:13.0371666Z (49:59) [ DONE] LiteRT GenAI Export > Export tokenizer (+00:02)
+2026-08-21T03:00:13.5086737Z (49:59) [START] LiteRT GenAI Export > Package model
+2026-08-21T03:00:13.6528348Z Failed to parse chat template: No user query found in messages.
+2026-08-21T03:00:13.6556388Z (50:00) [ FAIL] LiteRT GenAI Export > Package model
+2026-08-21T03:00:13.6560055Z (50:00) [ FAIL] LiteRT GenAI Export
+2026-08-21T03:00:13.6610631Z Traceback (most recent call last):
+2026-08-21T03:00:13.6963362Z   File "/home/runner/work/local-agent-plaza/local-agent-plaza/model-conversion/qwen35/convert_qwen35.py", line 219, in <module>
+2026-08-21T03:00:13.6977701Z     main()
+2026-08-21T03:00:13.6983316Z   File "/home/runner/work/local-agent-plaza/local-agent-plaza/model-conversion/qwen35/convert_qwen35.py", line 151, in main
+2026-08-21T03:00:13.6984443Z     litert_export_module.export(
+2026-08-21T03:00:13.6994411Z   File "/home/runner/work/_temp/litert-torch/litert_torch/generative/export_hf/export.py", line 326, in export
+2026-08-21T03:00:13.6999722Z     exported_model_artifacts = run_export_tasks(
+2026-08-21T03:00:13.7003767Z                                ^^^^^^^^^^^^^^^^^
+2026-08-21T03:00:13.7004763Z   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/contextlib.py", line 81, in inner
+2026-08-21T03:00:13.7010066Z     return func(*args, **kwds)
+2026-08-21T03:00:13.7010681Z            ^^^^^^^^^^^^^^^^^^^
+2026-08-21T03:00:13.7013989Z   File "/home/runner/work/_temp/litert-torch/litert_torch/generative/export_hf/export.py", line 70, in run_export_tasks
+2026-08-21T03:00:13.7018241Z     exported_model_artifacts = export_task(
+2026-08-21T03:00:13.7018963Z                                ^^^^^^^^^^^^
+2026-08-21T03:00:13.7022542Z   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/contextlib.py", line 81, in inner
+2026-08-21T03:00:13.7023525Z     return func(*args, **kwds)
+2026-08-21T03:00:13.7024017Z            ^^^^^^^^^^^^^^^^^^^
+2026-08-21T03:00:13.7029593Z   File "/home/runner/work/_temp/litert-torch/litert_torch/generative/export_hf/core/litert_lm_builder.py", line 362, in package_model
+2026-08-21T03:00:13.7030710Z     llm_metadata = build_llm_metadata(
+2026-08-21T03:00:13.7033759Z                    ^^^^^^^^^^^^^^^^^^^
+2026-08-21T03:00:13.7038671Z   File "/home/runner/work/_temp/litert-torch/litert_torch/generative/export_hf/core/litert_lm_builder.py", line 263, in build_llm_metadata
+2026-08-21T03:00:13.7040015Z     model_type = litert_lm_model_type_override or model.config.model_type
+2026-08-21T03:00:13.7040746Z                                                   ^^^^^^^^^^^^
+2026-08-21T03:00:13.7044432Z AttributeError: 'NoneType' object has no attribute 'config'
+2026-08-21T03:00:20.2237159Z                total        used        free      shared  buff/cache   available
+2026-08-21T03:00:20.2256429Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T03:00:20.2363482Z    2930    2928 901672 31952640 49.7  5.5 python
+2026-08-21T03:00:20.2367390Z    2001    1998 98512 1431384 0.2  0.6 provjobd8708899
+2026-08-21T03:00:20.2371396Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T03:00:20.2378416Z    2054    2034 40464 274566832 0.3  0.2 Runner.Worker
+2026-08-21T03:00:20.2379292Z    2034    1982 28484 274411220 0.1  0.1 Runner.Listener
+2026-08-21T03:00:20.2383488Z    1410     977 21852 453208  0.0  0.1 python3
+2026-08-21T03:00:20.2386712Z    1175       1 20752 2127340 0.0  0.1 dockerd
+2026-08-21T03:00:20.2391924Z    1031       1 17420 2042612 0.0  0.1 containerd
+2026-08-21T03:00:20.2395396Z       1       0  9440  22848  0.1  0.0 systemd
+2026-08-21T03:00:20.2395875Z    1982       1  8120 1235684 0.0  0.0 hosted-compute-
+2026-08-21T03:00:20.2400442Z     156       1  7000 116076  0.0  0.0 systemd-journal
+2026-08-21T03:00:26.4655164Z Command exited with non-zero status 1
+2026-08-21T03:00:26.4664727Z 	Command being timed: "env PYTHONPATH=/home/runner/work/_temp/qwen35-v6-patches:/home/runner/work/_temp/litert-torch python model-conversion/qwen35/convert_qwen35.py --config /home/runner/work/_temp/runtime_config.json --output-dir /home/runner/work/_temp/qwen35-4b-output --lightweight true"
+2026-08-21T03:00:26.4671429Z 	User time (seconds): 1105.42
+2026-08-21T03:00:26.4676208Z 	System time (seconds): 397.40
+2026-08-21T03:00:26.4679794Z 	Percent of CPU this job got: 49%
+2026-08-21T03:00:26.4683210Z 	Elapsed (wall clock) time (h:mm:ss or m:ss): 50:18.30
+2026-08-21T03:00:26.4687023Z 	Average shared text size (kbytes): 0
+2026-08-21T03:00:26.4687627Z 	Average unshared data size (kbytes): 0
+2026-08-21T03:00:26.4691511Z 	Average stack size (kbytes): 0
+2026-08-21T03:00:26.4694301Z 	Average total size (kbytes): 0
+2026-08-21T03:00:26.4697803Z 	Maximum resident set size (kbytes): 15358444
+2026-08-21T03:00:26.4701568Z 	Average resident set size (kbytes): 0
+2026-08-21T03:00:26.4705433Z 	Major (requiring I/O) page faults: 7742029
+2026-08-21T03:00:26.4709099Z 	Minor (reclaiming a frame) page faults: 51825517
+2026-08-21T03:00:26.4712751Z 	Voluntary context switches: 8630464
+2026-08-21T03:00:26.4718703Z 	Involuntary context switches: 13362
+2026-08-21T03:00:26.4719354Z 	Swaps: 0
+2026-08-21T03:00:26.4723061Z 	File system inputs: 389874792
+2026-08-21T03:00:26.4726667Z 	File system outputs: 92563784
+2026-08-21T03:00:26.4730424Z 	Socket messages sent: 0
+2026-08-21T03:00:26.4731035Z 	Socket messages received: 0
+2026-08-21T03:00:26.4734934Z 	Signals delivered: 0
+2026-08-21T03:00:26.4738252Z 	Page size (bytes): 4096
+2026-08-21T03:00:26.4744713Z 	Exit status: 1
+2026-08-21T03:00:26.4751076Z Lightweight conversion failed rc=1; using historical standard fallback.
+2026-08-21T03:00:30.2415410Z                total        used        free      shared  buff/cache   available
+2026-08-21T03:00:30.2430718Z NAME                              TYPE SIZE  USED PRIO
+2026-08-21T03:00:30.2569295Z    8970    8968 244432 789844 71.2  1.4 python
+2026-08-21T03:00:30.2570204Z    2001    1998 100260 1431384 0.2  0.6 provjobd8708899
+2026-08-21T03:00:30.2574060Z     221       1 43708 305380  0.0  0.2 multipathd
+2026-08-21T03:00:30.2578753Z    2054    2034 41820 274566832 0.3  0.2 Runner.Worker
+2026-08-21T03:00:30.2582292Z    2034    1982 28484 274411220 0.1  0.1 Runner.Listener
+2026-08-21T03:00:30.2586093Z    1410     977 23052 453208  0.0  0.1 python3
+2026-08-21T03:00:30.2589565Z    1175       1 20816 2127340 0.0  0.1 dockerd
+2026-08-21T03:00:30.2590136Z    1031       1 17420 2042612 0.0  0.1 containerd
+2026-08-21T03:00:30.2593879Z       1       0  9440  22848  0.1  0.0 systemd
+2026-08-21T03:00:30.2597058Z    1982       1  8120 1235684 0.0  0.0 hosted-compute-
+2026-08-21T03:00:30.2600717Z     156       1  7000 116076  0.0  0.0 systemd-journal
+2026-08-21T03:00:33.2052980Z Failed to load /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/torchao/_C_mxfp8.cpython-310-x86_64-linux-gnu.so: Could not load this library: /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/torchao/_C_mxfp8.cpython-310-x86_64-linux-gnu.so
+2026-08-21T03:00:33.2066876Z Failed to load /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/torchao/_C_cutlass_90a.abi3.so: Could not load this library: /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/torchao/_C_cutlass_90a.abi3.so
+2026-08-21T03:00:33.5613780Z W0821 03:00:33.560000 8970 site-packages/torch/utils/_pytree.py:630] <enum 'KernelPreference'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+2026-08-21T03:00:34.0624168Z W0821 03:00:34.061000 8970 site-packages/torch/utils/_pytree.py:630] <enum 'ScaleCalculationMode'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+2026-08-21T03:00:34.6280724Z [ERROR] `cache_position` is part of Qwen3TTSTokenizerV2DecoderTransformerModel.forward's signature, but not documented. Make sure to add it to the docstring of the function in /home/runner/work/_temp/litert-torch/litert_torch/generative/export_hf/model_ext/qwen3_tts/tokenizer_v2/modeling_qwen3_tts_tokenizer_v2.py.
+2026-08-21T03:00:35.1673586Z [ERROR] `mlp_only_layers` is part of Qwen3_5TextConfig.__init__'s signature, but not documented. Make sure to add it to the docstring of the function in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/transformers/models/qwen3_5/modular_qwen3_5.py.
+2026-08-21T03:00:35.1686859Z [ERROR] `deepstack_visual_indexes` is part of Qwen3_5VisionConfig.__init__'s signature, but not documented. Make sure to add it to the docstring of the function in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/transformers/models/qwen3_5/modular_qwen3_5.py.
+2026-08-21T03:00:35.1997593Z === Qwen3.5 conversion preflight ===
+2026-08-21T03:00:35.2005557Z {
+2026-08-21T03:00:35.2009304Z   "python": "3.11.16 (main, Aug 13 2026, 02:46:14) [GCC 13.3.0]",
+2026-08-21T03:00:35.2012979Z   "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+2026-08-21T03:00:35.2016537Z   "torch": "2.12.0+cpu",
+2026-08-21T03:00:35.2017018Z   "transformers": "5.15.1",
+2026-08-21T03:00:35.2020500Z   "litert_torch": "0.10.0",
+2026-08-21T03:00:35.2024442Z   "model_type": "qwen3_5",
+2026-08-21T03:00:35.2028183Z   "max_position_embeddings": 262144,
+2026-08-21T03:00:35.2028764Z   "num_hidden_layers": 32,
