@@ -1,0 +1,427 @@
+name: MCP247 emergency media runtime restore
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp247_emergency_media_runtime_restore.yaml'
+      - '.github/scripts/patch_mcp247_qwen35_verified_2b_32k.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp247-emergency-media-runtime-restore
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build audit publish MCP247 emergency restore APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SOURCE_BASE_COMMIT: '8a6f49e3631606610316399123298996157fe2e5'
+      MODEL_RELEASE_TAG: 'qwen35-2b-q8-32768-mcp238lineage-v3'
+      MODEL_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-32768.litertlm'
+      MODEL_NAME: 'Qwen3.5-2B LiteRT-LM Q8 32768 Plaza MCP247'
+      MODEL_SIZE: '4780966112'
+      MODEL_SHA256: '364f975167ba9bb083d9c01f0d600e9b1bb2955962d320c30cf4375b1fe42cb1'
+      MODEL_PARTS: '10'
+      LOCAL_VERSION_NAME: '1.0.14-mcp.247'
+      LOCAL_VERSION_CODE: '347'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      APK_RELEASE_TAG: 'mcp247-emergency-media-runtime-restore-v1'
+      APK_NAME: 'local-agent-plaza-1.0.14-mcp.247.apk'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+
+      - name: Publish MCP247 run marker
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/mcp247_run.json"
+          import json, os
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp247-emergency-run.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'run_number':int(os.environ['GITHUB_RUN_NUMBER']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'html_url':f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          },indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/mcp247_run.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp247_emergency_run.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP247 emergency run marker' -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP247 emergency run marker' -f branch=experimental -f content="$CONTENT"
+          fi
+
+      - name: Verify immutable source boundary and protected product baseline
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git cat-file -e "$SOURCE_BASE_COMMIT^{commit}"
+          mapfile -t changed < <(git diff --name-only "$SOURCE_BASE_COMMIT"...HEAD | sort)
+          printf 'Committed changes since protected base:\n%s\n' "${changed[*]}"
+          expected=(
+            '.github/scripts/patch_mcp247_qwen35_verified_2b_32k.py'
+            '.github/workflows/mcp247_emergency_media_runtime_restore.yaml'
+          )
+          mapfile -t expected_sorted < <(printf '%s\n' "${expected[@]}" | sort)
+          test "${changed[*]}" = "${expected_sorted[*]}"
+
+          # No committed Android/product source drift is allowed in this emergency build.
+          git diff --quiet "$SOURCE_BASE_COMMIT"...HEAD -- Android model_allowlists
+
+          grep -F 'implementation(libs.litertlm)' Android/src/app/build.gradle.kts
+          grep -F 'litertlm = "0.15.0"' Android/src/gradle/libs.versions.toml
+          grep -F 'litert = "2.1.6"' Android/src/gradle/libs.versions.toml
+          ! grep -q 'litertlm-android-0.15.0-mcp242.aar' Android/src/app/build.gradle.kts
+          ! grep -q 'MCP242_LOCAL_LITERTLM_AAR' Android/src/app/build.gradle.kts
+
+          HELPER='Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt'
+          grep -F 'data class LlmModelInstance(val engine: Engine, var conversation: Conversation)' "$HELPER"
+          grep -F 'val engine = instance.engine' "$HELPER"
+          grep -F 'COMPAT_FRESH_REASON_TOP_LEVEL' "$HELPER"
+          grep -F 'COMPAT_FRESH_REASON_TOOL_CONTINUATION' "$HELPER"
+          grep -F 'put("enable_thinking", false)' "$HELPER"
+          grep -F 'put("thinking_token_budget", 0)' "$HELPER"
+          ! grep -q 'MCP240_QWEN35_RECURRENT_STATE_RESET' "$HELPER"
+          ! grep -q 'MCP241_QWEN35_AGENT_LOGITS_FIX' "$HELPER"
+          ! grep -q 'prefillPrefaceOnInit' "$HELPER"
+          ! grep -q 'instance.engineConfig' "$HELPER"
+
+          test -f Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/CompatSearchRequiredPolicy.kt
+          test -f Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/CompatToolCallWireAdapter.kt
+          test -f Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentCompatRuntimeCoordinator.kt
+          git grep -q 'SEARCH_REQUIRED=true' -- Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat
+          test -f Android/src/scripts/patch_tool_call_wire_compat.py
+          test -f Android/src/scripts/patch_mcp224_model_diagnostics.py
+          test -f Android/src/scripts/patch_box_music_apk.py
+          test -f Android/src/scripts/audit_box_music_apk.py
+          test -f Android/src/scripts/prepare_box049_runtime.py
+          git grep -q 'GoldenBox049RuntimeEngine' -- Android/src/app/src/main/java
+          git grep -q 'Bonsai' -- Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation
+          git grep -q 'FLUX' -- Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation
+          git grep -q 'Z-Image' -- Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation
+          echo 'MCP247 protected source boundary PASS'
+
+      - name: Verify published Qwen3.5 2B 32K release byte-for-byte
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/qwen35_verify"
+          mkdir -p "$WORK/parts"
+          gh release view "$MODEL_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets > "$WORK/release.json"
+          python - <<'PY'
+          import json, os
+          d=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'qwen35_verify','release.json')))
+          assets={a['name']:int(a['size']) for a in d['assets']}
+          f=os.environ['MODEL_FILE']
+          sizes=[480_000_000]*9+[460_966_112]
+          for i,size in enumerate(sizes):
+              name=f'{f}.part{i:02d}'
+              assert assets.get(name)==size,(name,assets.get(name),size)
+          assert 'manifest.json' in assets
+          print('Qwen3.5 release inventory PASS')
+          PY
+          for n in $(seq 0 9); do
+            i=$(printf '%02d' "$n")
+            gh release download "$MODEL_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$MODEL_FILE.part$i" --dir "$WORK/parts"
+          done
+          cat $(find "$WORK/parts" -maxdepth 1 -type f -name "$MODEL_FILE.part*" | sort) > "$WORK/full.litertlm"
+          test "$(head -c 8 "$WORK/full.litertlm")" = 'LITERTLM'
+          test "$(stat -c '%s' "$WORK/full.litertlm")" = "$MODEL_SIZE"
+          test "$(sha256sum "$WORK/full.litertlm" | awk '{print $1}')" = "$MODEL_SHA256"
+          rm -rf "$WORK"
+          echo 'Qwen3.5 full release reconstruction SHA PASS'
+
+      - name: Apply only verified MCP247 Qwen registration and audit workspace delta
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile .github/scripts/patch_mcp247_qwen35_verified_2b_32k.py
+          python3 .github/scripts/patch_mcp247_qwen35_verified_2b_32k.py
+          git diff --check
+          mapfile -t changed < <(git diff --name-only | sort)
+          expected=(
+            'Android/src/app/src/main/assets/model_allowlists/1_0_14.json'
+            'Android/src/app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt'
+            'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt'
+            'Android/src/app/src/main/java/com/google/ai/edge/gallery/worker/DownloadWorker.kt'
+            'model_allowlists/1_0_14.json'
+          )
+          mapfile -t expected_sorted < <(printf '%s\n' "${expected[@]}" | sort)
+          printf 'Runtime workspace delta:\n%s\n' "${changed[*]}"
+          test "${changed[*]}" = "${expected_sorted[*]}"
+
+          # Explicitly prove the historical Agent behavior fixes remain present after the Qwen patch.
+          HELPER='Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt'
+          grep -F 'MCP247_QWEN35_VERIFIED_2B_CPU_ONLY' "$HELPER"
+          grep -F 'data class LlmModelInstance(val engine: Engine, var conversation: Conversation)' "$HELPER"
+          grep -F 'val engine = instance.engine' "$HELPER"
+          grep -F 'put("enable_thinking", false)' "$HELPER"
+          ! grep -q 'MCP240_QWEN35_RECURRENT_STATE_RESET' "$HELPER"
+          ! grep -q 'prefillPrefaceOnInit' "$HELPER"
+          echo 'MCP247 workspace-delta and Agent invariants PASS'
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          keytool -list -v -keystore "$RUNNER_TEMP/local-agent-plaza-release.jks" -storepass "$ANDROID_RELEASE_KEYSTORE_PASSWORD" -alias "$ANDROID_RELEASE_KEY_ALIAS" > "$RUNNER_TEMP/signing_key.txt"
+          grep -E 'SHA256:|SHA-256:' "$RUNNER_TEMP/signing_key.txt" || true
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Run unit regression suite
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./gradlew testDebugUnitTest
+
+      - name: Build signed MCP247 release APK
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./gradlew assembleRelease
+
+      - name: Pin MCP237 Box 0.4.9 golden LiteRT runtime and run canonical ABI audit
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK='app/build/outputs/apk/release/app-release.apk'
+          PATCHED="$RUNNER_TEMP/mcp247-golden-runtime-unsigned.apk"
+          ALIGNED="$RUNNER_TEMP/mcp247-golden-runtime-aligned.apk"
+          SIGNED="$RUNNER_TEMP/mcp247-golden-runtime-signed.apk"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          python3 scripts/patch_box_music_apk.py "$APK" "$PATCHED"
+          "$BUILD_TOOLS/zipalign" -f 4 "$PATCHED" "$ALIGNED"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$ANDROID_RELEASE_KEYSTORE_PATH" \
+            --ks-key-alias "$ANDROID_RELEASE_KEY_ALIAS" \
+            --ks-pass env:ANDROID_RELEASE_KEYSTORE_PASSWORD \
+            --key-pass env:ANDROID_RELEASE_KEY_PASSWORD \
+            --out "$SIGNED" \
+            "$ALIGNED"
+          mv "$SIGNED" "$APK"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/apksigner.txt"
+          python3 scripts/audit_box_music_apk.py "$APK"
+
+      - name: Independently audit final APK native hashes symbols product modules and Qwen metadata
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK='app/build/outputs/apk/release/app-release.apk'
+          AUDIT="$RUNNER_TEMP/final_apk_audit"
+          mkdir -p "$AUDIT"
+          python - <<'PY'
+          import hashlib,json,os,re,zipfile
+          apk='app/build/outputs/apk/release/app-release.apk'
+          out=os.path.join(os.environ['RUNNER_TEMP'],'final_apk_audit')
+          expected={
+            'libLiteRt.so':'da27c0d6e59460248b1032610e924bc0f518a1229d2e3b081e0a229be51ab1c8',
+            'libLiteRtClGlAccelerator.so':'4b19f18f4ba9b1bde6060def4388b74d07f939db798c8c77c4f4e5125aeabcb1',
+            'liblitert_jni.so':'a98ea95cbb5ac4581bf483fa90df66454e15b965f4fa94a1b169a60319f4dc9a',
+          }
+          with zipfile.ZipFile(apk) as z:
+            names=set(z.namelist())
+            for lib,sha in expected.items():
+              entry=f'lib/arm64-v8a/{lib}'
+              assert entry in names,entry
+              data=z.read(entry)
+              actual=hashlib.sha256(data).hexdigest()
+              assert actual==sha,(lib,actual,sha)
+              open(os.path.join(out,lib),'wb').write(data)
+            lm='lib/arm64-v8a/liblitertlm_jni.so'
+            assert lm in names,lm
+            open(os.path.join(out,'liblitertlm_jni.so'),'wb').write(z.read(lm))
+            allow='assets/model_allowlists/1_0_14.json'
+            assert allow in names,allow
+            d=json.loads(z.read(allow))
+            matches=[m for m in d['models'] if m.get('name')==os.environ['MODEL_NAME']]
+            assert len(matches)==1,len(matches)
+            m=matches[0]; cfg=m['defaultConfig']
+            assert m['modelFile']==os.environ['MODEL_FILE']
+            assert m['commitHash']==os.environ['MODEL_RELEASE_TAG']
+            assert int(m['sizeInBytes'])==int(os.environ['MODEL_SIZE'])
+            assert cfg['accelerators']=='cpu'
+            assert int(cfg['maxContextLength'])==32768
+            assert int(cfg['maxTokens'])==4096
+            dex=b''.join(z.read(n) for n in sorted(names) if re.fullmatch(r'classes\d*\.dex',n))
+            for marker in (
+              b'MCP247_QWEN35_VERIFIED_2B_CPU_ONLY',
+              os.environ['MODEL_RELEASE_TAG'].encode(),
+              os.environ['MODEL_SHA256'].encode(),
+              b'GoldenBox049RuntimeEngine',
+              b'Bonsai', b'FLUX', b'Z-Image', b'SEARCH_REQUIRED=true',
+            ):
+              assert marker in dex,marker
+          print('Independent ZIP/DEX/model/native hash audit PASS')
+          PY
+
+          readelf -Ws "$AUDIT/libLiteRt.so" | grep -F 'LiteRtCreateModelFromFd'
+          readelf -Ws "$AUDIT/libLiteRt.so" | grep -F 'LiteRtGetBlockWiseQuantization'
+          ! readelf -d "$AUDIT/liblitertlm_jni.so" | grep -F 'libLiteRt.so'
+          echo 'Independent critical-symbol and LiteRT-LM isolation audit PASS'
+
+      - name: Verify package version signature and in-place-upgrade identity
+        id: identity
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK='app/build/outputs/apk/release/app-release.apk'
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --print-certs "$APK" | tee "$RUNNER_TEMP/final_certs.txt"
+          BADGING="$("$BT/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='347'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.247'"
+          CERT_SHA="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/final_certs.txt" | head -n1 | tr -d '\r')"
+          test -n "$CERT_SHA"
+          echo "cert_sha256=$CERT_SHA" >> "$GITHUB_OUTPUT"
+          echo 'Package/signature/version identity PASS; versionCode 347 is greater than MCP246 code 346.'
+
+      - name: Rename hash and publish permanent MCP247 GitHub Release
+        id: publish
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC='app/build/outputs/apk/release/app-release.apk'
+          cp "$SRC" "$APK_NAME"
+          SHA="$(sha256sum "$APK_NAME" | awk '{print $1}')"
+          SIZE="$(stat -c '%s' "$APK_NAME")"
+          printf '%s  %s\n' "$SHA" "$APK_NAME" > "$APK_NAME.sha256"
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title 'Local Agent Plaza MCP247 emergency media runtime restore' \
+              --notes 'Emergency layered restore over MCP246. Preserves the MCP210/MCP223 Agent architecture and later search/tool/diagnostic features; registers the independently verified MCP238-lineage Qwen3.5-2B Q8 32768 model on CPU; excludes MCP242 custom LiteRT-LM AAR/JNI and MCP246 Qwen Engine-reset behavior; restores the MCP237/Box 0.4.9 device-proven LiteRT native set after APK build and hard-audits ABI, symbols, media module fingerprints, package identity, signing, and model metadata.' \
+              --prerelease
+          gh release upload "$APK_RELEASE_TAG" "$APK_NAME" "$APK_NAME.sha256" --repo "$GITHUB_REPOSITORY" --clobber
+          echo "apk_sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "apk_size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Re-download published APK and prove release bytes are identical
+        shell: bash
+        working-directory: ./Android/src
+        run: |
+          set -euxo pipefail
+          VERIFY="$RUNNER_TEMP/release_verify"
+          mkdir -p "$VERIFY"
+          gh release download "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$APK_NAME" --dir "$VERIFY"
+          test "$(sha256sum "$VERIFY/$APK_NAME" | awk '{print $1}')" = "${{ steps.publish.outputs.apk_sha256 }}"
+          test "$(stat -c '%s' "$VERIFY/$APK_NAME")" = "${{ steps.publish.outputs.apk_size }}"
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          "$BT/apksigner" verify "$VERIFY/$APK_NAME"
+          BADGING="$("$BT/aapt" dump badging "$VERIFY/$APK_NAME" | head -n 1)"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='347'"
+          echo 'Published release redownload SHA/signature/package verification PASS'
+
+      - name: Persist MCP247 final acceptance record
+        shell: bash
+        env:
+          APK_SHA256: ${{ steps.publish.outputs.apk_sha256 }}
+          APK_SIZE: ${{ steps.publish.outputs.apk_size }}
+          CERT_SHA256: ${{ steps.identity.outputs.cert_sha256 }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/mcp247_result.json"
+          import json,os
+          print(json.dumps({
+            'schema':'local-agent-plaza.mcp247-emergency-media-runtime-restore.v1',
+            'status':'FULLY_VERIFIED_PASS',
+            'run_id':int(os.environ['GITHUB_RUN_ID']),
+            'head_sha':os.environ['GITHUB_SHA'],
+            'version_name':os.environ['LOCAL_VERSION_NAME'],
+            'version_code':int(os.environ['LOCAL_VERSION_CODE']),
+            'package':'com.localagent.plaza.mcp',
+            'upgrade_target':'MCP246 versionCode 346',
+            'apk_name':os.environ['APK_NAME'],
+            'apk_sha256':os.environ['APK_SHA256'],
+            'apk_size':int(os.environ['APK_SIZE']),
+            'certificate_sha256':os.environ['CERT_SHA256'],
+            'release_tag':os.environ['APK_RELEASE_TAG'],
+            'release_url':f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['APK_RELEASE_TAG']}/{os.environ['APK_NAME']}",
+            'agent_runtime':{
+              'persistent_engine':True,
+              'fresh_top_level_conversation':True,
+              'fresh_tool_continuation_conversation':True,
+              'compat_hard_thinking_off':True,
+              'search_required_policy_preserved':True,
+              'mcp212_warm_prefill_excluded':True,
+              'mcp246_qwen_engine_reset_excluded':True,
+            },
+            'litert_lm':{'version':'0.15.0','official_maven_runtime':True,'custom_mcp242_aar_jni':False},
+            'qwen35_2b':{
+              'release_tag':os.environ['MODEL_RELEASE_TAG'],
+              'file':os.environ['MODEL_FILE'],
+              'size':int(os.environ['MODEL_SIZE']),
+              'sha256':os.environ['MODEL_SHA256'],
+              'context':32768,
+              'backend':'CPU_FORCED',
+              'multipart_release_reconstructed_and_verified':True,
+            },
+            'media_native':{
+              'libLiteRt.so':'da27c0d6e59460248b1032610e924bc0f518a1229d2e3b081e0a229be51ab1c8',
+              'libLiteRtClGlAccelerator.so':'4b19f18f4ba9b1bde6060def4388b74d07f939db798c8c77c4f4e5125aeabcb1',
+              'liblitert_jni.so':'a98ea95cbb5ac4581bf483fa90df66454e15b965f4fa94a1b169a60319f4dc9a',
+              'LiteRtCreateModelFromFd_present':True,
+              'LiteRtGetBlockWiseQuantization_present':True,
+              'litertlm_jni_direct_core_link':False,
+              'canonical_box_apk_audit_passed':True,
+            },
+            'modules':{'box_music':True,'bonsai_image':True,'flux_image':True,'z_image':True},
+            'release_redownload_exact_sha_verified':True,
+          },indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/mcp247_result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp247_emergency_media_restore_result.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP247 emergency restore acceptance' -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP247 emergency restore acceptance' -f branch=experimental -f content="$CONTENT"
+          fi
+          echo 'MCP247_FULLY_VERIFIED_PASS'
