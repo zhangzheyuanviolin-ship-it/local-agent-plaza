@@ -1,0 +1,72 @@
+name: Qwen3.5 4B v6 Failure Probe
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/qwen35_4b_v6_failure_probe.yaml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout experimental
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+
+      - name: Capture compact v6 failure diagnosis
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/96644673999/logs" \
+            -o /tmp/v6.job.logs
+
+          mkdir -p /tmp/v6logs
+          if file /tmp/v6.job.logs | grep -qi 'zip archive'; then
+            unzip -q /tmp/v6.job.logs -d /tmp/v6logs
+            find /tmp/v6logs -type f -print0 | sort -z | xargs -0 cat > /tmp/v6.all.log
+          else
+            cp /tmp/v6.job.logs /tmp/v6.all.log
+          fi
+
+          mkdir -p docs
+          {
+            echo 'QWEN35_4B_V6_FAILURE_PROBE'
+            echo 'run_id=32438617748'
+            echo 'job_id=96644673999'
+            echo '=== KEY MARKERS AND ERRORS ==='
+            grep -nE 'QWEN35_V6_|QWEN35_4B_|Calculating quantization parameters|Applying quantization transformations|quantiz|Traceback|Killed|No space|out of memory|OOM|RuntimeError|TypeError|ValueError|Error:|ERROR|exit code|shutdown|143|swap|Swap|disk|Disk' /tmp/v6.all.log | tail -n 700 || true
+            echo '=== FINAL 350 LINES ==='
+            tail -n 350 /tmp/v6.all.log
+          } > docs/qwen35_4b_q8_32768_v6_failure_probe.txt
+
+          echo '=== PROBE SUMMARY ==='
+          tail -n 120 docs/qwen35_4b_q8_32768_v6_failure_probe.txt
+
+      - name: Persist diagnosis on experimental
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/qwen35_4b_q8_32768_v6_failure_probe.txt
+          if git diff --cached --quiet; then
+            echo 'No diagnostic changes to commit.'
+            exit 0
+          fi
+          git commit -m 'diagnostics: capture Qwen3.5 4B v6 failure probe'
+          git pull --rebase origin experimental
+          git push origin HEAD:experimental
