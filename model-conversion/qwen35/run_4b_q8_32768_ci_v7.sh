@@ -11,6 +11,7 @@ set -euo pipefail
 # weights/export modules before PTQ. Model bytes, source revision, 32K cache,
 # prefill-128, quantization recipe, official Jinja template, and MCP238 recurrent
 # metadata semantics remain unchanged.
+# retry trigger: robust metadata-proxy anchor confirmed 2026-08-21
 
 SRC="model-conversion/qwen35/run_4b_q8_32768_ci_v6.sh"
 TMP="$RUNNER_TEMP/run_4b_q8_32768_ci_v7.materialized.sh"
