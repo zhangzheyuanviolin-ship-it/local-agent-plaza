@@ -1,5 +1,5 @@
 name: MCP247 emergency media runtime restore
-# retry 5: CI-only Truth + org.json test runtimes injected; protected Android product source remains immutable.
+# retry 6: compare patched unit failures against the protected pre-MCP247 baseline before release.
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/mcp247_emergency_media_runtime_restore.yaml'
       - '.github/scripts/run_mcp247_emergency_build.sh'
+      - '.github/scripts/run_mcp247_emergency_build_v2.sh'
       - '.github/scripts/patch_mcp247_qwen35_verified_2b_32k.py'
   workflow_dispatch:
 
@@ -66,4 +67,4 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          bash .github/scripts/run_mcp247_emergency_build.sh
+          bash .github/scripts/run_mcp247_emergency_build_v2.sh
