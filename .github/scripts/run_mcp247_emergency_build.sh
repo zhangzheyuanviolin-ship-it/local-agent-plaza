@@ -127,13 +127,26 @@ grep -F 'put("enable_thinking", false)' "$HELPER"
 ! grep -q 'prefillPrefaceOnInit' "$HELPER"
 echo MCP247_NARROW_PATCH_AND_AGENT_INVARIANTS_PASS
 
-# 4. Prepare the exact release signer, run regression tests, and build.
+# 4. Prepare the exact release signer, run the complete unit regression suite, and build.
+# AiKeyboardCommitVerifierTest uses Google Truth while the protected product Gradle file does not
+# declare it. Keep product bytes immutable: inject the pinned test-only dependency through a
+# temporary Gradle init script for the unit-test invocation only. The release build does not use it.
 printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
 export ANDROID_RELEASE_KEYSTORE_PATH="$RUNNER_TEMP/local-agent-plaza-release.jks"
 echo "ANDROID_RELEASE_KEYSTORE_PATH=$ANDROID_RELEASE_KEYSTORE_PATH" >> "$GITHUB_ENV"
+cat > "$RUNNER_TEMP/mcp247-ci-tests.init.gradle" <<'GRADLE'
+allprojects {
+  afterEvaluate { p ->
+    if (p.path == ':app') {
+      p.dependencies.add('testImplementation', 'com.google.truth:truth:1.4.4')
+    }
+  }
+}
+GRADLE
 (
   cd Android/src
-  ./gradlew testDebugUnitTest
+  ./gradlew --init-script "$RUNNER_TEMP/mcp247-ci-tests.init.gradle" testDebugUnitTest
+  echo MCP247_FULL_UNIT_REGRESSION_SUITE_PASS
   ./gradlew assembleRelease
 )
 
