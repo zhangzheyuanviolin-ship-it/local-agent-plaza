@@ -110,9 +110,9 @@ SPECS = [
         "key": "laguna_xs2",
         "name": "Laguna XS.2 phone k4 fold3 LiteRT experimental",
         "repo": "poolside-laguna-hackathon/laguna-xs2-phone-k4-fold3-litert",
-        "file": None,
+        "file": "model.litertlm",
         "min_ram": 14,
-        "description": "Laguna XS.2 phone k4 fold3 LiteRT experimental MoE/agentic-coding model. Treat as a reasoning/tool experiment; English/coding oriented.",
+        "description": "Laguna XS.2 phone k4 fold3 LiteRT experimental MoE/agentic-coding root phone artifact. Treat as a reasoning/tool experiment; English/coding oriented.",
         "config": {"topK": 40, "topP": 0.9, "temperature": 0.6, "maxTokens": 4096, "accelerators": "gpu,cpu", "maxContextLength": 4096},
         "taskTypes": ["llm_chat", "llm_prompt_lab", "llm_agent_chat"],
         "capabilities": ["llm_thinking"],
@@ -150,7 +150,7 @@ for spec in SPECS:
         if filename is None:
             candidates = [s.get("rfilename") for s in siblings if str(s.get("rfilename", "")).endswith(".litertlm")]
             if len(candidates) != 1:
-                fail(f"expected exactly one Laguna .litertlm file, got {candidates}")
+                fail(f"expected exactly one .litertlm file, got {candidates}")
             filename = candidates[0]
         matches = [s for s in siblings if s.get("rfilename") == filename]
         if len(matches) != 1:
