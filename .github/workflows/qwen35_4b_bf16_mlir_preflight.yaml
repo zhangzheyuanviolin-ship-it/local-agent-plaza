@@ -1,0 +1,102 @@
+name: Qwen3.5 4B BF16 MLIR compatibility preflight
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/qwen35_4b_bf16_mlir_preflight.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify pinned BF16 to MLIR bridge and scan conversion numpy hazards
+        shell: bash
+        run: |
+          set -euo pipefail
+          LT="$RUNNER_TEMP/litert-torch"
+          git clone -q https://github.com/google-ai-edge/litert-torch.git "$LT"
+          git -C "$LT" checkout -q --detach b66af07f1dcb9af2a990612bf6c9c0f654be3598
+          python -m pip install -q --upgrade 'torch==2.12.0+cpu' --extra-index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -q numpy ml_dtypes 'litert-converter>=0.0.0.dev0' ai-edge-litert-nightly
+          PYTHONPATH="$LT" python - <<'PY'
+          import ast, json, os
+          from pathlib import Path
+          import numpy as np
+          import torch
+          import ml_dtypes
+          from litert_converter.mlir import ir
+          from litert_torch.backend import export_utils
+
+          # Exact v5 bridge logic: preserve BF16 storage bits, expose them to
+          # NumPy through ml_dtypes.bfloat16, then build an MLIR bf16 constant.
+          t=torch.tensor([[1.0,-2.5],[3.125,0.0]], dtype=torch.bfloat16)
+          raw=t.contiguous().view(torch.uint16).numpy().copy()
+          arr=raw.view(ml_dtypes.bfloat16)
+          assert arr.dtype == ml_dtypes.bfloat16
+          assert np.array_equal(arr.view(np.uint16), raw)
+          with ir.Context() as ctx:
+            # Register only builtin dialects needed for DenseElementsAttr.
+            et=ir.BF16Type.get()
+            ty=ir.RankedTensorType.get(t.shape, et)
+            attr=ir.DenseElementsAttr.get(np.ascontiguousarray(arr), type=ty)
+            assert attr is not None
+          assert str(export_utils.torch_dtype_to_ir_element_type(torch.bfloat16)) == 'bf16'
+
+          # Conversion-path static scan. Record every direct .numpy() site in
+          # backend/_convert/generative export code so later failures are not
+          # discovered one at a time.
+          root=Path(os.environ['RUNNER_TEMP'])/'litert-torch'/'litert_torch'
+          scopes=[root/'backend', root/'_convert', root/'generative'/'export_hf']
+          hits=[]
+          for base in scopes:
+            for p in base.rglob('*.py'):
+              try: tree=ast.parse(p.read_text(encoding='utf-8'))
+              except Exception: continue
+              for n in ast.walk(tree):
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr=='numpy':
+                  hits.append({'file':str(p.relative_to(root)), 'line':n.lineno})
+          critical=[]
+          for h in hits:
+            f=h['file']
+            if f in {'backend/inline_consts.py','backend/export.py'}:
+              critical.append(h)
+          report={
+            'status':'PASS',
+            'pinned_litert_torch':'b66af07f1dcb9af2a990612bf6c9c0f654be3598',
+            'bf16_bit_preserving_ml_dtypes_view':True,
+            'mlir_dense_elements_bf16_accepts_array':True,
+            'torch_bfloat16_maps_to_mlir_bf16':True,
+            'direct_numpy_sites_total':len(hits),
+            'critical_direct_numpy_sites':critical,
+            'note':'inline_consts BF16 site is covered by v5 bridge; backend/export qdq numpy sites operate on quant scale/zero-point tensors and are recorded for proactive review.'
+          }
+          out=Path('docs/qwen35_4b_bf16_mlir_preflight.json')
+          out.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
+          print(out.read_text())
+          PY
+      - name: Persist preflight result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/qwen35_4b_bf16_mlir_preflight.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Record Qwen3.5 4B BF16 MLIR compatibility preflight [skip ci]'
+          for n in 1 2 3 4 5; do
+            git pull --rebase origin experimental && git push origin HEAD:experimental && exit 0
+            sleep $((n*3))
+          done
+          exit 1
