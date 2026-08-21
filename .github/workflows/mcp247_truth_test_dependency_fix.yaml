@@ -1,0 +1,44 @@
+name: Repair MCP247 unit-test Truth dependency
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp247_truth_test_dependency_fix.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+      - name: Inject Truth only through a CI init script
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/scripts/run_mcp247_emergency_build.sh')
+          s=p.read_text()
+          old='''# 4. Prepare the exact release signer, run regression tests, and build.\nprintf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"\nexport ANDROID_RELEASE_KEYSTORE_PATH="$RUNNER_TEMP/local-agent-plaza-release.jks"\necho "ANDROID_RELEASE_KEYSTORE_PATH=$ANDROID_RELEASE_KEYSTORE_PATH" >> "$GITHUB_ENV"\n(\n  cd Android/src\n  ./gradlew testDebugUnitTest\n  ./gradlew assembleRelease\n)\n'''
+          new='''# 4. Prepare the exact release signer, run the complete unit regression suite, and build.\n# AiKeyboardCommitVerifierTest uses Google Truth while the protected product Gradle file does not\n# declare it. Keep product bytes immutable: inject the pinned test-only dependency through a\n# temporary Gradle init script for the unit-test invocation only. The release build does not use it.\nprintf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"\nexport ANDROID_RELEASE_KEYSTORE_PATH="$RUNNER_TEMP/local-agent-plaza-release.jks"\necho "ANDROID_RELEASE_KEYSTORE_PATH=$ANDROID_RELEASE_KEYSTORE_PATH" >> "$GITHUB_ENV"\ncat > "$RUNNER_TEMP/mcp247-ci-tests.init.gradle" <<'GRADLE'\nallprojects {\n  afterEvaluate { p ->\n    if (p.path == ':app') {\n      p.dependencies.add('testImplementation', 'com.google.truth:truth:1.4.4')\n    }\n  }\n}\nGRADLE\n(\n  cd Android/src\n  ./gradlew --init-script "$RUNNER_TEMP/mcp247-ci-tests.init.gradle" testDebugUnitTest\n  echo MCP247_FULL_UNIT_REGRESSION_SUITE_PASS\n  ./gradlew assembleRelease\n)\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'MCP247 unit-test block anchor count={s.count(old)}')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git diff --check
+          git diff -- .github/scripts/run_mcp247_emergency_build.sh
+          git diff --quiet -- Android model_allowlists
+          grep -F "com.google.truth:truth:1.4.4" .github/scripts/run_mcp247_emergency_build.sh
+          grep -F 'MCP247_FULL_UNIT_REGRESSION_SUITE_PASS' .github/scripts/run_mcp247_emergency_build.sh
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- .github/scripts/run_mcp247_emergency_build.sh
+          git commit -m 'MCP247: inject Truth only for CI unit tests'
+          git push origin HEAD:experimental
