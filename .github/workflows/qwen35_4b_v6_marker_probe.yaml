@@ -1,0 +1,61 @@
+name: Qwen3.5 4B v6 Marker Probe
+
+on:
+  push:
+    branches: [experimental]
+    paths:
+      - '.github/workflows/qwen35_4b_v6_marker_probe.yaml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+      - name: Extract v6 conversion markers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/96644673999/logs" \
+            -o /tmp/v6.log
+          mkdir -p /tmp/v6z
+          if file /tmp/v6.log | grep -qi 'zip archive'; then
+            unzip -q /tmp/v6.log -d /tmp/v6z
+            find /tmp/v6z -type f -print0 | sort -z | xargs -0 cat > /tmp/v6.all.log
+          else
+            cp /tmp/v6.log /tmp/v6.all.log
+          fi
+          mkdir -p docs
+          {
+            echo 'QWEN35_4B_V6_MARKER_PROBE'
+            echo '=== LIFETIME MARKERS ==='
+            grep -nE 'QWEN35_V6_(TASK_ORDER|PRE_QUANT_RELEASE|UNQUANTIZED_CLEANUP|EMERGENCY_SWAP_TRIGGER)' /tmp/v6.all.log || true
+            echo '=== EXPORT/PTQ MARKERS ==='
+            grep -nEi 'export_embedder|embedder.*export|text.*export|flatbuffer|model\.tflite|calculating quantization|applying quantization|quantization transformations|quantiz(ed|ation|er)|3153/3153|fully_verified|verif(y|ication)|multipart|release' /tmp/v6.all.log | tail -n 500 || true
+            echo '=== PYTHON PROCESS SAMPLES NEAR END ==='
+            grep -nE '[[:space:]]python([[:space:]]|$)' /tmp/v6.all.log | tail -n 80 || true
+            echo '=== TERMINAL ERRORS ==='
+            grep -nEi 'Traceback|Killed|oom|out of memory|no space|shutdown signal|exit code 143|fatal|segmentation|aborted' /tmp/v6.all.log | tail -n 120 || true
+          } > docs/qwen35_4b_q8_32768_v6_marker_probe.txt
+      - name: Persist probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/qwen35_4b_q8_32768_v6_marker_probe.txt
+          git commit -m 'diagnostics: capture Qwen3.5 4B v6 markers'
+          git pull --rebase origin experimental
+          git push origin HEAD:experimental
