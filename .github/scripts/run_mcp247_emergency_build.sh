@@ -139,6 +139,7 @@ allprojects {
   afterEvaluate { p ->
     if (p.path == ':app') {
       p.dependencies.add('testImplementation', 'com.google.truth:truth:1.4.4')
+      p.dependencies.add('testImplementation', 'org.json:json:20260719')
     }
   }
 }
