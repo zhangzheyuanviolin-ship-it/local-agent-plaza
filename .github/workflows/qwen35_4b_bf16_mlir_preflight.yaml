@@ -30,6 +30,7 @@ jobs:
           git -C "$LT" checkout -q --detach b66af07f1dcb9af2a990612bf6c9c0f654be3598
           python -m pip install -q --upgrade 'torch==2.12.0+cpu' --extra-index-url https://download.pytorch.org/whl/cpu
           python -m pip install -q absl-py numpy scipy safetensors multipledispatch transformers kagglehub tabulate 'ai-edge-litert-nightly[model-utils]' ai-edge-quantizer-nightly 'litert-converter>=0.0.0.dev0' 'jax[cpu]' jaxtyping fire sentencepiece rich pillow psutil huggingface_hub ml_dtypes
+          python -m pip install -q --no-deps 'torchao>=0.17.0'
           PYTHONPATH="$LT" python - <<'PY'
           import ast, json, os
           from pathlib import Path
