@@ -36,6 +36,14 @@ python3 .github/scripts/patch_mcp249_ministral_phi_compat_v2.py
 if src.count(old)!=1: raise SystemExit(f'MCP249 v3 target-patch anchor count={src.count(old)}')
 src=src.replace(old,new,1)
 
+# Keep the inherited self-audit aligned with the v2 target patch name. The previous run reached
+# this check before any product patch was executed and failed only because it still searched for
+# the superseded v1 filename.
+old_check="grep -F 'patch_mcp249_ministral_phi_compat.py' \"$BASE_249\""
+new_check="grep -F 'patch_mcp249_ministral_phi_compat_v2.py' \"$BASE_249\""
+if src.count(old_check)!=1: raise SystemExit(f'MCP249 v3 target self-check anchor count={src.count(old_check)}')
+src=src.replace(old_check,new_check,1)
+
 # MCP218's CompatToolCallWireAdapter is now deliberately materialized before the narrow-delta audit.
 # It is protected existing behavior, not a new MCP249 feature.
 old_line="  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentCompatRuntimeCoordinator.kt'\n"
