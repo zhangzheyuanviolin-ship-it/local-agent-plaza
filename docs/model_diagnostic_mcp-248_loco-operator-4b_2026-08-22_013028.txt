@@ -1,0 +1,180 @@
+=== MCP207 Agent 会话性能诊断 ===
+schema=mcp207.agent_session_perf.v3
+model_name=LocoOperator-4B LiteRTLM
+session_id=bee69703
+current_user_turn_index=1
+included_request_reports=1
+privacy=diagnostic_metrics_only;user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged
+
+--- USER_TURN_1 ---
+=== MCP207 Agent 性能诊断 ===
+schema=mcp207.agent_perf.v5
+request_id=2f1b0d6f
+status=COMPLETED
+started_at=2026-08-22 09:20:55.827 +0800
+app_version=1.0.14-mcp.248
+model_name=LocoOperator-4B LiteRTLM
+tool_mode=COMPAT
+litert_lm_version=0.15.0
+litert_version=2.1.6
+android_sdk=36
+device=Xiaomi 23117RK66C
+available_processors=8
+memory_class_mb=256
+model_file_bytes=4059223584
+configured_context_window=8192
+max_output_tokens=2048
+conversation_max_output_override=none
+top_k=20
+top_p=0.8000
+temperature=0.6000
+accelerator=GPU
+active_skill_count=2
+enabled_mcp_count=0
+original_input_chars=27
+runtime_input_chars=2563
+compat_added_input_chars=2536
+thinking_override=per_pass;see_stream_channels
+
+[runtime_initialization]
+engine_init_ms=11084.36
+conversation_init_ms=1.64
+last_conversation_reset_ms=4.93
+conversation_reset_count_total=2
+conversation_resets_during_request=2
+engine_max_num_tokens=8192
+runtime_max_output_tokens=2048
+runtime_accelerator=GPU
+speculative_decoding=false
+
+[mcp207_runtime]
+session_id=bee69703
+user_turn_index=1
+session_history_turn_count=0
+session_history_chars=0
+session_completed_turn_count=1
+conversation_generation_id=3
+last_fresh_conversation_reason=tool_continuation
+top_level_reset_count=1
+top_level_prepare_ms_total=6.90
+last_top_level_prepare_ms=6.90
+last_top_level_reset_ms=3.30
+top_level_raw_input_chars=1145
+top_level_effective_input_chars=1145
+pre_submit_wait_ms_total=0.01
+continuation_prepare_ms_total=5.72
+last_continuation_prepare_ms=5.72
+last_continuation_reset_ms=5.10
+continuation_raw_input_chars=3332
+continuation_effective_input_chars=4083
+continuation_session_history_included=false
+compat_history_step_count=1
+compat_history_chars=2570
+repeated_tool_call_count=0
+tool_result_prompt_build_ms=unavailable
+audit_write_ms=unavailable
+diagnostic_memory_async=true
+
+[request_timing]
+total_ms=71860.99
+llm_pass_count=2
+continuation_count=1
+initial_input_chars=1145
+initial_ttft_ms=5681.23
+initial_decode_after_first_token_ms=124.33
+initial_total_generation_ms=5805.56
+initial_output_chars=83
+continuation_1_input_chars=4083
+continuation_1_ttft_ms=12881.10
+continuation_1_decode_after_first_token_ms=47665.98
+continuation_1_total_generation_ms=60547.08
+continuation_1_output_chars=544
+before_continuation_1_gap_ms=5487.47
+retry_count=0
+error_chars=0
+
+[stream_channels]
+initial_thinking_override=disabled_compat_global_template_native_budget0_top_level;render_chars=1195;render_open_thought=false;render_closed_thought_cue=false
+initial_first_callback_ttft_ms=5681.23
+initial_first_visible_ttft_ms=5681.23
+initial_first_thought_ttft_ms=unavailable
+initial_callback_count=1
+initial_visible_callback_count=1
+initial_thought_callback_count=0
+initial_visible_chars=83
+initial_thought_chars=0
+initial_thought_window_ms=unavailable
+initial_visible_window_ms=0.00
+initial_first_visible_to_done_ms=124.33
+initial_thought_to_first_visible_gap_ms=unavailable
+continuation_1_thinking_override=disabled_compat_global_template_native_budget0_continuation;render_chars=4133;render_open_thought=false;render_closed_thought_cue=false
+continuation_1_first_callback_ttft_ms=12881.10
+continuation_1_first_visible_ttft_ms=12881.10
+continuation_1_first_thought_ttft_ms=unavailable
+continuation_1_callback_count=365
+continuation_1_visible_callback_count=365
+continuation_1_thought_callback_count=0
+continuation_1_visible_chars=544
+continuation_1_thought_chars=0
+continuation_1_thought_window_ms=unavailable
+continuation_1_visible_window_ms=47532.17
+continuation_1_first_visible_to_done_ms=47665.98
+continuation_1_thought_to_first_visible_gap_ms=unavailable
+
+[tool_timing]
+compat_parser_exact_ms=unavailable
+compat_parser_note=post_generation_to_tool_start_ms includes parser and orchestration overhead
+observed_tool_event_count=1
+observed_tool_exec_total_ms=4372.65
+observed_tool_logged_detail_chars_total=1000
+tool_1_name=tool.run_js
+tool_1_exec_ms=4372.65
+tool_1_post_generation_to_start_ms=3.65
+tool_1_logged_detail_chars=1000
+tool_1_success=true
+
+[memory_snapshots]
+request_start.pss_mb=1341.63
+request_start.java_heap_used_mb=30.70
+request_start.native_heap_allocated_mb=159.29
+request_start.sample_delay_ms=52.71
+first_callback_1.pss_mb=1679.97
+first_callback_1.java_heap_used_mb=25.22
+first_callback_1.native_heap_allocated_mb=160.21
+first_callback_1.sample_delay_ms=91.95
+after_tool_1.pss_mb=1247.66
+after_tool_1.java_heap_used_mb=36.07
+after_tool_1.native_heap_allocated_mb=163.70
+after_tool_1.sample_delay_ms=47.96
+first_callback_2.pss_mb=1300.17
+first_callback_2.java_heap_used_mb=62.79
+first_callback_2.native_heap_allocated_mb=163.86
+first_callback_2.sample_delay_ms=80.01
+final.pss_mb=1254.84
+final.java_heap_used_mb=26.73
+final.native_heap_allocated_mb=166.18
+final.sample_delay_ms=36.43
+
+privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged
+=== MCP207 Agent 性能诊断结束 ===
+=== MCP207 Agent 会话性能诊断结束 ===
+根据2026年世界杯决赛的相关新闻，以下是综合信息摘要：
+
+**比赛结果**：  
+207年7月19日，2026年国际足联世界杯决赛在美国新泽西的场馆举行，西班牙以1-0击败阿根廷，首次在决赛中淘汰南北美加墨冠军，夺得大力神杯。
+
+**比赛关键细节**：  
+- 常规时间双方0-0，西班牙在控球和压制上占优，阿根廷在第90分钟因恩佐·费尔南德斯吃到红牌，110人应战。  
+- 加时赛第106分钟，替补登场的费兰·托雷斯接队友尼科·威廉姆头球回做，禁区内抽射破门，锁定胜局。  
+- 西班牙全场20射门，射正12次，阿根廷仅2次射门、0射正，整体压制明显。  
+- 西班牙实现队史第2次世界杯冠军，时隔16年再夺冠，此前连续38场正式比赛不败，创下欧洲球队最长不败纪录。
+
+**赛后荣誉**：  
+- 罗�德里获金球奖，西蒙获金手套，姆巴佩以10球夺得金靴。  
+- 比佩成为世界杯历史上首位10球得金靴的球员。
+
+**其他亮点**：  
+- 世界杯历史上首次在中场休息引入表演的决赛中场秀，休息时间超过27分钟。  
+- 比赛现场包括美国总统特朗普、加拿大总理卡尼、墨西哥总统辛鲍姆等政要出席观战。
+
+以上信息来自央视网、BBC、中新网、新华网、美国之音、奥运会官网等多家媒体的报道。
