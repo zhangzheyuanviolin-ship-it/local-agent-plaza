@@ -1,8 +1,8 @@
 {
   "schema": "local-agent-plaza.mcp249-agent-family-compat-run.v1",
-  "run_id": 32547733251,
-  "run_number": 5,
-  "head_sha": "e1487f42c540673789e07e33daa4126513481cc8",
-  "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32547733251",
+  "run_id": 32547772665,
+  "run_number": 6,
+  "head_sha": "dad792eb2ac8d4cfaa7bd722ba5b5125eb201053",
+  "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32547772665",
   "stage": "workflow_started"
 }
