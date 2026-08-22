@@ -51,6 +51,34 @@ jobs:
           ref: experimental
           fetch-depth: 0
 
+      - name: Publish MCP249 run marker early
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          p='/tmp/mcp249_run_early.json'
+          with open(p,'w',encoding='utf-8') as f:
+              json.dump({
+                  'schema':'local-agent-plaza.mcp249-agent-family-compat-run.v1',
+                  'run_id':int(os.environ['GITHUB_RUN_ID']),
+                  'run_number':int(os.environ['GITHUB_RUN_NUMBER']),
+                  'head_sha':os.environ['GITHUB_SHA'],
+                  'html_url':f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+                  'stage':'workflow_started',
+              },f,ensure_ascii=False,indent=2)
+              f.write('\n')
+          PY
+          content="$(base64 -w0 /tmp/mcp249_run_early.json)"
+          api="repos/${GITHUB_REPOSITORY}/contents/docs/mcp249_run.json"
+          response="$(gh api "${api}?ref=experimental" 2>/dev/null || true)"
+          sha="$(printf '%s' "$response" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))')"
+          if [ -n "$sha" ]; then
+            gh api --method PUT "$api" -f message='Update MCP249 early run marker' -f branch=experimental -f sha="$sha" -f content="$content"
+          else
+            gh api --method PUT "$api" -f message='Create MCP249 early run marker' -f branch=experimental -f content="$content"
+          fi
+
       - name: Checkout stable-diffusion.cpp at the MCP247 product-pinned revision
         uses: actions/checkout@v4
         with:
