@@ -10,15 +10,30 @@ from pathlib import Path
 repo = Path(__file__).resolve().parents[2]
 orig = repo / ".github/scripts/patch_mcp249_ministral_phi_compat.py"
 src = orig.read_text(encoding="utf-8")
-old = '''prepare_old = ''' + "'''    val compactedRawInput = compactCompatEnvelope(input)\\n'''" + '''
-prepare_new = ''' + "'''    val compactedRawInput = compactCompatEnvelope(model = model, input = input)\\n'''" + '''
+
+# Rewrite only the two source-level literals that describe the helper's pre/post state. Use real
+# newlines here; the previous wrapper accidentally searched for the two characters "\\n" inside
+# the Python source and therefore could never match the original triple-quoted literals.
+old = """prepare_old = '''    val compactedRawInput = compactCompatEnvelope(input)
 '''
-new = '''prepare_old = ''' + "'''    val compactedRawInput =\\n      CompatSearchRequiredPolicy.injectIntoCompatInput(compactCompatEnvelope(input))\\n'''" + '''
-prepare_new = ''' + "'''    val compactedRawInput =\\n      CompatSearchRequiredPolicy.injectIntoCompatInput(\\n        compactCompatEnvelope(model = model, input = input)\\n      )\\n'''" + '''
+prepare_new = '''    val compactedRawInput = compactCompatEnvelope(model = model, input = input)
 '''
+"""
+new = """prepare_old = '''    val compactedRawInput =
+      CompatSearchRequiredPolicy.injectIntoCompatInput(compactCompatEnvelope(input))
+'''
+prepare_new = '''    val compactedRawInput =
+      CompatSearchRequiredPolicy.injectIntoCompatInput(
+        compactCompatEnvelope(model = model, input = input)
+      )
+'''
+"""
 if src.count(old) != 1:
-    raise SystemExit(f"MCP249 v2 patch wrapper: expected one post-wire compaction anchor source, got {src.count(old)}")
+    raise SystemExit(
+        f"MCP249 v2 patch wrapper: expected one original compaction source block, got {src.count(old)}"
+    )
 src = src.replace(old, new, 1)
+
 # Execute with the original __file__ so REPO_ROOT resolution remains exact.
-g = {"__name__":"__main__", "__file__":str(orig)}
+g = {"__name__": "__main__", "__file__": str(orig)}
 exec(compile(src, str(orig), "exec"), g, g)
