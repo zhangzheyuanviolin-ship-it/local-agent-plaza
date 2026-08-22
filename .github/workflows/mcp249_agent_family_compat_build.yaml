@@ -19,7 +19,7 @@ permissions:
 
 concurrency:
   group: mcp249-agent-family-compat-build
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
