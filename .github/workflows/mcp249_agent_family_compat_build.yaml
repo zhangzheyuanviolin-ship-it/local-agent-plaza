@@ -6,8 +6,9 @@ on:
     paths:
       - '.github/workflows/mcp249_agent_family_compat_build.yaml'
       - '.github/scripts/patch_mcp249_ministral_phi_compat.py'
+      - '.github/scripts/pin_mcp249_model_pool.py'
       - '.github/scripts/run_mcp249_agent_family_compat_build.sh'
-      - '.github/scripts/freeze_mcp248_models.py'
+      - '.github/scripts/run_mcp249_agent_family_compat_build_v2.sh'
       - '.github/scripts/patch_mcp247_qwen35_verified_2b_32k.py'
   workflow_dispatch:
 
@@ -67,4 +68,4 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          bash .github/scripts/run_mcp249_agent_family_compat_build.sh
+          bash .github/scripts/run_mcp249_agent_family_compat_build_v2.sh
