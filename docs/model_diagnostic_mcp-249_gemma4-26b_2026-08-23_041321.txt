@@ -1,0 +1,37 @@
+=== MCP224 模型生命周期诊断 ===
+schema=mcp224.model_lifecycle.v1
+app_version=1.0.14-mcp.249
+app_version_code=349
+litert_lm=0.15.0
+litert=2.1.6
+device=Xiaomi 23117RK66C
+device_code=manet
+android_api=36
+memory_class_mb=256
+task_id=llm_agent_chat
+model_name=Gemma-4-26B-A4B-it Box web artifact experimental
+model_display_name=
+model_imported=false
+model_file_name=gemma-4-26B-A4B-it-web.litertlm
+model_file_expected_bytes=15786524672
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Gemma_4_26B_A4B_it_Box_web_artifact_experimental/755026618afd72ebb6d970f784d42effa67398bc/gemma-4-26B-A4B-it-web.litertlm
+model_file_exists=true
+model_file_actual_bytes=15786524672
+configured_context_window=8192
+max_output_tokens=4000
+accelerator=GPU
+supports_image=false
+supports_audio=false
+memory_java_used_bytes=29072008 | memory_native_allocated_bytes=32959584
+privacy=no_user_prompt;no_tool_arguments;no_tool_result_content;no_workspace_content;no_secrets
+
+[2026-08-23 12:04:13.033 +0800] model_manager.initialize.attempt | Starting model initialization attempt 1
+memory_java_used_bytes=29613672 | memory_native_allocated_bytes=33313616
+
+[2026-08-23 12:04:13.076 +0800] litert.engine_config | Preparing LiteRT-LM EngineConfig
+memory_java_used_bytes=32707096 | memory_native_allocated_bytes=35278272
+detail:
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Gemma_4_26B_A4B_it_Box_web_artifact_experimental/755026618afd72ebb6d970f784d42effa67398bc/gemma-4-26B-A4B-it-web.litertlm | backend=GPU | vision_backend=GPU | support_image=false | support_audio=false | context=8192 | engine_max_tokens=8192 | max_output_tokens=4000
+
+[2026-08-23 12:04:13.085 +0800] litert.engine_initialize.start | Engine.initialize() started
+memory_java_used_bytes=33133832 | memory_native_allocated_bytes=35236496
