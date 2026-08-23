@@ -56,12 +56,6 @@ if s.count(old_line) != 1:
     raise SystemExit(f'MCP250 expected-delta anchor count={s.count(old_line)}')
 s = s.replace(old_line, new_line, 1)
 
-dex_old = "b'MCP249_MINISTRAL_COMPAT_V1', b'MCP249_PHI4MINI_COMPAT_V1'):\n"
-dex_new = "b'MCP249_MINISTRAL_COMPAT_V1', b'MCP249_PHI4MINI_COMPAT_V1',\n                   b'MCP250_MINISTRAL_STATE_V1', b'MCP250_PHI_STATE_V1',\n                   b'MCP250_FALCON_STATE_V1', b'MCP250_JAN_STATE_V1',\n                   b'MCP250_FASTCONTEXT_STATE_V1', b'MCP250_TARGET_LOOP_GUARD',\n                   b'LocoOperator-4B LiteRTLM', b'Gemma-4-12B-it (experimental)'):\n"
-if s.count(dex_old) != 1:
-    raise SystemExit(f'MCP250 DEX anchor count={s.count(dex_old)}')
-s = s.replace(dex_old, dex_new, 1)
-
 repls = {
     "versionCode='349'": "versionCode='350'",
     "versionName='1.0.14-mcp.249'": "versionName='1.0.14-mcp.250'",
@@ -100,6 +94,28 @@ echo MCP250_PROTECTED_CORE_ROUTING_STATIC_PASS
 if s.count(pre_build_anchor) != 1:
     raise SystemExit(f'MCP250 protected static anchor count={s.count(pre_build_anchor)}')
 s = s.replace(pre_build_anchor, pre_build_insert, 1)
+
+# Independent packaged-Dex proof for all MCP250 target branches and protected exact-name guards.
+audit_anchor = 'echo MCP247_CRITICAL_SYMBOL_AND_LITERTLM_ISOLATION_PASS\n'
+audit_insert = audit_anchor + '''python3 - <<'PY250DEX'
+import os,re,zipfile
+apk=os.environ.get('APK') or os.path.join(os.environ['RUNNER_TEMP'],'signed.apk')
+with zipfile.ZipFile(apk) as z:
+    names=z.namelist()
+    dex=b''.join(z.read(n) for n in sorted(names) if re.fullmatch(r'classes\\d*\\.dex',n))
+    markers=[
+      b'MCP250_MINISTRAL_STATE_V1',b'MCP250_PHI_STATE_V1',b'MCP250_FALCON_STATE_V1',
+      b'MCP250_JAN_STATE_V1',b'MCP250_FASTCONTEXT_STATE_V1',b'MCP250_TARGET_LOOP_GUARD',
+      b'LocoOperator-4B LiteRTLM',b'Gemma-4-12B-it (experimental)'
+    ]
+    for marker in markers:
+        assert marker in dex,marker
+print('MCP250_PACKAGED_TARGET_AND_PROTECTED_MARKERS_PASS')
+PY250DEX
+'''
+if s.count(audit_anchor) != 1:
+    raise SystemExit(f'MCP250 packaged DEX audit anchor count={s.count(audit_anchor)}')
+s = s.replace(audit_anchor, audit_insert, 1)
 
 p.write_text(s, encoding='utf-8')
 print('MCP250_RUNNER_MATERIALIZATION_PASS')
