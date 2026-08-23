@@ -69,7 +69,10 @@ new_line = old_line + "  'Android/src/app/src/main/java/com/google/ai/edge/galle
 replace_once(old_line, new_line, 'expected tracked delta')
 
 audit_tail = "    assert int(g[0]['defaultConfig']['maxContextLength'])==32000\n"
-audit_extra = audit_tail + '''    for marker in (b'MCP250_MINISTRAL_STATE_V1', b'MCP250_PHI_STATE_V1',
+audit_extra = audit_tail + '''    # This insertion occurs before the inherited MCP247 DEX marker block, so materialize the
+    # APK DEX bytes here as well. Keeping the audit self-contained avoids relying on a later local.
+    dex=b''.join(z.read(n) for n in sorted(names) if re.fullmatch(r'classes\\d*\\.dex',n))
+    for marker in (b'MCP250_MINISTRAL_STATE_V1', b'MCP250_PHI_STATE_V1',
                    b'MCP250_FALCON_STATE_V1', b'MCP250_JAN_STATE_V1',
                    b'MCP250_FASTCONTEXT_STATE_V1', b'MCP250_TARGET_LOOP_GUARD',
                    b'LocoOperator-4B LiteRTLM', b'Gemma-4-12B-it (experimental)'):
