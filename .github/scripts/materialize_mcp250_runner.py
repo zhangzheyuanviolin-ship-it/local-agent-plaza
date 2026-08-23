@@ -15,8 +15,6 @@ def replace_once(old: str, new: str, label: str) -> None:
         raise SystemExit(f'MCP250 {label} anchor count={c}')
     s = s.replace(old, new, 1)
 
-# The MCP249 wrapper will eventually materialize the MCP247 golden source tree. Insert MCP250 only
-# after MCP218 + MCP249 have already produced the verified compatibility baseline.
 anchor = 'python3 .github/scripts/patch_mcp249_ministral_phi_compat_v2.py\n'
 insert = anchor + '''export MCP250_PROTECTED_SNAPSHOT="$RUNNER_TEMP/mcp250_protected_core.json"
 python3 - <<'PY250PROTECTBEFORE'
@@ -55,6 +53,7 @@ for name,expected in before.items():
     assert ahits[0]==expected,(name,'asset allowlist changed')
 print('MCP250_PROTECTED_LOCO_GEMMA12_EXACT_ALLOWLIST_PASS')
 PY250PROTECTAFTER
+test -f Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/Mcp250TargetAgentCompat.kt
 grep -F 'PROTECTED_LOCO = "LocoOperator-4B LiteRTLM"' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/Mcp250TargetAgentCompat.kt
 grep -F 'PROTECTED_GEMMA12 = "Gemma-4-12B-it (experimental)"' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/Mcp250TargetAgentCompat.kt
 grep -F 'parseCompatToolCall(lastAgentText.content)' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentChatScreen.kt
@@ -63,13 +62,12 @@ echo MCP250_PROTECTED_CORE_ROUTING_STATIC_PASS
 '''
 replace_once(anchor, insert, 'product injection')
 
-# MCP250 adds only its target-only UI/policy sources beyond the inherited MCP249 workspace delta.
+# `git diff --name-only` does not include the newly-created untracked policy source; audit that file
+# explicitly above, and add only the tracked AgentChatScreen change to the inherited delta list.
 old_line = "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentCompatRuntimeCoordinator.kt'\n"
-new_line = old_line + "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentChatScreen.kt'\n" + "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/Mcp250TargetAgentCompat.kt'\n"
-replace_once(old_line, new_line, 'expected delta')
+new_line = old_line + "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentChatScreen.kt'\n"
+replace_once(old_line, new_line, 'expected tracked delta')
 
-# Extend the already-existing independent APK/allowlist audit. This raw block is injected by MCP249
-# into MCP247's final ZIP audit, where `dex` is already available.
 audit_tail = "    assert int(g[0]['defaultConfig']['maxContextLength'])==32000\n"
 audit_extra = audit_tail + '''    for marker in (b'MCP250_MINISTRAL_STATE_V1', b'MCP250_PHI_STATE_V1',
                    b'MCP250_FALCON_STATE_V1', b'MCP250_JAN_STATE_V1',
@@ -80,8 +78,6 @@ audit_extra = audit_tail + '''    for marker in (b'MCP250_MINISTRAL_STATE_V1', b
 '''
 replace_once(audit_tail, audit_extra, 'packaged DEX audit')
 
-# Promote the inherited package/release/result/run identities to MCP250. Product code remains rooted
-# in the MCP247 golden harness and exact MCP248/MCP249 model inventory.
 repls = {
     "versionCode='349'": "versionCode='350'",
     "versionName='1.0.14-mcp.249'": "versionName='1.0.14-mcp.250'",
