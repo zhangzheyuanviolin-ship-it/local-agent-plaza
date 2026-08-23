@@ -28,12 +28,21 @@ if s.count(old_patch) != 1:
 s = s.replace(old_patch, new_patch, 1)
 
 # MCP224 is normally applied later by Gradle. Since it is deliberately materialized before the
-# narrow-delta audit in MCP250, include its three additional tracked UI/model-manager files.
-anchor = "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt'\n"
-extra = anchor + (
+# narrow-delta audit in MCP250, include its three additional tracked UI/model-manager files. Use a
+# unique three-line slice of the expected[] list, avoiding helper-path copies elsewhere in the
+# generated harness.
+anchor = (
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt'\n"
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt'\n"
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/worker/DownloadWorker.kt'\n"
+)
+extra = (
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt'\n"
     "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/common/modelitem/ModelItem.kt'\n"
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt'\n"
     "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatScreen.kt'\n"
     "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/modelmanager/ModelManagerViewModel.kt'\n"
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/worker/DownloadWorker.kt'\n"
 )
 if s.count(anchor) != 1:
     raise SystemExit(f"MCP250 v2 expected-delta anchor count={s.count(anchor)}")
