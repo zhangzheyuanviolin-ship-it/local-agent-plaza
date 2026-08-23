@@ -97,9 +97,10 @@ s = s.replace(pre_build_anchor, pre_build_insert, 1)
 
 # Independent packaged-Dex proof for all MCP250 target branches and protected exact-name guards.
 audit_anchor = 'echo MCP247_CRITICAL_SYMBOL_AND_LITERTLM_ISOLATION_PASS\n'
-audit_insert = audit_anchor + '''python3 - <<'PY250DEX'
+audit_insert = audit_anchor + '''export APK
+python3 - <<'PY250DEX'
 import os,re,zipfile
-apk=os.environ.get('APK') or os.path.join(os.environ['RUNNER_TEMP'],'signed.apk')
+apk=os.environ['APK']
 with zipfile.ZipFile(apk) as z:
     names=z.namelist()
     dex=b''.join(z.read(n) for n in sorted(names) if re.fullmatch(r'classes\\d*\\.dex',n))
