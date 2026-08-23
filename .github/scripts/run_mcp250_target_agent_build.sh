@@ -3,6 +3,7 @@ set -euxo pipefail
 
 python3 -m py_compile .github/scripts/materialize_mcp250_runner.py
 python3 -m py_compile .github/scripts/patch_mcp250_target_agent_families.py
+grep -F 'MCP250_PACKAGED_TARGET_AND_PROTECTED_MARKERS_PASS' .github/scripts/materialize_mcp250_runner.py
 
 ORIG='.github/scripts/run_mcp249_agent_family_compat_build_v3.sh'
 WRAPPED="$RUNNER_TEMP/run_mcp250_from_mcp249_v3.sh"
