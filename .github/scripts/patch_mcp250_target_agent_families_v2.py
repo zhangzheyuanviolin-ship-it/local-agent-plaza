@@ -86,7 +86,7 @@ subprocess.run([sys.executable, str(ORIG)], cwd=ROOT, check=True)
 # 3) Restore MCP224's generic unlimited/user-stop loop. MCP250 loop convergence lives entirely
 # inside the exact-target branch; protected/non-target models flow straight to the original MCP224
 # diagnostic block and then execute the already-verified tool call path.
-screen = SCREEN.read_text(encoding="utf-8")n
+screen = SCREEN.read_text(encoding="utf-8")
 start_marker = '        val currentSteps = compatToolStepsByModel[model.name] ?: 0\n'
 end_marker = '''        if (Mcp250TargetAgentCompat.isTargetAgentModel(model.name)) {
           mcp250LastCompatToolByModel[model.name] = parsedToolCall.toolName
