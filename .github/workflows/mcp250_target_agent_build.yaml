@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/mcp250_target_agent_build.yaml'
       - '.github/scripts/patch_mcp250_target_agent_families.py'
+      - '.github/scripts/materialize_mcp250_runner.py'
       - '.github/scripts/run_mcp250_target_agent_build.sh'
   workflow_dispatch:
 
