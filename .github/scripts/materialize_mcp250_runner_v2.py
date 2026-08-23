@@ -28,15 +28,23 @@ if s.count(old_patch) != 1:
 s = s.replace(old_patch, new_patch, 1)
 
 # MCP224 is normally applied later by Gradle. Since it is deliberately materialized before the
-# narrow-delta audit in MCP250, include its three additional tracked UI/model-manager files. Use a
-# unique three-line slice of the expected[] list, avoiding helper-path copies elsewhere in the
-# generated harness.
+# narrow-delta audit in MCP250, include its three additional tracked UI/model-manager files. Anchor
+# on the MCP250/MCP249 expanded expected[] body (AgentChatScreen + wire adapter), so the older
+# five-file expected_old literal inside the meta-runner can never match.
 anchor = (
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentCompatRuntimeCoordinator.kt'\n"
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentChatScreen.kt'\n"
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/CompatToolCallWireAdapter.kt'\n"
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentTooling.kt'\n"
     "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt'\n"
     "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt'\n"
     "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/worker/DownloadWorker.kt'\n"
 )
 extra = (
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentCompatRuntimeCoordinator.kt'\n"
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentChatScreen.kt'\n"
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/CompatToolCallWireAdapter.kt'\n"
+    "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentTooling.kt'\n"
     "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt'\n"
     "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/common/modelitem/ModelItem.kt'\n"
     "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt'\n"
@@ -45,7 +53,7 @@ extra = (
     "  'Android/src/app/src/main/java/com/google/ai/edge/gallery/worker/DownloadWorker.kt'\n"
 )
 if s.count(anchor) != 1:
-    raise SystemExit(f"MCP250 v2 expected-delta anchor count={s.count(anchor)}")
+    raise SystemExit(f"MCP250 v2 expanded expected-delta anchor count={s.count(anchor)}")
 s = s.replace(anchor, extra, 1)
 
 # Fail closed on the ordering contract and preserve explicit evidence in the materialized runner.
