@@ -57,6 +57,12 @@ providers.exec {
   )
 }.result.get().assertNormalExitValue()
 
+// MCP251: add five opt-in Office skills through the existing workspace + skill protocol only.
+// This patch is deliberately after the established MCP224 compatibility patches and is fail-closed.
+providers.exec {
+  commandLine("python3", rootProject.file("scripts/patch_mcp251_office_skills.py").absolutePath)
+}.result.get().assertNormalExitValue()
+
 android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
