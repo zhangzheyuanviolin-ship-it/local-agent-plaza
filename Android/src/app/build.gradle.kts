@@ -180,6 +180,9 @@ dependencies {
   kapt(libs.hilt.android.compiler)
   testImplementation(libs.junit)
   testImplementation("com.google.truth:truth:1.4.4")
+  // MCP252: Android's local-unit-test android.jar exposes org.json stubs that throw at runtime.
+  // Use the real JVM implementation so the evidence-derived request-normalization regressions execute.
+  testImplementation("org.json:json:20240303")
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -202,5 +205,5 @@ dependencies {
 
 protobuf {
   protoc { artifact = "com.google.protobuf:protoc:4.26.1" }
-  generateProtoTasks { all().forEach { it.plugins { create("java") { option("lite") } } } }
+  generateProtoTasks { all().forEach { it.plugins { create("java") { option("lite") } } }
 }
