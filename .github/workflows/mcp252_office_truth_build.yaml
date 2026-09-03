@@ -6,6 +6,7 @@ on:
     branches: ["experimental"]
     paths:
       - '.github/workflows/mcp252_office_truth_build.yaml'
+      - 'Android/src/app/build.gradle.kts'
       - 'Android/src/scripts/patch_mcp252_office_truth.py'
       - 'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeTruthGuard.kt'
       - 'Android/src/app/src/test/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeTruthGuardTest.kt'
