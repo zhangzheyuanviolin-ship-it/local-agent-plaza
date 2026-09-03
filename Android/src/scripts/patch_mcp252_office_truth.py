@@ -162,9 +162,27 @@ def patch_agent_tooling(text: str) -> str:
     return text.replace(marker, marker + '\n  // MCP252_OFFICE_TRUTH_SCHEMA_GUIDANCE', 1)
 
 
+def patch_truth_guard(text: str) -> str:
+    old = '''  private fun resolveExplicitOperation(skillName: String, rawOperation: String): String? {
+    if (rawOperation.isBlank()) return null
+'''
+    new = '''  private fun resolveExplicitOperation(skillName: String, rawOperation: String): String? {
+    // MCP252_DOCUMENT_CONVERT_SINGLE_OPERATION: conversion has exactly one legal backend action,
+    // so a missing operation is unambiguous and can be canonicalized immediately.
+    if (skillName == DOCUMENT_CONVERT_SKILL_NAME) return "document_convert"
+    if (rawOperation.isBlank()) return null
+'''
+    return replace_once(text, old, new, "single-operation document conversion canonicalization")
+
+
 patch_file(AGENT / "IntentHandler.kt", "MCP252_OFFICE_TRUTH_VERIFIED_DISPATCH", patch_intent_handler)
 patch_file(AGENT / "AgentTools.kt", "MCP252_OFFICE_TRUTH_COMPAT_HELPER", patch_agent_tools)
 patch_file(AGENT / "AgentTooling.kt", "MCP252_OFFICE_TRUTH_SCHEMA_GUIDANCE", patch_agent_tooling)
+patch_file(
+    AGENT / "AgentOfficeTruthGuard.kt",
+    "MCP252_DOCUMENT_CONVERT_SINGLE_OPERATION",
+    patch_truth_guard,
+)
 
 truth_guard = AGENT / "AgentOfficeTruthGuard.kt"
 if not truth_guard.exists():
@@ -177,6 +195,7 @@ for marker in (
     "workspace_safe_inference",
     "Output verification failed",
     "rolled_back",
+    "MCP252_DOCUMENT_CONVERT_SINGLE_OPERATION",
 ):
     if marker not in truth_text:
         raise SystemExit(f"MCP252 fail-closed: Truth Guard marker missing: {marker}")
