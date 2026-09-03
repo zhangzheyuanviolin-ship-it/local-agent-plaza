@@ -115,6 +115,7 @@ def patch_agent_tools(text: str) -> str:
   }
 
   // MCP252_OFFICE_TRUTH_COMPAT_HELPER
+  // MCP251_OFFICE_SKILLS_COMPAT_HELPER
 '''
     text = text[:start] + helper + text[end + len(end_marker):]
 
