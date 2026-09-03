@@ -179,6 +179,7 @@ dependencies {
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
   kapt(libs.hilt.android.compiler)
   testImplementation(libs.junit)
+  testImplementation("com.google.truth:truth:1.4.4")
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(platform(libs.androidx.compose.bom))
