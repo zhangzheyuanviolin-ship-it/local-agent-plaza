@@ -1,0 +1,289 @@
+name: MCP253 Office evidence contract build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp253_office_contract_build.yaml'
+      - 'Android/src/scripts/patch_mcp253_office_contract.py'
+      - 'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeMcp253Compat.kt'
+      - 'Android/src/app/src/test/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeMcp253CompatTest.kt'
+      - 'logs/mcp-252_测试日志与文档_20260904.zip'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp253-office-contract
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Reproduce MCP252 logs test build sign and publish MCP253
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.253'
+      LOCAL_VERSION_CODE: '353'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      APK_RELEASE_TAG: 'mcp253-office-contract-v1'
+      APK_NAME: 'local-agent-plaza-1.0.14-mcp.253.apk'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+
+      - name: Verify MCP250 golden boundary
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin golden/mcp-250-product-stable:refs/remotes/origin/golden/mcp-250-product-stable
+          test "$(git rev-parse refs/remotes/origin/golden/mcp-250-product-stable)" = '4a4346a199344ac0912984f1f383abedf3b93819'
+          git diff --name-status refs/remotes/origin/golden/mcp-250-product-stable...HEAD | tee /tmp/mcp253-source-diff.txt
+          ! grep -E 'customtasks/(musicgeneration|visualcreation)/|app/src/main/jniLibs/arm64-v8a/' /tmp/mcp253-source-diff.txt
+
+      - name: Reproduce MCP252 failures from the exact uploaded nine-entry evidence ZIP
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ZIP='logs/mcp-252_测试日志与文档_20260904.zip'
+          test -s "$ZIP"
+          rm -rf /tmp/mcp252-field && mkdir -p /tmp/mcp252-field
+          unzip -o "$ZIP" -d /tmp/mcp252-field >/dev/null
+          python3 - <<'PY'
+          import json, zipfile, re, html
+          from pathlib import Path
+          root = Path('/tmp/mcp252-field')
+          files = {p.name for p in root.iterdir()}
+          required = {
+            '20260904-135415-166-word_document.json',
+            '20260904-135443-445-word_document.json',
+            '20260904-134741-262-word_document.json',
+            '20260904-135541-993-word_document.json',
+            '20260904-135740-951-word_document.json',
+            '20260904-135510-771-word_document.json',
+            '20260904-135032-586-word_document.json',
+            'document.docx',
+            'self_intro.docx',
+          }
+          assert files == required, (len(files), files)
+
+          def load(name):
+            return json.loads((root / name).read_text(encoding='utf-8'))
+          def raw_args(d):
+            return json.loads(d['model_tool_arguments'])
+          def raw_result(d):
+            return json.loads(d['tool_result']['raw_result_json'])
+
+          a = load('20260904-135415-166-word_document.json')
+          ar = raw_args(a)
+          assert ar['operations'] == ['create']
+          assert a['resolved_operation'] == 'word_modify'
+          assert raw_result(a)['error'] == 'Input path is required.'
+
+          b = load('20260904-135510-771-word_document.json')
+          br = raw_args(b)
+          assert br['operations'][0]['operation'] == 'create'
+          assert b['resolved_operation'] == 'word_modify'
+          assert raw_result(b)['error'] == 'Input path is required.'
+
+          c = load('20260904-135740-951-word_document.json')
+          cr = raw_args(c)
+          assert cr['operations'][0]['type'] == 'append'
+          assert cr['operations'][0]['content']
+          assert raw_result(c)['error'].startswith('Unsupported Word modify action:')
+
+          d = load('20260904-135032-586-word_document.json')
+          dr = raw_args(d)
+          assert dr['operations'][0]['operation'] == 'append'
+          assert dr['operations'][0]['content']
+          assert raw_result(d)['error'].startswith('Unsupported Word modify action:')
+
+          first_success = load('20260904-134741-262-word_document.json')
+          assert first_success['tool_result']['status'] == 'succeeded'
+          assert first_success['tool_result']['path'] == 'file/document.docx'
+          assert raw_result(first_success)['verified'] is True
+
+          collision = load('20260904-135443-445-word_document.json')
+          assert collision['tool_result']['status'] == 'failed'
+          assert 'file/document.docx' in collision['tool_result']['error']
+          assert 'Refusing to overwrite existing file' in collision['tool_result']['error']
+
+          explicit = load('20260904-135541-993-word_document.json')
+          assert explicit['tool_result']['status'] == 'succeeded'
+          assert explicit['tool_result']['path'] == 'file/self_intro.docx'
+          assert raw_result(explicit)['verified'] is True
+
+          def docx_text(path):
+            with zipfile.ZipFile(path) as z:
+              xml = z.read('word/document.xml').decode('utf-8')
+            parts = [html.unescape(re.sub('<[^>]+>', '', x)) for x in re.findall(r'<w:t(?:\s[^>]*)?>(.*?)</w:t>', xml, re.S)]
+            return '\n'.join(parts)
+
+          text1 = docx_text(root / 'document.docx')
+          expected1 = raw_args(first_success)
+          assert expected1['title'] in text1
+          assert expected1['content'] in text1
+          text2 = docx_text(root / 'self_intro.docx')
+          expected2 = raw_args(explicit)
+          assert expected2['title'] in text2
+          assert expected2['content'] in text2
+
+          # The logs prove the detailed backend retry hint was replaced by a generic outer hint.
+          assert 'For create provide title/content' in raw_result(a)['recovery_hint']
+          assert a['tool_result']['recovery_hint'] == 'Check the required fields and retry with a workspace-relative path.'
+          print('MCP252_NINE_ENTRY_FIELD_EVIDENCE_REPRODUCED')
+          PY
+
+      - name: Materialize MCP251 MCP252 then apply MCP253 evidence repair
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile Android/src/scripts/patch_mcp251_office_skills.py
+          python3 -m py_compile Android/src/scripts/patch_mcp252_office_truth.py
+          python3 -m py_compile Android/src/scripts/patch_mcp253_office_contract.py
+          cd Android/src
+          python3 scripts/patch_mcp251_office_skills.py
+          python3 scripts/patch_mcp252_office_truth.py
+          python3 scripts/patch_mcp253_office_contract.py
+          AGENT='app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat'
+          grep -F 'MCP253_OFFICE_EVIDENCE_DIALECT_NORMALIZATION' "$AGENT/AgentOfficeTruthGuard.kt"
+          grep -F 'MCP253_OFFICE_COLLISION_SAFE_OUTPUT' "$AGENT/AgentOfficeTruthGuard.kt"
+          grep -F 'MCP253_OFFICE_PRESERVE_BACKEND_RECOVERY_HINT' "$AGENT/AgentTools.kt"
+          grep -F 'MCP253_OFFICE_EVIDENCE_SCHEMA_GUIDANCE' "$AGENT/AgentTooling.kt"
+          grep -F 'promoteWrappedRootOperation' "$AGENT/AgentOfficeMcp253Compat.kt"
+          grep -F 'normalizeModifyOperations' "$AGENT/AgentOfficeMcp253Compat.kt"
+          grep -F 'chooseUniquePath' "$AGENT/AgentOfficeMcp253Compat.kt"
+
+      - name: Checkout stable-diffusion.cpp at MCP250 protected revision
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Run MCP252 and MCP253 targeted regressions and build release APK
+        working-directory: Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./gradlew :app:testReleaseUnitTest \
+            --tests 'com.google.ai.edge.gallery.customtasks.agentchat.AgentOfficeTruthGuardTest' \
+            --tests 'com.google.ai.edge.gallery.customtasks.agentchat.AgentOfficeMcp253CompatTest' \
+            :app:assembleRelease --stacktrace
+
+      - name: Verify protected runtime boundaries after materialization
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git diff --exit-code refs/remotes/origin/golden/mcp-250-product-stable -- \
+            Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/musicgeneration \
+            Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation \
+            Android/src/app/src/main/jniLibs/arm64-v8a
+          grep -F 'executeVerified' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeTruthGuard.kt
+          grep -F 'verified' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeTruthGuard.kt
+          grep -F 'rolled_back' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeTruthGuard.kt
+          grep -F 'payload.optString("recovery_hint")' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentTools.kt
+
+      - name: Verify signed MCP253 APK identity and five Office assets
+        id: verify
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BUILD_TOOLS="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          APK='Android/src/app/build/outputs/apk/release/app-release.apk'
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='353'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.253'"
+          for skill in word-document pdf-document excel-workbook powerpoint-presentation document-convert; do
+            unzip -l "$APK" | grep "assets/skills/$skill/SKILL.md"
+          done
+          cp "$APK" "$RUNNER_TEMP/$APK_NAME"
+          sha256sum "$RUNNER_TEMP/$APK_NAME" | tee "$RUNNER_TEMP/$APK_NAME.sha256"
+          echo "apk_sha256=$(cut -d' ' -f1 "$RUNNER_TEMP/$APK_NAME.sha256")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP253 Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-253
+          path: |
+            ${{ runner.temp }}/${{ env.APK_NAME }}
+            ${{ runner.temp }}/${{ env.APK_NAME }}.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish permanent MCP253 GitHub Release
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title 'Local Agent Plaza MCP253 Office Evidence Contract Fix' \
+              --notes 'MCP253 is derived from the exact nine-entry MCP252 field evidence uploaded on 2026-09-04. It fixes wrapped create directives misrouted as modify, accepts observed append dialects using type/operation plus direct content, allocates semantic collision-safe filenames when output_path is omitted, preserves precise backend recovery hints, keeps MCP252 semantic read-back verification and rollback, and applies the shared envelope hardening to Excel/PPTX while preserving MCP250 protected runtimes.'
+          gh release upload "$APK_RELEASE_TAG" "$RUNNER_TEMP/$APK_NAME" "$RUNNER_TEMP/$APK_NAME.sha256" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,url,assets
+
+      - name: Write MCP253 result marker
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY' > /tmp/mcp253-result.json
+          import json, os
+          print(json.dumps({
+              'schema': 'local-agent-plaza.mcp253-office-contract-result.v1',
+              'run_id': int(os.environ['GITHUB_RUN_ID']),
+              'run_number': int(os.environ['GITHUB_RUN_NUMBER']),
+              'commit_sha': os.environ['GITHUB_SHA'],
+              'version_name': os.environ['LOCAL_VERSION_NAME'],
+              'version_code': int(os.environ['LOCAL_VERSION_CODE']),
+              'package': 'com.localagent.plaza.mcp',
+              'release_tag': os.environ['APK_RELEASE_TAG'],
+              'apk_name': os.environ['APK_NAME'],
+              'apk_sha256': '${{ steps.verify.outputs.apk_sha256 }}',
+              'evidence_zip': 'logs/mcp-252_测试日志与文档_20260904.zip',
+              'evidence_entries': 9,
+              'release_url': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/{os.environ['APK_RELEASE_TAG']}",
+              'apk_url': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['APK_RELEASE_TAG']}/{os.environ['APK_NAME']}",
+          }, ensure_ascii=False, indent=2))
+          PY
+          content="$(base64 -w0 /tmp/mcp253-result.json)"
+          api="repos/${GITHUB_REPOSITORY}/contents/docs/mcp253_office_contract_result.json"
+          old="$(gh api "$api?ref=experimental" 2>/dev/null || true)"
+          sha="$(printf '%s' "$old" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$sha" ]; then
+            gh api --method PUT "$api" -f message='Update MCP253 Office contract build result' -f branch=experimental -f sha="$sha" -f content="$content"
+          else
+            gh api --method PUT "$api" -f message='Create MCP253 Office contract build result' -f branch=experimental -f content="$content"
+          fi
