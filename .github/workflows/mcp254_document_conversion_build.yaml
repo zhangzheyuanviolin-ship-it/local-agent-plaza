@@ -1,0 +1,267 @@
+name: MCP254 Document conversion evidence build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp254_document_conversion_build.yaml'
+      - 'Android/src/scripts/patch_mcp254_document_conversion.py'
+      - 'Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentDocumentConversionMcp254.kt'
+      - 'Android/src/app/src/test/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentDocumentConversionMcp254Test.kt'
+      - 'Android/src/app/src/main/assets/skills/document-convert/SKILL.md'
+      - 'logs/mcp-253_测试日志与文档_20260904.zip'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp254-document-conversion
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Reproduce MCP253 conversion logs audit matrix build sign and publish MCP254
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.254'
+      LOCAL_VERSION_CODE: '354'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      APK_RELEASE_TAG: 'mcp254-document-conversion-v1'
+      APK_NAME: 'local-agent-plaza-1.0.14-mcp.254.apk'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+
+      - name: Verify MCP250 golden boundary
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git fetch origin golden/mcp-250-product-stable:refs/remotes/origin/golden/mcp-250-product-stable
+          test "$(git rev-parse refs/remotes/origin/golden/mcp-250-product-stable)" = '4a4346a199344ac0912984f1f383abedf3b93819'
+          git diff --name-status refs/remotes/origin/golden/mcp-250-product-stable...HEAD | tee /tmp/mcp254-source-diff.txt
+          ! grep -E 'customtasks/(musicgeneration|visualcreation)/|app/src/main/jniLibs/arm64-v8a/' /tmp/mcp254-source-diff.txt
+
+      - name: Reproduce exact six-entry MCP253 document conversion evidence
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ZIP='logs/mcp-253_测试日志与文档_20260904.zip'
+          test -s "$ZIP"
+          rm -rf /tmp/mcp253-conversion && mkdir -p /tmp/mcp253-conversion
+          unzip -o "$ZIP" -d /tmp/mcp253-conversion >/dev/null
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('/tmp/mcp253-conversion')
+          files = sorted(p.name for p in root.iterdir())
+          required = sorted([
+            '20260904-213720-233-convert_document.json',
+            '20260904-213407-980-convert_document.json',
+            '20260904-215043-813-convert_document.json',
+            '20260904-214145-856-convert_document.json',
+            '20260904-215016-405-convert_document.json',
+            '20260904-214120-395-convert_document.json',
+          ])
+          assert files == required, (len(files), files)
+
+          def load(name):
+            return json.loads((root / name).read_text(encoding='utf-8'))
+          def args(name):
+            return json.loads(load(name)['model_tool_arguments'])
+          def raw(name):
+            return json.loads(load(name)['tool_result']['raw_result_json'])
+
+          txt_docx = load('20260904-213407-980-convert_document.json')
+          assert txt_docx['tool_result']['status'] == 'succeeded'
+          assert args('20260904-213407-980-convert_document.json') == {
+            'input_path': 'file/artistic_freedom_reflection.txt',
+            'output_format': 'docx',
+          }
+          assert raw('20260904-213407-980-convert_document.json')['verified'] is True
+
+          bare_txt = load('20260904-215043-813-convert_document.json')
+          assert args('20260904-215043-813-convert_document.json')['input_path'] == '2026世界杯决赛新闻.txt'
+          assert bare_txt['tool_result']['error'] == 'File not found: 2026世界杯决赛新闻.txt'
+
+          bare_docx = load('20260904-214145-856-convert_document.json')
+          assert args('20260904-214145-856-convert_document.json')['input_path'] == 'artistic_freedom_reflection.docx'
+          assert bare_docx['tool_result']['error'] == 'File not found: artistic_freedom_reflection.docx'
+
+          for name in (
+            '20260904-213720-233-convert_document.json',
+            '20260904-215016-405-convert_document.json',
+            '20260904-214120-395-convert_document.json',
+          ):
+            d = load(name)
+            r = raw(name)
+            assert d['tool_result']['status'] == 'failed'
+            assert r['verified'] is False
+            assert r['rolled_back'] is True
+            assert r['error'] == 'Output verification failed: Converted output failed semantic source-content preservation checks.'
+            assert r['path'].endswith('.pdf')
+
+          print('MCP253_SIX_ENTRY_CONVERSION_EVIDENCE_REPRODUCED')
+          PY
+
+      - name: Materialize MCP251 MCP252 MCP253 then apply MCP254 conversion repair
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile Android/src/scripts/patch_mcp251_office_skills.py
+          python3 -m py_compile Android/src/scripts/patch_mcp252_office_truth.py
+          python3 -m py_compile Android/src/scripts/patch_mcp253_office_contract.py
+          python3 -m py_compile Android/src/scripts/patch_mcp254_document_conversion.py
+          cd Android/src
+          python3 scripts/patch_mcp251_office_skills.py
+          python3 scripts/patch_mcp252_office_truth.py
+          python3 scripts/patch_mcp253_office_contract.py
+          python3 scripts/patch_mcp254_document_conversion.py
+          AGENT='app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat'
+          grep -F 'MCP254_DOCUMENT_CONVERSION_NORMALIZATION' "$AGENT/AgentOfficeTruthGuard.kt"
+          grep -F 'MCP254_DOCUMENT_CONVERSION_SOURCE_PRESERVATION' "$AGENT/AgentOfficeTruthGuard.kt"
+          grep -F 'MCP254_PDF_LAYOUT_INSENSITIVE_VERIFICATION' "$AGENT/AgentOfficeTruthGuard.kt"
+          grep -F 'MCP254_DOCUMENT_CONVERSION_MATRIX' "$AGENT/AgentOfficeDocumentSupport.kt"
+          grep -F 'MCP254_DOCUMENT_CONVERSION_SCHEMA_GUIDANCE' "$AGENT/AgentTooling.kt"
+          grep -F 'BINARY_COPY' "$AGENT/AgentDocumentConversionMcp254.kt"
+          grep -F 'preservesSemanticContent' "$AGENT/AgentDocumentConversionMcp254.kt"
+          ! grep -F 'text = text.take(500_000)' "$AGENT/AgentOfficeDocumentSupport.kt"
+
+      - name: Checkout stable-diffusion.cpp at MCP250 protected revision
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Run Office regressions full conversion matrix policy and build release APK
+        working-directory: Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./gradlew :app:testReleaseUnitTest \
+            --tests 'com.google.ai.edge.gallery.customtasks.agentchat.AgentOfficeTruthGuardTest' \
+            --tests 'com.google.ai.edge.gallery.customtasks.agentchat.AgentOfficeMcp253CompatTest' \
+            --tests 'com.google.ai.edge.gallery.customtasks.agentchat.AgentDocumentConversionMcp254Test' \
+            :app:assembleRelease --stacktrace
+
+      - name: Verify protected runtime boundaries after materialization
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git diff --exit-code refs/remotes/origin/golden/mcp-250-product-stable -- \
+            Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/musicgeneration \
+            Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/visualcreation \
+            Android/src/app/src/main/jniLibs/arm64-v8a
+          grep -F 'executeVerified' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeTruthGuard.kt
+          grep -F 'rolled_back' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeTruthGuard.kt
+          grep -F 'layout-insensitive' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeTruthGuard.kt
+          grep -F 'refusing a partial conversion' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeDocumentSupport.kt
+          grep -F 'Scanned/image-only PDF conversion requires OCR' Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AgentOfficeDocumentSupport.kt
+
+      - name: Verify signed MCP254 APK identity and five Office assets
+        id: verify
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BUILD_TOOLS="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          APK='Android/src/app/build/outputs/apk/release/app-release.apk'
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='354'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.254'"
+          for skill in word-document pdf-document excel-workbook powerpoint-presentation document-convert; do
+            unzip -l "$APK" | grep "assets/skills/$skill/SKILL.md"
+          done
+          cp "$APK" "$RUNNER_TEMP/$APK_NAME"
+          sha256sum "$RUNNER_TEMP/$APK_NAME" | tee "$RUNNER_TEMP/$APK_NAME.sha256"
+          echo "apk_sha256=$(cut -d' ' -f1 "$RUNNER_TEMP/$APK_NAME.sha256")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP254 Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-254
+          path: |
+            ${{ runner.temp }}/${{ env.APK_NAME }}
+            ${{ runner.temp }}/${{ env.APK_NAME }}.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish permanent MCP254 GitHub Release
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title 'Local Agent Plaza MCP254 Document Conversion Fix' \
+              --notes 'MCP254 is derived from the exact six-entry MCP253 document-conversion evidence uploaded on 2026-09-04. It normalizes bare document input filenames into file/, fixes valid TXT/DOCX to PDF outputs being rejected by layout-sensitive semantic verification, audits all 16 TXT/DOCX/PDF/HTML conversion routes, uses exact binary copies for same-format conversion, refuses silent text truncation and same-path source overwrite, reports scanned/image-only PDF limitations honestly, preserves MCP252 truth verification/rollback and MCP253 Office compatibility, and leaves MCP250 protected model/media/native runtimes unchanged.'
+          gh release upload "$APK_RELEASE_TAG" "$RUNNER_TEMP/$APK_NAME" "$RUNNER_TEMP/$APK_NAME.sha256" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,url,assets
+
+      - name: Write MCP254 result marker
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY' > /tmp/mcp254-result.json
+          import json, os
+          print(json.dumps({
+              'schema': 'local-agent-plaza.mcp254-document-conversion-result.v1',
+              'run_id': int(os.environ['GITHUB_RUN_ID']),
+              'run_number': int(os.environ['GITHUB_RUN_NUMBER']),
+              'commit_sha': os.environ['GITHUB_SHA'],
+              'version_name': os.environ['LOCAL_VERSION_NAME'],
+              'version_code': int(os.environ['LOCAL_VERSION_CODE']),
+              'package': 'com.localagent.plaza.mcp',
+              'release_tag': os.environ['APK_RELEASE_TAG'],
+              'apk_name': os.environ['APK_NAME'],
+              'apk_sha256': '${{ steps.verify.outputs.apk_sha256 }}',
+              'evidence_zip': 'logs/mcp-253_测试日志与文档_20260904.zip',
+              'evidence_entries': 6,
+              'conversion_matrix_routes': 16,
+              'same_format_binary_copy_routes': 4,
+              'cross_format_text_routes': 12,
+              'release_url': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/{os.environ['APK_RELEASE_TAG']}",
+              'apk_url': f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['APK_RELEASE_TAG']}/{os.environ['APK_NAME']}",
+          }, ensure_ascii=False, indent=2))
+          PY
+          content="$(base64 -w0 /tmp/mcp254-result.json)"
+          api="repos/${GITHUB_REPOSITORY}/contents/docs/mcp254_document_conversion_result.json"
+          old="$(gh api "$api?ref=experimental" 2>/dev/null || true)"
+          sha="$(printf '%s' "$old" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$sha" ]; then
+            gh api --method PUT "$api" -f message='Update MCP254 document conversion build result' -f branch=experimental -f sha="$sha" -f content="$content"
+          else
+            gh api --method PUT "$api" -f message='Create MCP254 document conversion build result' -f branch=experimental -f content="$content"
+          fi

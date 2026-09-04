@@ -32,9 +32,20 @@ import com.google.ai.edge.gallery.common.isAICoreSupported
 import com.google.ai.edge.gallery.customtasks.aikeyboard.TASK_ID_AI_KEYBOARD
 import com.google.ai.edge.gallery.customtasks.aikeyboard.createAiKeyboardSettingsModel
 import com.google.ai.edge.gallery.customtasks.common.CustomTask
+import com.google.ai.edge.gallery.customtasks.musicgeneration.TASK_ID_LOCAL_MUSIC_GENERATION
+import com.google.ai.edge.gallery.customtasks.musicgeneration.createMusicGenerationModels
 import com.google.ai.edge.gallery.customtasks.visionnarration.TASK_ID_VISION_NARRATION
 import com.google.ai.edge.gallery.customtasks.videoqa.TASK_ID_VIDEO_QUESTION_ANSWER
+import com.google.ai.edge.gallery.customtasks.visualcreation.BONSAI_IMAGE_MODEL_ID
+import com.google.ai.edge.gallery.customtasks.visualcreation.FLUX_KLEIN_IMAGE_MODEL_ID
+import com.google.ai.edge.gallery.customtasks.visualcreation.Z_IMAGE_TURBO_MODEL_ID
+import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_BONSAI_IMAGE
+import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_FLUX_KLEIN_IMAGE
+import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_Z_IMAGE_TURBO
 import com.google.ai.edge.gallery.customtasks.visualcreation.TASK_ID_LOCAL_VISUAL_CREATION
+import com.google.ai.edge.gallery.customtasks.visualcreation.createBonsaiImageModel
+import com.google.ai.edge.gallery.customtasks.visualcreation.createFluxKleinImageModel
+import com.google.ai.edge.gallery.customtasks.visualcreation.createZImageTurboModel
 import com.google.ai.edge.gallery.customtasks.visualcreation.createVisualCreationImageModels
 import com.google.ai.edge.gallery.data.Accelerator
 import com.google.ai.edge.gallery.data.BuiltInTaskId
@@ -192,6 +203,7 @@ private val PREDEFINED_LLM_TASK_ORDER =
     BuiltInTaskId.LLM_CHAT,
     BuiltInTaskId.LLM_AGENT_CHAT,
     TASK_ID_AI_KEYBOARD,
+    TASK_ID_LOCAL_MUSIC_GENERATION,
     BuiltInTaskId.LLM_PROMPT_LAB,
     BuiltInTaskId.LLM_TINY_GARDEN,
     BuiltInTaskId.LLM_MOBILE_ACTIONS,
@@ -298,7 +310,11 @@ constructor(
   private fun restoreLocalVisualCreationModels(tasks: Collection<Task>) {
     val task = tasks.firstOrNull { it.id == TASK_ID_LOCAL_VISUAL_CREATION } ?: return
     var changed = false
-    for (model in createVisualCreationImageModels()) {
+    for (
+      model in
+        listOf(createBonsaiImageModel(), createFluxKleinImageModel(), createZImageTurboModel()) +
+          createVisualCreationImageModels()
+    ) {
       if (task.models.none { it.name == model.name }) {
         task.models.add(model)
         changed = true
@@ -307,6 +323,55 @@ constructor(
     if (changed) {
       task.updateTrigger.value = System.currentTimeMillis()
     }
+  }
+
+  private fun restoreDedicatedSingleModelTask(
+    tasks: Collection<Task>,
+    taskId: String,
+    modelId: String,
+    createModel: () -> Model,
+  ) {
+    val task = tasks.firstOrNull { it.id == taskId } ?: return
+    val alreadyCanonical = task.models.size == 1 && task.models.first().name == modelId
+    if (alreadyCanonical) return
+
+    task.models.clear()
+    task.models.add(createModel())
+    task.updateTrigger.value = System.currentTimeMillis()
+  }
+
+  private fun restoreBonsaiImageModel(tasks: Collection<Task>) {
+    restoreDedicatedSingleModelTask(
+      tasks = tasks,
+      taskId = TASK_ID_BONSAI_IMAGE,
+      modelId = BONSAI_IMAGE_MODEL_ID,
+      createModel = ::createBonsaiImageModel,
+    )
+  }
+
+  private fun restoreFluxKleinImageModel(tasks: Collection<Task>) {
+    restoreDedicatedSingleModelTask(
+      tasks = tasks,
+      taskId = TASK_ID_FLUX_KLEIN_IMAGE,
+      modelId = FLUX_KLEIN_IMAGE_MODEL_ID,
+      createModel = ::createFluxKleinImageModel,
+    )
+  }
+
+  private fun restoreZImageTurboModel(tasks: Collection<Task>) {
+    restoreDedicatedSingleModelTask(
+      tasks = tasks,
+      taskId = TASK_ID_Z_IMAGE_TURBO,
+      modelId = Z_IMAGE_TURBO_MODEL_ID,
+      createModel = ::createZImageTurboModel,
+    )
+  }
+
+  private fun restoreLocalImageGenerationModels(tasks: Collection<Task>) {
+    restoreLocalVisualCreationModels(tasks)
+    restoreBonsaiImageModel(tasks)
+    restoreFluxKleinImageModel(tasks)
+    restoreZImageTurboModel(tasks)
   }
 
   private fun restoreAiKeyboardSettingsModel(tasks: Collection<Task>) {
@@ -318,18 +383,40 @@ constructor(
     }
   }
 
+  private fun restoreLocalMusicGenerationModels(tasks: Collection<Task>) {
+    val task = tasks.firstOrNull { it.id == TASK_ID_LOCAL_MUSIC_GENERATION } ?: return
+    var changed = false
+    for (model in createMusicGenerationModels()) {
+      if (task.models.none { it.name == model.name }) {
+        task.models.add(model)
+        changed = true
+      }
+    }
+    if (changed) {
+      task.updateTrigger.value = System.currentTimeMillis()
+    }
+  }
+
   fun processTasks() {
     val curTasks = getActiveCustomTasks().map { it.task }
-    restoreLocalVisualCreationModels(curTasks)
+    restoreLocalImageGenerationModels(curTasks)
     restoreAiKeyboardSettingsModel(curTasks)
+    restoreLocalMusicGenerationModels(curTasks)
     for (task in curTasks) {
+      val uniqueModels = task.models.distinctBy { it.name }
+      if (uniqueModels.size != task.models.size) {
+        task.models.clear()
+        task.models.addAll(uniqueModels)
+        task.updateTrigger.value = System.currentTimeMillis()
+      }
       for (model in task.models) {
         model.preProcess()
       }
-      // Move the model that is best for this task to the front.
-      val bestModel = task.models.find { it.bestForTaskIds.contains(task.id) }
-      if (bestModel != null) {
-        task.models.remove(bestModel)
+      // Move the model that is best for this task to the front without equality-based remove().
+      // Index-based removal guarantees we cannot accidentally duplicate the same model.
+      val bestModelIndex = task.models.indexOfFirst { it.bestForTaskIds.contains(task.id) }
+      if (bestModelIndex > 0) {
+        val bestModel = task.models.removeAt(bestModelIndex)
         task.models.add(0, bestModel)
       }
     }
@@ -401,10 +488,8 @@ constructor(
       return
     }
 
-    // Delete the model files first.
-    deleteModel(model = model)
-
-    // Start to send download request.
+    // Keep completed files and .tmp ranges. The worker resumes from persisted bytes.
+    // Only the explicit delete action clears model data.
     downloadRepository.downloadModel(
       task = task,
       model = model,
@@ -419,8 +504,8 @@ constructor(
     if (model.runtimeType == RuntimeType.AICORE) {
       return
     }
+    // Treat cancellation as pause. Preserve final component files and .tmp ranges.
     downloadRepository.cancelDownloadModel(model)
-    deleteModel(model = model)
   }
 
   fun deleteModel(model: Model) {
@@ -1052,8 +1137,9 @@ constructor(
       try {
         val curTasks = getActiveCustomTasks().map { it.task }
         clearNonImportedModelsFromTasks(curTasks)
-        restoreLocalVisualCreationModels(curTasks)
+        restoreLocalImageGenerationModels(curTasks)
         restoreAiKeyboardSettingsModel(curTasks)
+        restoreLocalMusicGenerationModels(curTasks)
 
         // Clear existing allowlist models.
         _allowlistModels.clear()
@@ -1304,21 +1390,37 @@ constructor(
     }
   }
 
-  private fun isModelPartiallyDownloaded(model: Model): Boolean {
-    if (model.localModelFilePathOverride.isNotEmpty()) {
-      return false
-    }
+  private fun modelDownloadFileNames(model: Model): List<String> =
+    listOf(model.downloadFileName) + model.extraDataFiles.map { it.downloadFileName }
 
-    // A model is partially downloaded when the tmp file exists.
-    return getModelDownloadTempFile(model).exists()
+  private fun modelDownloadDirectory(model: Model): File =
+    File(
+      externalFilesDir,
+      listOf(model.normalizedName, model.version).joinToString(File.separator),
+    )
+
+  private fun isModelPartiallyDownloaded(model: Model): Boolean {
+    if (model.localModelFilePathOverride.isNotEmpty()) return false
+    val dir = modelDownloadDirectory(model)
+    val names = modelDownloadFileNames(model)
+    val hasAnyBytes = names.any { name ->
+      File(dir, name).length() > 0L || File(dir, "$name.$TMP_FILE_EXT").length() > 0L
+    }
+    val allCompleted = names.all { name -> File(dir, name).length() > 0L }
+    return hasAnyBytes && !allCompleted
   }
 
-  private fun getModelDownloadTempFile(model: Model): File {
-    return File(
-      externalFilesDir,
-      listOf(model.normalizedName, model.version, "${model.downloadFileName}.$TMP_FILE_EXT")
-        .joinToString(File.separator),
-    )
+  private fun getModelDownloadedBytes(model: Model): Long {
+    val dir = modelDownloadDirectory(model)
+    return modelDownloadFileNames(model).sumOf { name ->
+      val partial = File(dir, "$name.$TMP_FILE_EXT")
+      val completed = File(dir, name)
+      when {
+        partial.length() > 0L -> partial.length()
+        completed.length() > 0L -> completed.length()
+        else -> 0L
+      }
+    }
   }
 
   private fun createEmptyUiState(): ModelManagerUiState {
@@ -1333,8 +1435,9 @@ constructor(
   private fun createBootstrapUiState(): ModelManagerUiState {
     val activeTasks = getActiveCustomTasks().map { it.task }
     clearAllModelsFromTasks(activeTasks)
-    restoreLocalVisualCreationModels(activeTasks)
+    restoreLocalImageGenerationModels(activeTasks)
     restoreAiKeyboardSettingsModel(activeTasks)
+    restoreLocalMusicGenerationModels(activeTasks)
 
     val modelDownloadStatus: MutableMap<String, ModelDownloadStatus> = mutableMapOf()
     val modelInstances: MutableMap<String, ModelInitializationStatus> = mutableMapOf()
@@ -1703,8 +1806,7 @@ constructor(
     // Partially downloaded.
     else if (isModelPartiallyDownloaded(model = model)) {
       status = ModelDownloadStatusType.PARTIALLY_DOWNLOADED
-      val tmpFile = getModelDownloadTempFile(model)
-      receivedBytes = tmpFile.length()
+      receivedBytes = getModelDownloadedBytes(model)
       totalBytes = model.totalBytes
       Log.d(TAG, "${model.name} is partially downloaded. $receivedBytes/$totalBytes")
     }

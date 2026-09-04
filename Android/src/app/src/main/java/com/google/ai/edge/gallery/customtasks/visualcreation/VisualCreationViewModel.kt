@@ -50,8 +50,7 @@ data class VisualCreationUiState(
   val prompt: String = "",
   val negativePrompt: String = "",
   val settings: ImageGenerationSettings = ImageGenerationSettings.default(),
-  val selectedImageGenerationModelId: String? =
-    ImageGenerationModelRegistry.recommendedModels.firstOrNull()?.modelId,
+  val selectedImageGenerationModelId: String? = BONSAI_IMAGE_MODEL_ID,
   val status: VisualCreationStatus = VisualCreationStatus.IMAGE_MODEL_MISSING,
   val statusText: String = "请选择或导入图像生成模型",
   val submittedPrompt: String = "",
@@ -59,6 +58,8 @@ data class VisualCreationUiState(
   val generationStartedAtMs: Long = 0L,
   val generationProgressStep: Int = 0,
   val generationProgressSteps: Int = 0,
+  val generationStageText: String = "等待开始",
+  val generationTimingText: String = "",
   val generatedImagePath: String? = null,
   val generatedImageWidth: Int = 0,
   val generatedImageHeight: Int = 0,
@@ -91,7 +92,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
   }
 
   fun syncSelectedImageGenerationModel(model: Model) {
-    val modelInfo = ImageGenerationModelRegistry.findModel(model.name)
+    val modelInfo = findVisualCreationImageModelInfo(model.name)
     val nextSettings = defaultSettingsForModel(modelInfo, _uiState.value.settings)
     _uiState.update {
       it.copy(
@@ -104,7 +105,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
   }
 
   fun selectImageGenerationModel(modelId: String) {
-    val model = ImageGenerationModelRegistry.findModel(modelId) ?: return
+    val model = findVisualCreationImageModelInfo(modelId) ?: return
     _uiState.update {
       it.copy(
         selectedImageGenerationModelId = model.modelId,
@@ -297,7 +298,7 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
       return
     }
 
-    val modelInfo = ImageGenerationModelRegistry.findModel(model.name)
+    val modelInfo = findVisualCreationImageModelInfo(model.name)
     if (modelInfo == null || !modelInfo.supportsTextToImage) {
       _uiState.update {
         it.copy(
@@ -308,6 +309,9 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
       return
     }
 
+    val bonsaiModel = isBonsaiImageModel(model.name)
+    val fluxModel = isFluxKleinImageModel(model.name)
+    val zImageModel = isZImageTurboModel(model.name)
     val nativeFiles =
       if (modelInfo.backend == ImageGenerationBackend.STABLE_DIFFUSION_CPP) {
         resolveNativeImageGenerationFiles(context = context, model = model, modelInfo = modelInfo)
@@ -351,6 +355,8 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
         generationStartedAtMs = startedAtMs,
         generationProgressStep = 0,
         generationProgressSteps = settings.steps,
+        generationStageText = "准备模型和推理环境",
+        generationTimingText = "",
       )
     }
 
@@ -405,7 +411,68 @@ class VisualCreationViewModel @Inject constructor() : ViewModel() {
           settleDelayMs = 350L,
         )
         val nativeResult =
-          if (modelInfo.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN) {
+          if (bonsaiModel) {
+            BonsaiImageGenerationClient.generateImage(
+              modelPath = nativeFiles.modelPath,
+              prompt = prompt,
+              seed = seed,
+              steps = settings.steps,
+              threadCount = settings.threadCount,
+              progressListener = { progress ->
+                _uiState.update { current ->
+                  if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
+                    current.copy(
+                      generationProgressStep = progress.step,
+                      generationProgressSteps = if (progress.totalSteps > 0) progress.totalSteps else current.generationProgressSteps,
+                      generationStageText = progress.stageText,
+                      generationTimingText = progress.timingText,
+                      statusText = progress.stageText,
+                    )
+                  } else current
+                }
+              },
+            )
+          } else if (fluxModel) {
+            FluxKleinImageGenerationClient.generateImage(
+              context = context.applicationContext,
+              modelPath = nativeFiles.modelPath,
+              prompt = prompt,
+              seed = seed,
+              progressListener = { progress ->
+                _uiState.update { current ->
+                  if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
+                    current.copy(
+                      generationProgressStep = progress.step,
+                      generationProgressSteps = if (progress.totalSteps > 0) progress.totalSteps else 4,
+                      generationStageText = progress.stageText,
+                      generationTimingText = progress.timingText,
+                      statusText = progress.stageText,
+                    )
+                  } else current
+                }
+              },
+            )
+          } else if (zImageModel) {
+            ZImageTurboGenerationClient.generateImage(
+              context = context.applicationContext,
+              modelPath = nativeFiles.modelPath,
+              prompt = prompt,
+              seed = seed,
+              progressListener = { progress ->
+                _uiState.update { current ->
+                  if (current.status == VisualCreationStatus.GENERATING_IMAGE) {
+                    current.copy(
+                      generationProgressStep = progress.step,
+                      generationProgressSteps = if (progress.totalSteps > 0) progress.totalSteps else 9,
+                      generationStageText = progress.stageText,
+                      generationTimingText = progress.timingText,
+                      statusText = progress.stageText,
+                    )
+                  } else current
+                }
+              },
+            )
+          } else if (modelInfo.backend == ImageGenerationBackend.LOCAL_DREAM_QNN_MNN) {
             LocalDreamImageGenerationClient(context)
               .generateImage(
                 modelPath = nativeFiles.modelPath,
@@ -943,7 +1010,11 @@ private fun defaultSettingsForModel(
       vaeTiling = false,
     )
   return when (modelInfo.family) {
-    "Z-Image" -> base.copy(steps = 8, cfgScale = 1.0f)
+    "Bonsai Image 4B" -> base.copy(width = 512, height = 512, steps = 4, cfgScale = 1.0f)
+    "FLUX.2 Klein 4B" -> base.copy(width = 256, height = 256, steps = 4, cfgScale = 1.0f)
+    "Alibaba Tongyi-MAI Z-Image-Turbo 6B" ->
+      base.copy(width = 256, height = 256, steps = 9, cfgScale = 1.0f)
+    "Z-Image" -> base.copy(width = 256, height = 256, steps = 9, cfgScale = 1.0f)
     "Stable Diffusion 1.5" -> base.copy(steps = 28, cfgScale = 7.0f)
     "Absolute Reality SD1.5" -> base.copy(steps = 28, cfgScale = 7.0f)
     "Local Dream SDXL QNN" -> base.copy(steps = 28, cfgScale = 7.0f)

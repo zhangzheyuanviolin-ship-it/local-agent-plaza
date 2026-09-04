@@ -1,0 +1,6 @@
+=== MCP224 模型生命周期诊断 ===
+schema=mcp224.model_lifecycle.v1
+app_version=1.0.14-mcp.244
+model_name=Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP244
+stage=ui_fallback_error
+Multipart SHA-256 mismatch: 535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4 != 7cdf8232b949d184e3cee81694cea7b21bac36a538d495d1a83581a4ce2c5d44Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP244 下载失败 Multipart SHA-256 mismatch: 535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4 != 7cdf8232b949d184e3cee81694cea7b21bac36a538d495d1a83581a4ce2c5d44 了解更多并查看模型许可证 收起 Local Agent Plaza MCP244 Qwen3.5 2B Q8/4096 CPU bundle. Rebuilt from the physically tool-proven MCP238 bundle while preserving its full original tool-aware Qwen3.5 Jinja template byte-for-byte; only natural stop ID 248046 is added beside 248044. App-side generation behavior remains the MCP238/MCP239 baseline. 0%

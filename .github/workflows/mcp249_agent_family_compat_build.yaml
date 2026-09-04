@@ -1,0 +1,100 @@
+name: MCP249 targeted Agent family compatibility build
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp249_agent_family_compat_build.yaml'
+      - '.github/scripts/patch_mcp249_ministral_phi_compat.py'
+      - '.github/scripts/patch_mcp249_ministral_phi_compat_v2.py'
+      - '.github/scripts/pin_mcp249_model_pool.py'
+      - '.github/scripts/run_mcp249_agent_family_compat_build.sh'
+      - '.github/scripts/run_mcp249_agent_family_compat_build_v3.sh'
+      - '.github/scripts/patch_mcp247_qwen35_verified_2b_32k.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp249-agent-family-compat-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build audit publish MCP249 APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SOURCE_BASE_COMMIT: '1aa2f87a22a50d9133a1776556201672c1707c77'
+      MODEL_RELEASE_TAG: 'qwen35-2b-q8-32768-mcp238lineage-v3'
+      MODEL_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-32768.litertlm'
+      MODEL_NAME: 'Qwen3.5-2B LiteRT-LM Q8 32768 Plaza MCP247'
+      MODEL_SIZE: '4780966112'
+      MODEL_SHA256: '364f975167ba9bb083d9c01f0d600e9b1bb2955962d320c30cf4375b1fe42cb1'
+      LOCAL_VERSION_NAME: '1.0.14-mcp.249'
+      LOCAL_VERSION_CODE: '349'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      APK_RELEASE_TAG: 'mcp249-ministral-phi-agent-compat-v1'
+      APK_NAME: 'local-agent-plaza-1.0.14-mcp.249.apk'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+
+      - name: Publish MCP249 run marker early
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          p='/tmp/mcp249_run_early.json'
+          with open(p,'w',encoding='utf-8') as f:
+              json.dump({
+                  'schema':'local-agent-plaza.mcp249-agent-family-compat-run.v1',
+                  'run_id':int(os.environ['GITHUB_RUN_ID']),
+                  'run_number':int(os.environ['GITHUB_RUN_NUMBER']),
+                  'head_sha':os.environ['GITHUB_SHA'],
+                  'html_url':f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+                  'stage':'workflow_started',
+              },f,ensure_ascii=False,indent=2)
+              f.write('\n')
+          PY
+          content="$(base64 -w0 /tmp/mcp249_run_early.json)"
+          api="repos/${GITHUB_REPOSITORY}/contents/docs/mcp249_run.json"
+          response="$(gh api "${api}?ref=experimental" 2>/dev/null || true)"
+          sha="$(printf '%s' "$response" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))')"
+          if [ -n "$sha" ]; then
+            gh api --method PUT "$api" -f message='Update MCP249 early run marker' -f branch=experimental -f sha="$sha" -f content="$content"
+          else
+            gh api --method PUT "$api" -f message='Create MCP249 early run marker' -f branch=experimental -f content="$content"
+          fi
+
+      - name: Checkout stable-diffusion.cpp at the MCP247 product-pinned revision
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Run MCP249 fail-closed build and acceptance harness
+        shell: bash
+        run: |
+          set -euxo pipefail
+          bash .github/scripts/run_mcp249_agent_family_compat_build_v3.sh

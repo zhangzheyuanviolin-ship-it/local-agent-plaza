@@ -1,0 +1,16 @@
+{
+  "schema": "local-agent-plaza.mcp253-office-contract-result.v1",
+  "run_id": 33843986418,
+  "run_number": 1,
+  "commit_sha": "976ecba0a9dd69430381d7fad070585e26b0eb71",
+  "version_name": "1.0.14-mcp.253",
+  "version_code": 353,
+  "package": "com.localagent.plaza.mcp",
+  "release_tag": "mcp253-office-contract-v1",
+  "apk_name": "local-agent-plaza-1.0.14-mcp.253.apk",
+  "apk_sha256": "5ed8924157cd65a94b09b224fed3828abc989d018719302c16f08253102cd198",
+  "evidence_zip": "logs/mcp-252_测试日志与文档_20260904.zip",
+  "evidence_entries": 9,
+  "release_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/tag/mcp253-office-contract-v1",
+  "apk_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp253-office-contract-v1/local-agent-plaza-1.0.14-mcp.253.apk"
+}

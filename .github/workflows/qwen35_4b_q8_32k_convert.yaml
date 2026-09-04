@@ -1,0 +1,74 @@
+name: Qwen3.5 4B Q8 32K MCP238 lineage hardened
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/qwen35_4b_q8_32k_convert.yaml'
+      - 'model-conversion/qwen35/run_4b_q8_32768_ci.sh'
+      - 'model-conversion/qwen35/configs/4b-q8-32768.json'
+      - 'model-conversion/qwen35/verify_qwen35_4b.py'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: qwen35-4b-q8-32k-mcp238-lineage
+  cancel-in-progress: true
+
+jobs:
+  convert_validate_publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      PYTHONUNBUFFERED: '1'
+      MALLOC_ARENA_MAX: '2'
+    steps:
+      - name: Checkout exact experimental commit
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run hardened MCP238-lineage 4B Q8 32K conversion and all validation gates
+        shell: bash
+        run: bash model-conversion/qwen35/run_4b_q8_32768_ci.sh
+
+      - name: Persist completion or failure status to experimental
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS="$RUNNER_TEMP/qwen35_4b_32k_status.json"
+          if [ ! -f "$STATUS" ]; then
+            python - <<'PY'
+          import json,os,datetime
+          p=os.environ['RUNNER_TEMP']+'/qwen35_4b_32k_status.json'
+          d={'schema':'qwen35-4b-q8-32768-ci-status.v1','status':'FAILED','stage':'workflow_wrapper','message':'driver did not create status file','repository_commit':os.environ.get('GITHUB_SHA',''),'workflow_run_id':os.environ.get('GITHUB_RUN_ID',''),'workflow_run_url':f"https://github.com/{os.environ.get('GITHUB_REPOSITORY','')}/actions/runs/{os.environ.get('GITHUB_RUN_ID','')}",'updated_at_utc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+          open(p,'w').write(json.dumps(d,indent=2)+'\n')
+          PY
+          fi
+          python - <<'PY' > "$RUNNER_TEMP/status_payload.json"
+          import base64,json,os
+          p=os.environ['RUNNER_TEMP']+'/qwen35_4b_32k_status.json'
+          print(json.dumps({'message':'Record Qwen3.5 4B Q8 32K conversion status','content':base64.b64encode(open(p,'rb').read()).decode(),'branch':'experimental'}))
+          PY
+          API="repos/$GITHUB_REPOSITORY/contents/docs/qwen35_4b_q8_32768_conversion_status.json"
+          if gh api "$API?ref=experimental" >/tmp/existing.json 2>/dev/null; then
+            SHA=$(python -c "import json; print(json.load(open('/tmp/existing.json'))['sha'])")
+            python - "$SHA" <<'PY' > "$RUNNER_TEMP/status_payload_update.json"
+          import base64,json,os,sys
+          p=os.environ['RUNNER_TEMP']+'/qwen35_4b_32k_status.json'
+          print(json.dumps({'message':'Update Qwen3.5 4B Q8 32K conversion status','content':base64.b64encode(open(p,'rb').read()).decode(),'branch':'experimental','sha':sys.argv[1]}))
+          PY
+            gh api --method PUT "$API" --input "$RUNNER_TEMP/status_payload_update.json"
+          else
+            gh api --method PUT "$API" --input "$RUNNER_TEMP/status_payload.json"
+          fi

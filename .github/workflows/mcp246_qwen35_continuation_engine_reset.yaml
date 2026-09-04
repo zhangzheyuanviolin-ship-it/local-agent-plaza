@@ -1,0 +1,263 @@
+name: MCP246 Qwen3.5 continuation Engine reset
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp246_qwen35_continuation_engine_reset.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp246-qwen35-continuation-engine-reset
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build signed MCP246 isolated continuation reset APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MODEL_RELEASE_TAG: 'qwen35-2b-q8-4096-mcp245-frozen-v1'
+      MODEL_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp245.litertlm'
+      MODEL_NAME: 'Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP245'
+      MCP245_MODEL_SHA256: '535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4'
+      MCP245_MODEL_SIZE: '4780966112'
+      MCP245_TEMPLATE_SHA256: '273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80'
+      APK_RELEASE_TAG: 'mcp246-qwen35-continuation-engine-reset'
+      LOCAL_VERSION_NAME: '1.0.14-mcp.246'
+      LOCAL_VERSION_CODE: '346'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout experimental
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+
+      - name: Verify immutable MCP245 model and official runtime boundary
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/mcp245_manifest"
+          gh release download "$MODEL_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern manifest.json --dir "$RUNNER_TEMP/mcp245_manifest"
+          python - <<'PY'
+          import json, os
+          d=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'mcp245_manifest','manifest.json')))
+          assert d['full_sha256']==os.environ['MCP245_MODEL_SHA256']
+          assert d['full_size']==int(os.environ['MCP245_MODEL_SIZE'])
+          assert d['template_sha256']==os.environ['MCP245_TEMPLATE_SHA256']
+          assert d['byte_frozen_without_repack'] is True
+          assert d['original_tool_template_preserved_byte_for_byte'] is True
+          assert d['natural_stop_token_ids']==[248044,248046]
+          PY
+          cd Android/src
+          grep -F 'implementation(libs.litertlm)' app/build.gradle.kts
+          grep -F 'litertlm = "0.15.0"' gradle/libs.versions.toml
+          ! grep -q 'litertlm-android-0.15.0-mcp242.aar' app/build.gradle.kts
+          test -f scripts/patch_mcp238_qwen35_model_download_v3.py
+          test -f scripts/patch_mcp239_qwen35_cpu_only.py
+          test -f scripts/patch_mcp245_qwen35_frozen_download.py
+          test -f scripts/patch_mcp246_qwen35_continuation_engine_reset.py
+
+      - name: Apply MCP238 MCP239 MCP245 MCP246 and assert single-variable lifecycle change
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile \
+            scripts/patch_mcp238_qwen35_model_download_v3.py \
+            scripts/patch_mcp239_qwen35_cpu_only.py \
+            scripts/patch_mcp245_qwen35_frozen_download.py \
+            scripts/patch_mcp246_qwen35_continuation_engine_reset.py
+          python3 scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 scripts/patch_mcp239_qwen35_cpu_only.py
+          python3 scripts/patch_mcp245_qwen35_frozen_download.py
+          python3 scripts/patch_mcp246_qwen35_continuation_engine_reset.py
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          helper=Path('app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt').read_text()
+          gradle=Path('app/build.gradle.kts').read_text()
+          repo=Path('app/src/main/java/com/google/ai/edge/gallery/data/DownloadRepository.kt').read_text()
+          assert 'MCP246_QWEN35_CONTINUATION_ENGINE_RESET' in helper
+          assert 'prepared.freshConversationReason == COMPAT_FRESH_REASON_TOOL_CONTINUATION' in helper
+          assert 'Engine(instance.engineConfig).also' in helper
+          assert 'instance.engine = engine' in helper
+          assert helper.count('MCP246_QWEN35_CONTINUATION_ENGINE_RESET') >= 2
+          assert os.environ['MODEL_NAME'] in helper
+          assert os.environ['MCP245_MODEL_SHA256'] in repo
+          assert os.environ['MODEL_RELEASE_TAG'] in repo
+          assert os.environ['MODEL_FILE'] in repo
+          for forbidden in (
+              'RepetitionPenaltyConfig','NoRepeatNgramConfig','maxOutputToken =',
+              'presencePenalty = 2.0f','repetitionPenalty = 1.0f',
+              'MCP242_LOCAL_LITERTLM_AAR','MCP240_QWEN35_RECURRENT_STATE_RESET',
+              'MCP241_QWEN35_AGENT_LOGITS_FIX'):
+              assert forbidden not in helper, forbidden
+          assert 'implementation(libs.litertlm)' in gradle
+          assert 'litertlm-android-0.15.0-mcp242.aar' not in gradle
+          name=os.environ['MODEL_NAME']
+          for p in (Path('../../model_allowlists/1_0_14.json'),Path('app/src/main/assets/model_allowlists/1_0_14.json')):
+              ms=[m for m in json.loads(p.read_text())['models'] if m.get('name')==name]
+              assert len(ms)==1
+              m=ms[0]; c=m['defaultConfig']
+              assert m['modelFile']==os.environ['MODEL_FILE']
+              assert m['commitHash']==os.environ['MODEL_RELEASE_TAG']
+              assert m['sizeInBytes']==int(os.environ['MCP245_MODEL_SIZE'])
+              assert (c['topK'],c['topP'],c['temperature'],c['maxTokens'],c['maxContextLength'],c['accelerators'])==(20,0.8,0.6,1536,4096,'cpu')
+          print('MCP246 isolation invariant passed: same MCP245 model/runtime/sampler; only continuation Engine lifecycle reset added.')
+          PY
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        working-directory: ./Android/src
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Verify identity rename and hash
+        id: apk
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$SRC"
+          BADGING="$("$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$SRC" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='346'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.246'"
+          OUT="local-agent-plaza-1.0.14-mcp.246.apk"
+          cp "$SRC" "$OUT"
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$OUT" > "$OUT.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-246-final
+          path: |
+            Android/src/local-agent-plaza-1.0.14-mcp.246.apk
+            Android/src/local-agent-plaza-1.0.14-mcp.246.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish permanent APK release
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'MCP246 release already exists; uploading APK with clobber is intentionally allowed for APK artifact only.'
+          else
+            gh release create "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title 'Local Agent Plaza MCP246 Qwen3.5 continuation Engine reset' \
+              --notes 'Isolated app-level lifecycle fix on official LiteRT-LM 0.15. MCP245 frozen model bytes/template/stops/sampler/context are unchanged. Only Qwen3.5 COMPAT tool continuations rebuild the official Engine before the fresh Conversation to clear recurrent gated-delta running state. No custom JNI/AAR, repetition processor, output watchdog, hard truncation, or no-repeat mechanism.' \
+              --prerelease
+          fi
+          gh release upload "$APK_RELEASE_TAG" \
+            local-agent-plaza-1.0.14-mcp.246.apk \
+            local-agent-plaza-1.0.14-mcp.246.apk.sha256 \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish result metadata and checkpoint
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA: ${{ steps.apk.outputs.sha }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/result.json"
+          import json,os
+          apk_url=f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['APK_RELEASE_TAG']}/local-agent-plaza-1.0.14-mcp.246.apk"
+          d={
+            'schema':'local-agent-plaza.mcp246-qwen35-continuation-engine-reset.v1',
+            'run_id':int(os.environ['GITHUB_RUN_ID']),
+            'head_sha':os.environ['GITHUB_SHA'],
+            'apk_name':'local-agent-plaza-1.0.14-mcp.246.apk',
+            'apk_sha256':os.environ['APK_SHA'],
+            'version_name':'1.0.14-mcp.246','version_code':346,'package':'com.localagent.plaza.mcp',
+            'release_tag':os.environ['APK_RELEASE_TAG'],'release_apk_url':apk_url,
+            'artifact_id':int(os.environ['ARTIFACT_ID']),'artifact_url':os.environ['ARTIFACT_URL'],
+            'runtime':'official Maven LiteRT-LM 0.15.0','custom_litertlm_aar':False,'custom_litertlm_jni':False,
+            'app_patch_chain':['MCP238','MCP239','MCP245','MCP246'],
+            'model_release_tag':os.environ['MODEL_RELEASE_TAG'],'model_file':os.environ['MODEL_FILE'],
+            'model_sha256':os.environ['MCP245_MODEL_SHA256'],'model_size':int(os.environ['MCP245_MODEL_SIZE']),
+            'model_redownload_required':False,'template_sha256':os.environ['MCP245_TEMPLATE_SHA256'],
+            'natural_stop_token_ids':[248044,248046],
+            'sampler':{'top_k':20,'top_p':0.8,'temperature':0.6,'max_tokens':1536,'context':4096},
+            'backend':'CPU_FORCED','continuation_engine_reset':True,'top_level_engine_reset':False,
+            'runtime_repetition_penalty_processor':False,'hard_output_truncation':False,
+            'repetition_watchdog_cancel':False,'hard_no_repeat_ngram':False,
+            'purpose':'clear LiteRT-LM shared-Engine recurrent state only before Qwen3.5 COMPAT tool-result continuation'
+          }
+          print(json.dumps(d,indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp246_apk_result.json"
+          OLD="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          OLD_SHA="$(printf '%s' "$OLD" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$OLD_SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP246 APK result' -f branch=experimental -f sha="$OLD_SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP246 APK result' -f branch=experimental -f content="$CONTENT"
+          fi
+          python - <<'PY' > "$RUNNER_TEMP/checkpoint.md"
+          import json,os
+          d=json.load(open(os.environ['RUNNER_TEMP']+'/result.json'))
+          print('# MCP246 Qwen3.5 continuation Engine reset — final checkpoint')
+          print('\nBuild/release SUCCESS.')
+          print(f"\nRun `{d['run_id']}`; APK SHA256 `{d['apk_sha256']}`.")
+          print(f"\nAPK: `{d['release_apk_url']}`")
+          print(f"\nArtifact: `{d['artifact_url']}`")
+          print('\nModel download is NOT required. MCP246 reuses the already installed frozen MCP245 model SHA `535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4`.')
+          print('\nSingle behavioral change: for the exact MCP245 Qwen3.5 model, only a COMPAT tool-result continuation closes/reinitializes the official LiteRT-LM Engine before creating the continuation Conversation. Top-level Agent and ordinary AI chat keep the MCP245 lifecycle.')
+          print('\nNo custom JNI/AAR, repetition penalty processor, hard truncation, watchdog, or no-repeat constraint was added.')
+          print('\nPhysical validation: repeat the same web-search Agent test and compare continuation TTFT, callback count, completion, visible final answer, and whether manual Stop is still required.')
+          PY
+          CP_CONTENT="$(base64 -w0 "$RUNNER_TEMP/checkpoint.md")"
+          CP_API="repos/$GITHUB_REPOSITORY/contents/docs/checkpoints/QWEN35_MCP246_FINAL_2026-08-20.md"
+          OLD_CP="$(gh api "$CP_API?ref=experimental" 2>/dev/null || true)"
+          OLD_CP_SHA="$(printf '%s' "$OLD_CP" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$OLD_CP_SHA" ]; then
+            gh api --method PUT "$CP_API" -f message='Update MCP246 final checkpoint' -f branch=experimental -f sha="$OLD_CP_SHA" -f content="$CP_CONTENT"
+          else
+            gh api --method PUT "$CP_API" -f message='Add MCP246 final checkpoint' -f branch=experimental -f content="$CP_CONTENT"
+          fi

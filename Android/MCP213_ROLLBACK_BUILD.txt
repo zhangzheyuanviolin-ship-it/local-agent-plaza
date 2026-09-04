@@ -1,0 +1,8 @@
+MCP213 rollback rebuild marker.
+
+The Android application runtime source for this build is intentionally restored to the MCP210 stable tree.
+This file is outside Android/src and exists only to make the rollback push unambiguously match the GitHub Actions Android/** path filter.
+It is not part of the APK runtime or packaged application resources.
+
+MCP210 stable commit: 46504c36c1eac36d9123cde2d9ed3e2856c21353
+Rollback commit before marker: a40667af7a76d9e1a366974fe8b675b84d03a20c

@@ -1,0 +1,24 @@
+exit_code=1
+go: downloading github.com/rhysd/actionlint v1.7.12
+go: github.com/rhysd/actionlint@v1.7.12 requires go >= 1.25.0; switching to go1.26.7
+go: downloading go1.26.7 (linux/amd64)
+go: downloading github.com/bmatcuk/doublestar/v4 v4.10.0
+go: downloading github.com/fatih/color v1.19.0
+go: downloading github.com/mattn/go-colorable v0.1.14
+go: downloading github.com/mattn/go-runewidth v0.0.21
+go: downloading github.com/mattn/go-shellwords v1.0.12
+go: downloading github.com/robfig/cron/v3 v3.0.1
+go: downloading go.yaml.in/yaml/v4 v4.0.0-rc.3
+go: downloading golang.org/x/sync v0.20.0
+go: downloading golang.org/x/sys v0.42.0
+go: downloading github.com/mattn/go-isatty v0.0.20
+go: downloading github.com/clipperhouse/uax29/v2 v2.7.0
+.github/workflows/mcp242_qwen35_compatible_repetition.yaml:83:9: shellcheck reported issue in this script: SC2295:info:14:19: Expansions inside ${..} need to be quoted separately, otherwise they match as patterns [shellcheck]
+   |
+83 |         run: |
+   |         ^~~~
+.github/workflows/mcp242_qwen35_compatible_repetition.yaml:244:9: shellcheck reported issue in this script: SC2012:info:2:7: Use find instead of ls to better handle non-alphanumeric filenames [shellcheck]
+    |
+244 |         run: |
+    |         ^~~~
+exit status 1

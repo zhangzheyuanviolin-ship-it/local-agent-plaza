@@ -28,6 +28,41 @@ plugins {
   kotlin("kapt")
 }
 
+// Build the music runtime from the exact device-validated Box Local Music 0.4.9 golden source.
+// The preparation script pins the commit, replays the complete patch chain, audits the effective
+// engine, rewrites only the Java package, and emits it into this app's normal Java source set.
+providers.exec {
+  commandLine("python3", rootProject.file("scripts/prepare_box049_runtime.py").absolutePath)
+}.result.get().assertNormalExitValue()
+
+// MCP215: keep the MCP210 engine/runtime baseline while hardening the textual COMPAT boundary.
+// The patch is fail-fast and idempotent: if its exact anchors ever drift, the build stops rather
+// than silently shipping without multi-family tool-call normalization.
+providers.exec {
+  commandLine("python3", rootProject.file("scripts/patch_tool_call_wire_compat.py").absolutePath)
+}.result.get().assertNormalExitValue()
+
+// MCP224: preserve the validated runtime while adding copyable model lifecycle diagnostics,
+// true manual Native selection, and user-controlled COMPAT tool-loop termination.
+providers.exec {
+  commandLine("python3", rootProject.file("scripts/patch_mcp224_model_diagnostics.py").absolutePath)
+}.result.get().assertNormalExitValue()
+
+// MCP224 CI follow-up: run after the main MCP224 patch so inference callbacks can append the
+// diagnostic exception without requiring an Android Context that is unavailable in runInference.
+providers.exec {
+  commandLine(
+    "python3",
+    rootProject.file("scripts/patch_mcp224_inference_diag_context_fix.py").absolutePath,
+  )
+}.result.get().assertNormalExitValue()
+
+// MCP251: add five opt-in Office skills through the existing workspace + skill protocol only.
+// This patch is deliberately after the established MCP224 compatibility patches and is fail-closed.
+providers.exec {
+  commandLine("python3", rootProject.file("scripts/patch_mcp251_office_skills.py").absolutePath)
+}.result.get().assertNormalExitValue()
+
 android {
   namespace = "com.google.ai.edge.gallery"
   compileSdk = 35
@@ -97,6 +132,9 @@ android {
     compose = true
     buildConfig = true
   }
+  sourceSets.getByName("main").java.srcDir(rootProject.file("build/generated/box049/java"))
+  packagingOptions.pickFirst("lib/**/libLiteRt*.so")
+  packagingOptions.doNotStrip("**/libLiteRt*.so")
   externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } }
 }
 
@@ -120,11 +158,9 @@ dependencies {
   implementation(libs.androidx.security.crypto)
   implementation(libs.androidx.webkit)
   implementation(libs.litertlm)
+  implementation(libs.litert)
   implementation(libs.commonmark)
   implementation(libs.richtext)
-  implementation(libs.tflite)
-  implementation(libs.tflite.gpu)
-  implementation(libs.tflite.support)
   implementation(libs.camerax.core)
   implementation(libs.camerax.camera2)
   implementation(libs.camerax.lifecycle)
@@ -143,6 +179,10 @@ dependencies {
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
   kapt(libs.hilt.android.compiler)
   testImplementation(libs.junit)
+  testImplementation("com.google.truth:truth:1.4.4")
+  // MCP252: Android's local-unit-test android.jar exposes org.json stubs that throw at runtime.
+  // Use the real JVM implementation so the evidence-derived request-normalization regressions execute.
+  testImplementation("org.json:json:20240303")
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(platform(libs.androidx.compose.bom))

@@ -1,0 +1,845 @@
+{
+  "schema": "local-agent-plaza.artifact-enumeration.v1",
+  "matches": [
+    {
+      "id": 9367955724,
+      "name": "qwen35-q8-4096-part-09",
+      "size_in_bytes": 460966254,
+      "expired": false,
+      "created_at": "2026-08-19T13:49:28Z",
+      "expires_at": "2026-08-22T13:49:21Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367951599,
+      "name": "qwen35-q8-4096-part-08",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:49:21Z",
+      "expires_at": "2026-08-22T13:49:14Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367947260,
+      "name": "qwen35-q8-4096-part-07",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:49:14Z",
+      "expires_at": "2026-08-22T13:49:07Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367942970,
+      "name": "qwen35-q8-4096-part-06",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:49:07Z",
+      "expires_at": "2026-08-22T13:48:54Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367934316,
+      "name": "qwen35-q8-4096-part-05",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:48:53Z",
+      "expires_at": "2026-08-22T13:48:47Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367930096,
+      "name": "qwen35-q8-4096-part-04",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:48:47Z",
+      "expires_at": "2026-08-22T13:48:39Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367925084,
+      "name": "qwen35-q8-4096-part-03",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:48:39Z",
+      "expires_at": "2026-08-22T13:48:31Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367920273,
+      "name": "qwen35-q8-4096-part-02",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:48:31Z",
+      "expires_at": "2026-08-22T13:48:25Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367916011,
+      "name": "qwen35-q8-4096-part-01",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:48:24Z",
+      "expires_at": "2026-08-22T13:48:16Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367910490,
+      "name": "qwen35-q8-4096-part-00",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:48:16Z",
+      "expires_at": "2026-08-22T13:48:09Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367906166,
+      "name": "qwen35-q8-4096-manifest",
+      "size_in_bytes": 569,
+      "expired": false,
+      "created_at": "2026-08-19T13:48:09Z",
+      "expires_at": "2026-08-22T13:48:08Z",
+      "workflow_run": {
+        "id": 32259128613,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "f492c2bf1d90ddb7c2b8a81902c5ba30bfbba690"
+      }
+    },
+    {
+      "id": 9367883111,
+      "name": "qwen35-q8-4096-part-09",
+      "size_in_bytes": 460966254,
+      "expired": false,
+      "created_at": "2026-08-19T13:47:32Z",
+      "expires_at": "2026-08-22T13:47:27Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367879716,
+      "name": "qwen35-q8-4096-part-08",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:47:27Z",
+      "expires_at": "2026-08-22T13:47:22Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367876529,
+      "name": "qwen35-q8-4096-part-07",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:47:21Z",
+      "expires_at": "2026-08-22T13:47:15Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367872397,
+      "name": "qwen35-q8-4096-part-06",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:47:15Z",
+      "expires_at": "2026-08-22T13:47:10Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367868922,
+      "name": "qwen35-q8-4096-part-05",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:47:09Z",
+      "expires_at": "2026-08-22T13:47:04Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367865475,
+      "name": "qwen35-q8-4096-part-04",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:47:04Z",
+      "expires_at": "2026-08-22T13:46:59Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367861906,
+      "name": "qwen35-q8-4096-part-03",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:46:59Z",
+      "expires_at": "2026-08-22T13:46:54Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367858678,
+      "name": "qwen35-q8-4096-part-02",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:46:54Z",
+      "expires_at": "2026-08-22T13:46:48Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367855136,
+      "name": "qwen35-q8-4096-part-01",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:46:48Z",
+      "expires_at": "2026-08-22T13:46:43Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367851560,
+      "name": "qwen35-q8-4096-part-00",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:46:43Z",
+      "expires_at": "2026-08-22T13:46:38Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367848112,
+      "name": "qwen35-q8-4096-manifest",
+      "size_in_bytes": 569,
+      "expired": false,
+      "created_at": "2026-08-19T13:46:37Z",
+      "expires_at": "2026-08-22T13:46:37Z",
+      "workflow_run": {
+        "id": 32259471597,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367838803,
+      "name": "qwen35-q8-4096-part-09",
+      "size_in_bytes": 460966254,
+      "expired": false,
+      "created_at": "2026-08-19T13:46:23Z",
+      "expires_at": "2026-08-22T13:46:18Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367835289,
+      "name": "qwen35-q8-4096-part-08",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:46:18Z",
+      "expires_at": "2026-08-22T13:46:13Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367831811,
+      "name": "qwen35-q8-4096-part-07",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:46:13Z",
+      "expires_at": "2026-08-22T13:46:08Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367828338,
+      "name": "qwen35-q8-4096-part-06",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:46:07Z",
+      "expires_at": "2026-08-22T13:46:02Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367824871,
+      "name": "qwen35-q8-4096-part-05",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:46:02Z",
+      "expires_at": "2026-08-22T13:45:57Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367821036,
+      "name": "qwen35-q8-4096-part-04",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:56Z",
+      "expires_at": "2026-08-22T13:45:52Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367818794,
+      "name": "qwen35-q8-4096-part-09",
+      "size_in_bytes": 460966254,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:53Z",
+      "expires_at": "2026-08-22T13:45:47Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367817634,
+      "name": "qwen35-q8-4096-part-03",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:51Z",
+      "expires_at": "2026-08-22T13:45:46Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367814456,
+      "name": "qwen35-q8-4096-part-08",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:46Z",
+      "expires_at": "2026-08-22T13:45:39Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367814306,
+      "name": "qwen35-q8-4096-part-02",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:46Z",
+      "expires_at": "2026-08-22T13:45:41Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367810973,
+      "name": "qwen35-q8-4096-part-01",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:41Z",
+      "expires_at": "2026-08-22T13:45:36Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367809704,
+      "name": "qwen35-q8-4096-part-07",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:39Z",
+      "expires_at": "2026-08-22T13:45:32Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367807461,
+      "name": "qwen35-q8-4096-part-00",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:35Z",
+      "expires_at": "2026-08-22T13:45:30Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367805296,
+      "name": "qwen35-q8-4096-part-06",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:32Z",
+      "expires_at": "2026-08-22T13:45:26Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367804028,
+      "name": "qwen35-q8-4096-manifest",
+      "size_in_bytes": 569,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:30Z",
+      "expires_at": "2026-08-22T13:45:29Z",
+      "workflow_run": {
+        "id": 32259475089,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "97735946d303d04b87f1427ec9ebd0ada8475ba9"
+      }
+    },
+    {
+      "id": 9367801263,
+      "name": "qwen35-q8-4096-part-05",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:26Z",
+      "expires_at": "2026-08-22T13:45:19Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367796785,
+      "name": "qwen35-q8-4096-part-04",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:19Z",
+      "expires_at": "2026-08-22T13:45:12Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367792705,
+      "name": "qwen35-q8-4096-part-03",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:12Z",
+      "expires_at": "2026-08-22T13:45:05Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367788405,
+      "name": "qwen35-q8-4096-part-02",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:45:05Z",
+      "expires_at": "2026-08-22T13:44:59Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367784478,
+      "name": "qwen35-q8-4096-part-01",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:44:59Z",
+      "expires_at": "2026-08-22T13:44:53Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367780683,
+      "name": "qwen35-q8-4096-part-00",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:44:52Z",
+      "expires_at": "2026-08-22T13:44:46Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367776556,
+      "name": "qwen35-q8-4096-manifest",
+      "size_in_bytes": 569,
+      "expired": false,
+      "created_at": "2026-08-19T13:44:46Z",
+      "expires_at": "2026-08-22T13:44:45Z",
+      "workflow_run": {
+        "id": 32259321074,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "feature/qwen35-artifact-split",
+        "head_sha": "a2c5dfcbf4c82017af335683ef4704b4e42e0b0e"
+      }
+    },
+    {
+      "id": 9367745660,
+      "name": "qwen35-q8-4096-part-09",
+      "size_in_bytes": 460966254,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:56Z",
+      "expires_at": "2026-08-22T13:43:51Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367742530,
+      "name": "qwen35-q8-4096-part-08",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:51Z",
+      "expires_at": "2026-08-22T13:43:46Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367739399,
+      "name": "qwen35-q8-4096-part-07",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:45Z",
+      "expires_at": "2026-08-22T13:43:41Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367736205,
+      "name": "qwen35-q8-4096-part-06",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:40Z",
+      "expires_at": "2026-08-22T13:43:36Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367733133,
+      "name": "qwen35-q8-4096-part-05",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:36Z",
+      "expires_at": "2026-08-22T13:43:31Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367730164,
+      "name": "qwen35-q8-4096-part-04",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:31Z",
+      "expires_at": "2026-08-22T13:43:26Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367727067,
+      "name": "qwen35-q8-4096-part-03",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:26Z",
+      "expires_at": "2026-08-22T13:43:21Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367723974,
+      "name": "qwen35-q8-4096-part-02",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:21Z",
+      "expires_at": "2026-08-22T13:43:16Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367720898,
+      "name": "qwen35-q8-4096-part-01",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:16Z",
+      "expires_at": "2026-08-22T13:43:11Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367717692,
+      "name": "qwen35-q8-4096-part-00",
+      "size_in_bytes": 480000142,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:11Z",
+      "expires_at": "2026-08-22T13:43:06Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367714429,
+      "name": "qwen35-q8-4096-manifest",
+      "size_in_bytes": 569,
+      "expired": false,
+      "created_at": "2026-08-19T13:43:06Z",
+      "expires_at": "2026-08-22T13:43:05Z",
+      "workflow_run": {
+        "id": 32259196029,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "aae4e0846a4c4892376b9798de359defca57296e"
+      }
+    },
+    {
+      "id": 9367298862,
+      "name": "local-agent-plaza-dev-265",
+      "size_in_bytes": 4172100459,
+      "expired": false,
+      "created_at": "2026-08-19T13:31:54Z",
+      "expires_at": "2026-08-22T13:29:21Z",
+      "workflow_run": {
+        "id": 32255079022,
+        "repository_id": 1202479081,
+        "head_repository_id": 1202479081,
+        "head_branch": "agent/qwen35-model-build",
+        "head_sha": "ec4d70383a06697f40d79c4a98bfb9428f087e65"
+      }
+    }
+  ]
+}

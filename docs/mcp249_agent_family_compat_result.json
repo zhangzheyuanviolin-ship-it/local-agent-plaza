@@ -1,0 +1,287 @@
+{
+  "schema": "local-agent-plaza.mcp249-agent-family-compat.v1",
+  "status": "FULLY_VERIFIED_PASS",
+  "run_id": 32548192874,
+  "head_sha": "49ea75ead1d16d3847fe9d05c2d34e9b6c0d152f",
+  "version_name": "1.0.14-mcp.249",
+  "version_code": 349,
+  "package": "com.localagent.plaza.mcp",
+  "upgrade_target": "MCP248 versionCode 348",
+  "apk_name": "local-agent-plaza-1.0.14-mcp.249.apk",
+  "apk_sha256": "842e6f2df0f92399120bbfaec3d826b76a6deba9ab2aa7daff5c0f089d636205",
+  "apk_size": 239155297,
+  "certificate_sha256": "38a9a4f15ed53f47abee1a0343b2fe3d825687acb148ac8c522fa1d29f3e292d",
+  "release_tag": "mcp249-ministral-phi-agent-compat-v1",
+  "release_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp249-ministral-phi-agent-compat-v1/local-agent-plaza-1.0.14-mcp.249.apk",
+  "agent_runtime": {
+    "persistent_engine": true,
+    "fresh_top_level_conversation": true,
+    "fresh_tool_continuation_conversation": true,
+    "compat_hard_thinking_off": true,
+    "search_required_policy_preserved": true,
+    "mcp212_warm_prefill_excluded": true,
+    "mcp246_qwen_engine_reset_excluded": true
+  },
+  "unit_regression": {
+    "protected_baseline_compared": true,
+    "no_new_failures": true
+  },
+  "litert_lm": {
+    "version": "0.15.0",
+    "official_maven_runtime": true,
+    "custom_mcp242_aar_jni": false
+  },
+  "qwen35_2b": {
+    "release_tag": "qwen35-2b-q8-32768-mcp238lineage-v3",
+    "file": "Qwen3.5-2B-LiteRT-LM-Q8-32768.litertlm",
+    "size": 4780966112,
+    "sha256": "364f975167ba9bb083d9c01f0d600e9b1bb2955962d320c30cf4375b1fe42cb1",
+    "context": 32768,
+    "backend": "CPU_FORCED",
+    "multipart_release_reconstructed_and_verified": true
+  },
+  "model_pool": [
+    {
+      "key": "ministral3b",
+      "name": "Ministral-3-3B-Instruct-2512 LiteRT",
+      "repo": "litert-community/Ministral-3-3B-Instruct-2512",
+      "file": "Ministral-3-3B-Instruct-2512_q4_block32_ekv4096.litertlm",
+      "revision": "e69d446849a7723eb6eceac970deca94be97dc0c",
+      "size": 2340982768,
+      "min_ram": 10,
+      "description": "Ministral 3B Instruct LiteRT-LM blockwise INT4/OCTAV text model. 4096 KV context; experimental cross-family Agent control model.",
+      "config": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "key": "phi4mini",
+      "name": "Phi-4-mini-instruct Q8 4096 LiteRT",
+      "repo": "litert-community/Phi-4-mini-instruct",
+      "file": "Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+      "revision": "8cd368be75fdb94d5a6f6f5b40f1ab22a6c2543e",
+      "size": 3910090752,
+      "min_ram": 10,
+      "description": "Microsoft Phi-4 mini instruct LiteRT-LM Q8 model with 4096 KV context. Function-calling-trained upstream; experimental Agent candidate.",
+      "config": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "key": "llama32_3b",
+      "name": "Llama-3.2-3B-Instruct LiteRT block32",
+      "repo": "mlboydaisuke/Llama-3.2-3B-Instruct-LiteRT",
+      "file": "model.litertlm",
+      "revision": "c1ddfa1879bb812752db254e3f2e6eb65fe38b6a",
+      "size": 2210301872,
+      "min_ram": 10,
+      "description": "Llama 3.2 3B Instruct LiteRT-LM blockwise INT4 + INT8 embedding conversion, 4096 KV context; direct-answering control model.",
+      "config": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "key": "falcon_h1_3b",
+      "name": "Falcon-H1-3B-Instruct INT8 LiteRT",
+      "repo": "litert-community/Falcon-H1-3B-Instruct",
+      "file": "Falcon-H1-3B-Instruct_int8.litertlm",
+      "revision": "d64b51d448c3313468ba0dbad463d0c12f01f47c",
+      "size": 3385302368,
+      "min_ram": 10,
+      "description": "Falcon-H1 3B Instruct hybrid attention + Mamba2 LiteRT-LM INT8 model. Requires LiteRT-LM 0.15+; experimental architecture-compatibility control.",
+      "config": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.7,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "key": "jan_nano",
+      "name": "Jan-nano 4B reasoning LiteRT",
+      "repo": "litert-community/Jan-nano",
+      "file": "model.litertlm",
+      "revision": "492a1af5794a6d1ea573cd360655ba935b4f3b8f",
+      "size": 2474357680,
+      "min_ram": 10,
+      "description": "Jan-nano 4B deep-research/MCP-oriented Qwen3 derivative, LiteRT-LM blockwise INT4. Reasoning model; 4096 KV context.",
+      "config": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "capabilities": [
+        "llm_thinking"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_prompt_lab",
+          "llm_agent_chat"
+        ]
+      }
+    },
+    {
+      "key": "fastcontext4b",
+      "name": "FastContext-1.0-4B-SFT LiteRT block32",
+      "repo": "litert-community/FastContext-1.0-4B-SFT",
+      "file": "model.litertlm",
+      "revision": "2eebcbbacbb644bd656137a243e0248e465a6e80",
+      "size": 2662888368,
+      "min_ram": 10,
+      "description": "FastContext 4B repository-exploration/tool-calling SFT LiteRT-LM block32 quality build, 4096 KV context.",
+      "config": {
+        "topK": 20,
+        "topP": 0.8,
+        "temperature": 0.6,
+        "maxTokens": 2048,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "bestForTaskTypes": [
+        "llm_agent_chat"
+      ]
+    },
+    {
+      "key": "laguna_xs2",
+      "name": "Laguna XS.2 phone k4 fold3 LiteRT experimental",
+      "repo": "poolside-laguna-hackathon/laguna-xs2-phone-k4-fold3-litert",
+      "file": "model.litertlm",
+      "revision": "db2a76388c4f8105790334cb4ff2a81ea7a8b15c",
+      "size": 3037564832,
+      "min_ram": 14,
+      "description": "Laguna XS.2 phone k4 fold3 LiteRT experimental MoE/agentic-coding root phone artifact. Treat as a reasoning/tool experiment; English/coding oriented.",
+      "config": {
+        "topK": 40,
+        "topP": 0.9,
+        "temperature": 0.6,
+        "maxTokens": 4096,
+        "accelerators": "gpu,cpu",
+        "maxContextLength": 4096
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "capabilities": [
+        "llm_thinking"
+      ],
+      "capabilityToTaskTypes": {
+        "llm_thinking": [
+          "llm_chat",
+          "llm_prompt_lab",
+          "llm_agent_chat"
+        ]
+      }
+    },
+    {
+      "key": "gemma4_26b_a4b",
+      "name": "Gemma-4-26B-A4B-it Box web artifact experimental",
+      "repo": "litert-community/gemma-4-26B-A4B-it-litert-lm",
+      "file": "gemma-4-26B-A4B-it-web.litertlm",
+      "revision": "755026618afd72ebb6d970f784d42effa67398bc",
+      "size": 15786524672,
+      "min_ram": 16,
+      "description": "Experimental Gemma 4 26B-A4B text model using the exact public web LiteRT-LM artifact and configuration proven by Box v3.3.2 on the target phone. 15.8 GB; GPU only.",
+      "config": {
+        "topK": 64,
+        "topP": 0.95,
+        "temperature": 1.0,
+        "maxTokens": 4000,
+        "accelerators": "gpu",
+        "maxContextLength": 32000
+      },
+      "taskTypes": [
+        "llm_chat",
+        "llm_prompt_lab",
+        "llm_agent_chat"
+      ],
+      "bestForTaskTypes": [
+        "llm_chat",
+        "llm_prompt_lab"
+      ]
+    }
+  ],
+  "agent_family_compat": {
+    "ministral3b": true,
+    "phi4mini": true,
+    "artifact_context_unchanged": 4096,
+    "tool_result_budget_chars": [
+      2200,
+      2400
+    ],
+    "history_budget_chars": [
+      2200,
+      2400
+    ],
+    "generic_model_protocol_path_unchanged": true,
+    "reconversion": false
+  },
+  "media_native": {
+    "libLiteRt.so": "da27c0d6e59460248b1032610e924bc0f518a1229d2e3b081e0a229be51ab1c8",
+    "libLiteRtClGlAccelerator.so": "4b19f18f4ba9b1bde6060def4388b74d07f939db798c8c77c4f4e5125aeabcb1",
+    "liblitert_jni.so": "a98ea95cbb5ac4581bf483fa90df66454e15b965f4fa94a1b169a60319f4dc9a",
+    "LiteRtCreateModelFromFd_present": true,
+    "LiteRtGetBlockWiseQuantization_present": true,
+    "litertlm_jni_direct_core_link": false,
+    "canonical_box_apk_audit_passed": true
+  },
+  "modules": {
+    "box_music": true,
+    "bonsai_image": true,
+    "flux_image": true,
+    "z_image": true
+  },
+  "release_redownload_exact_sha_verified": true
+}

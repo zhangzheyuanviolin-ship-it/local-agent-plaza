@@ -1,0 +1,15 @@
+{
+  "schema": "mcp244-strict-v2-probe.v1",
+  "runs": [
+    {
+      "id": 32350287008,
+      "run_number": 1,
+      "status": "in_progress",
+      "conclusion": null,
+      "head_sha": "192bd7e51224a8b7449e7be2bdedee99038a6fb6",
+      "created_at": "2026-08-20T08:44:14Z",
+      "updated_at": "2026-08-20T08:44:19Z",
+      "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32350287008"
+    }
+  ]
+}

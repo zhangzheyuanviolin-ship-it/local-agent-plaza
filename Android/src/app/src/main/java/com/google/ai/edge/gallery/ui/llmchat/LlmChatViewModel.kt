@@ -18,10 +18,12 @@ package com.google.ai.edge.gallery.ui.llmchat
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.gallery.common.SystemPromptHelper
+import com.google.ai.edge.gallery.customtasks.agentchat.AgentCompatRuntimeCoordinator
 import com.google.ai.edge.gallery.data.ConfigKeys
 import com.google.ai.edge.gallery.data.Model
 import com.google.ai.edge.gallery.data.SystemPromptRepository
@@ -44,14 +46,14 @@ import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.ToolProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.Collections
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.Collections
-import java.util.concurrent.atomic.AtomicBoolean
 
 private const val TAG = "AGLlmChatViewModel"
 
@@ -153,11 +155,16 @@ open class LlmChatViewModelBase(
       // Loading.
       addMessage(model = model, message = ChatMessageLoading(accelerator = accelerator))
 
-      // Wait for instance to be initialized.
+      // Wait only until the runtime instance is actually ready. MCP204 removes the old unconditional
+      // 500 ms sleep that ran after readiness on every initial and continuation pass.
+      val readinessWaitStartedNanos = SystemClock.elapsedRealtimeNanos()
       while (model.instance == null) {
         delay(100)
       }
-      delay(500)
+      AgentCompatRuntimeCoordinator.recordPreSubmitWait(
+        modelName = model.name,
+        elapsedMs = (SystemClock.elapsedRealtimeNanos() - readinessWaitStartedNanos) / 1_000_000.0,
+      )
 
       // Run inference.
       val audioClips: MutableList<ByteArray> = mutableListOf()
@@ -367,6 +374,7 @@ open class LlmChatViewModelBase(
     }
     setInProgress(false)
     model.runtimeHelper.stopResponse(model)
+    AgentCompatRuntimeCoordinator.clear(model.name)
     Log.d(TAG, "Done stopping response")
   }
 

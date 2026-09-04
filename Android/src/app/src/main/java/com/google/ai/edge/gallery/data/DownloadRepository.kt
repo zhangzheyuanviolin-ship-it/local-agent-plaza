@@ -249,9 +249,8 @@ class DefaultDownloadRepository(
                 modelName = "",
               )
             }
-            val partialFile = getPartialDownloadFile(model)
-            val partialBytes = partialFile.length()
-            if (partialBytes > 0L) {
+            val partialBytes = getDownloadedBytes(model)
+            if (hasPersistentPartialDownload(model)) {
               status = ModelDownloadStatusType.PARTIALLY_DOWNLOADED
             }
             onStatusUpdated(
@@ -284,12 +283,36 @@ class DefaultDownloadRepository(
     }
   }
 
-  private fun getPartialDownloadFile(model: Model): File {
-    return File(
+  private fun modelDownloadDirectory(model: Model): File =
+    File(
       context.getExternalFilesDir(null),
-      listOf(model.normalizedName, model.version, "${model.downloadFileName}.$TMP_FILE_EXT")
-        .joinToString(File.separator),
+      listOf(model.normalizedName, model.version).joinToString(File.separator),
     )
+
+  private fun modelDownloadFileNames(model: Model): List<String> =
+    listOf(model.downloadFileName) + model.extraDataFiles.map { it.downloadFileName }
+
+  private fun getDownloadedBytes(model: Model): Long {
+    val dir = modelDownloadDirectory(model)
+    return modelDownloadFileNames(model).sumOf { name ->
+      val partial = File(dir, "$name.$TMP_FILE_EXT")
+      val completed = File(dir, name)
+      when {
+        partial.length() > 0L -> partial.length()
+        completed.length() > 0L -> completed.length()
+        else -> 0L
+      }
+    }
+  }
+
+  private fun hasPersistentPartialDownload(model: Model): Boolean {
+    val dir = modelDownloadDirectory(model)
+    val names = modelDownloadFileNames(model)
+    val hasAnyBytes = names.any { name ->
+      File(dir, name).length() > 0L || File(dir, "$name.$TMP_FILE_EXT").length() > 0L
+    }
+    val allCompleted = names.all { name -> File(dir, name).length() > 0L }
+    return hasAnyBytes && !allCompleted
   }
 
   private fun sendNotification(title: String, text: String, taskId: String, modelName: String) {

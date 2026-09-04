@@ -1,0 +1,45 @@
+{
+  "schema": "local-agent-plaza.mcp245-frozen-download-fix.v1",
+  "run_id": 32359008843,
+  "head_sha": "25528a2d1bec175ee7058f9a188ede5dda839696",
+  "apk_name": "local-agent-plaza-1.0.14-mcp.245.apk",
+  "apk_sha256": "b31851709d6c0e969bbba631ed9748378517cd3c6ea455ea85cf74a7571b47e3",
+  "version_name": "1.0.14-mcp.245",
+  "version_code": 345,
+  "package": "com.localagent.plaza.mcp",
+  "release_tag": "mcp245-qwen35-frozen-download-fix",
+  "release_apk_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp245-qwen35-frozen-download-fix/local-agent-plaza-1.0.14-mcp.245.apk",
+  "artifact_id": 9403353880,
+  "artifact_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32359008843/artifacts/9403353880",
+  "runtime": "official Maven LiteRT-LM 0.15.0",
+  "app_patch_chain": [
+    "MCP238",
+    "MCP239",
+    "MCP245"
+  ],
+  "model_release_tag": "qwen35-2b-q8-4096-mcp245-frozen-v1",
+  "model_file": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp245.litertlm",
+  "model_sha256": "535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4",
+  "model_size": 4780966112,
+  "template_sha256": "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+  "frozen_release_reconstructed_after_publish": true,
+  "original_tool_template_preserved_byte_for_byte": true,
+  "natural_stop_token_ids": [
+    248044,
+    248046
+  ],
+  "model_redownload_required": true,
+  "backend": "CPU_FORCED",
+  "sampler": {
+    "top_k": 20,
+    "top_p": 0.8,
+    "temperature": 0.6,
+    "max_tokens": 1536,
+    "context": 4096
+  },
+  "fresh_engine_reset": false,
+  "runtime_repetition_penalty_processor": false,
+  "custom_litertlm_aar": false,
+  "custom_litertlm_jni": false,
+  "root_cause": "MCP244 APK embedded SHA 7cdf8232... but its mutable model release was later clobbered by a nondeterministic repack; current release reconstructed to 535c3296..., exactly matching the physical-device failure hash."
+}

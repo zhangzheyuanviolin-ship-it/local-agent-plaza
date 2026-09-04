@@ -1,0 +1,15 @@
+{
+  "schema": "local-agent-plaza.mcp252-office-truth-result.v1",
+  "run_id": 33882044639,
+  "run_number": 6,
+  "commit_sha": "c539140c90995707306bbc673754d612237d58dc",
+  "version_name": "1.0.14-mcp.252",
+  "version_code": 352,
+  "package": "com.localagent.plaza.mcp",
+  "release_tag": "mcp252-office-truth-v1",
+  "apk_name": "local-agent-plaza-1.0.14-mcp.252.apk",
+  "apk_sha256": "5ebd4b38f73f7043254c85c4db1ca25cccd2acd43198ef440d5435e26f5cd60c",
+  "evidence_zip": "logs/mcp-251_测试日志与文档_20260903.zip",
+  "release_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/tag/mcp252-office-truth-v1",
+  "apk_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp252-office-truth-v1/local-agent-plaza-1.0.14-mcp.252.apk"
+}

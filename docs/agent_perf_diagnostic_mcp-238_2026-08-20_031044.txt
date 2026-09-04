@@ -1,0 +1,344 @@
+=== MCP207 Agent 会话性能诊断 ===
+schema=mcp207.agent_session_perf.v3
+model_name=Qwen3.5-2B LiteRT-LM Q8 4096 Plaza
+session_id=a4042995
+current_user_turn_index=1
+included_request_reports=1
+privacy=diagnostic_metrics_only;user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged
+
+--- USER_TURN_1 ---
+=== MCP207 Agent 性能诊断 ===
+schema=mcp207.agent_perf.v5
+request_id=d692ba8e
+status=COMPLETED
+started_at=2026-08-20 10:46:31.773 +0800
+app_version=1.0.14-mcp.238
+model_name=Qwen3.5-2B LiteRT-LM Q8 4096 Plaza
+tool_mode=COMPAT
+litert_lm_version=0.15.0
+litert_version=2.1.6
+android_sdk=36
+device=Xiaomi 23117RK66C
+available_processors=8
+memory_class_mb=256
+model_file_bytes=4780966112
+configured_context_window=4096
+max_output_tokens=1536
+conversation_max_output_override=none
+top_k=20
+top_p=0.8000
+temperature=0.6000
+accelerator=CPU
+active_skill_count=2
+enabled_mcp_count=0
+original_input_chars=29
+runtime_input_chars=2565
+compat_added_input_chars=2536
+thinking_override=per_pass;see_stream_channels
+
+[runtime_initialization]
+engine_init_ms=5002.76
+conversation_init_ms=5.12
+last_conversation_reset_ms=8.60
+conversation_reset_count_total=2
+conversation_resets_during_request=2
+engine_max_num_tokens=4096
+runtime_max_output_tokens=1536
+runtime_accelerator=CPU
+speculative_decoding=false
+
+[mcp207_runtime]
+session_id=a4042995
+user_turn_index=1
+session_history_turn_count=0
+session_history_chars=0
+session_completed_turn_count=1
+conversation_generation_id=3
+last_fresh_conversation_reason=tool_continuation
+top_level_reset_count=1
+top_level_prepare_ms_total=7.63
+last_top_level_prepare_ms=7.63
+last_top_level_reset_ms=5.62
+top_level_raw_input_chars=1147
+top_level_effective_input_chars=1147
+pre_submit_wait_ms_total=0.01
+continuation_prepare_ms_total=9.45
+last_continuation_prepare_ms=9.45
+last_continuation_reset_ms=8.83
+continuation_raw_input_chars=2626
+continuation_effective_input_chars=2953
+continuation_session_history_included=false
+compat_history_step_count=1
+compat_history_chars=1440
+repeated_tool_call_count=0
+tool_result_prompt_build_ms=unavailable
+audit_write_ms=unavailable
+diagnostic_memory_async=true
+
+[request_timing]
+total_ms=271134.59
+llm_pass_count=2
+continuation_count=1
+initial_input_chars=1147
+initial_ttft_ms=4909.31
+initial_decode_after_first_token_ms=1910.80
+initial_total_generation_ms=6820.11
+initial_output_chars=92
+continuation_1_input_chars=2953
+continuation_1_ttft_ms=11438.25
+continuation_1_decode_after_first_token_ms=245678.78
+continuation_1_total_generation_ms=257117.03
+continuation_1_output_chars=4476
+before_continuation_1_gap_ms=7176.25
+retry_count=0
+error_chars=0
+
+[stream_channels]
+initial_thinking_override=disabled_compat_global_template_native_budget0_top_level;render_chars=1216;render_open_thought=false;render_closed_thought_cue=false
+initial_first_callback_ttft_ms=4909.31
+initial_first_visible_ttft_ms=4909.31
+initial_first_thought_ttft_ms=unavailable
+initial_callback_count=23
+initial_visible_callback_count=23
+initial_thought_callback_count=0
+initial_visible_chars=92
+initial_thought_chars=0
+initial_thought_window_ms=unavailable
+initial_visible_window_ms=1834.80
+initial_first_visible_to_done_ms=1910.80
+initial_thought_to_first_visible_gap_ms=unavailable
+continuation_1_thinking_override=disabled_compat_global_template_native_budget0_continuation;render_chars=3022;render_open_thought=false;render_closed_thought_cue=false
+continuation_1_first_callback_ttft_ms=11438.25
+continuation_1_first_visible_ttft_ms=11438.25
+continuation_1_first_thought_ttft_ms=unavailable
+continuation_1_callback_count=2868
+continuation_1_visible_callback_count=2868
+continuation_1_thought_callback_count=0
+continuation_1_visible_chars=4476
+continuation_1_thought_chars=0
+continuation_1_thought_window_ms=unavailable
+continuation_1_visible_window_ms=245664.53
+continuation_1_first_visible_to_done_ms=245678.78
+continuation_1_thought_to_first_visible_gap_ms=unavailable
+
+[tool_timing]
+compat_parser_exact_ms=unavailable
+compat_parser_note=post_generation_to_tool_start_ms includes parser and orchestration overhead
+observed_tool_event_count=1
+observed_tool_exec_total_ms=6183.51
+observed_tool_logged_detail_chars_total=1000
+tool_1_name=tool.run_js
+tool_1_exec_ms=6183.51
+tool_1_post_generation_to_start_ms=2.29
+tool_1_logged_detail_chars=1000
+tool_1_success=true
+
+[memory_snapshots]
+request_start.pss_mb=535.00
+request_start.java_heap_used_mb=29.89
+request_start.native_heap_allocated_mb=307.25
+request_start.sample_delay_ms=39.15
+first_callback_1.pss_mb=3792.22
+first_callback_1.java_heap_used_mb=21.99
+first_callback_1.native_heap_allocated_mb=374.62
+first_callback_1.sample_delay_ms=159.40
+after_tool_1.pss_mb=3651.95
+after_tool_1.java_heap_used_mb=44.00
+after_tool_1.native_heap_allocated_mb=377.70
+after_tool_1.sample_delay_ms=95.15
+first_callback_2.pss_mb=3820.44
+first_callback_2.java_heap_used_mb=18.20
+first_callback_2.native_heap_allocated_mb=378.57
+first_callback_2.sample_delay_ms=162.65
+final.pss_mb=3820.88
+final.java_heap_used_mb=80.81
+final.native_heap_allocated_mb=383.53
+final.sample_delay_ms=150.58
+
+privacy=user_prompt_not_logged;tool_arguments_not_logged;tool_result_content_not_logged;workspace_paths_not_logged;secrets_not_logged
+=== MCP207 Agent 性能诊断结束 ===
+=== MCP207 Agent 会话性能诊断结束 ===
+**2026年美加墨世界杯决赛详细回顾**
+
+**比赛概况**
+*   **对阵双方**：西班牙（主队）vs 阿根廷（客队）
+*   **决赛时间**：2026年7月20日
+*   **决赛地点**：美国，墨西哥，加拿大（具体场馆待补充）
+*   **最终比分**：西班牙 1 - 0 阿根廷
+
+**比赛进程**
+*   **常规时间**：
+    *   西班牙在常规时间内保持零封，未能打破僵局。
+    *   阿根廷中场恩佐·费尔南德斯（Enzo Fernández）在常规时间第45分钟被两黄变红，被罚下场。
+    *   西班牙队全场控球率领先，展现出更强的技术统治力。
+    *   比赛中场首次引入了中场秀表演，西班牙队球员在场上展示默契配合。
+*   **加时赛**：
+    *   常规时间0-0进入加时赛。
+    *   阿根廷费尔南德斯被红牌罚下后，西班牙队在加时赛处境更为不利。
+    *   加时赛替补出场的费兰·托雷斯（Franco Tès）打入关键进球，帮助西班牙打破僵局。
+    *   西班牙队球员尼科·威廉斯（Nicolas Williams）在加时赛头球后近距离劲射破门。
+    *   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**冠军意义**
+*   **西班牙**：
+    *   实现队史第二次世界杯冠军。
+    *   实现欧锦赛 - 世界杯连冠。
+    *   成为历史上首个同时拥有男子与女子世界冠军头衔的国家。
+*   **阿根廷**：
+    *   无缘卫冕。
+    *   整场比赛受压制，正规时间零射门。
+
+**球员表现**
+*   **费兰·托雷斯**（Franco Tès）：加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   **尼科·威廉斯**（Nicolas Williams）：加时赛头球后近距离劲射破门。
+*   **恩佐·费尔南德斯**（Enzo Fernández）：常规时间被红牌罚下，未能打破僵局。
+*   **罗德里**（Lionel Messi）：获得金球奖。
+*   **姆巴佩**（Kylian Mbappé）：凭借本届10球夺得“金靴”。
+
+**赛事整体评价**
+*   **西班牙**：展现出更强的技术统治力，全场比赛控球与反抢优势明显。
+*   **阿根廷**：则以压制战术与多次关键扑救抵挡对手。
+*   **比赛风格**：赛事整体较为克制，西班牙展现出更强的技术统治力；阿根廷则以压制战术与多次关键扑救抵挡对手。
+
+**后续影响**
+*   西班牙在2026年世界杯决赛中凭借费兰·托雷斯在加时赛的进球，以1-0击败10人阿根廷，从而实现队史第二次世界杯冠军，并实现欧锦赛-世界杯连冠。
+
+**信息来源**
+*   央视网（CCTV.com）
+*   BBC News 中文
+*   新华网
+*   中央社 CNA
+
+**备注**
+*   2026年世界杯决赛的详细信息可能因具体场馆或时间调整而有所不同。
+*   阿根廷在常规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**总结**
+*   西班牙在2026年美加墨世界杯决赛中凭借费兰·托雷斯在加时赛的进球，以1-0击败10人阿根廷，从而实现队史第二次世界杯冠军，并实现欧锦赛-世界杯连冠。
+*   阿根廷整场比赛受压制，正规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**信息来源**
+*   央视网（CCTV.com）
+*   BBC News 中文
+*   新华网
+*   中央社 CNA
+
+**备注**
+*   2026年世界杯决赛的详细信息可能因具体场馆或时间调整而有所不同。
+*   阿根廷在常规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**总结**
+*   西班牙在2026年美加墨世界杯决赛中凭借费兰·托雷斯在加时赛的进球，以1-0击败10人阿根廷，从而实现队史第二次世界杯冠军，并实现欧锦赛-世界杯连冠。
+*   阿根廷整场比赛受压制，正规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**信息来源**
+*   央视网（CCTV.com）
+*   BBC News 中文
+*   新华网
+*   中央社 CNA
+
+**备注**
+*   2026年世界杯决赛的详细信息可能因具体场馆或时间调整而有所不同。
+*   阿根廷在常规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**总结**
+*   西班牙在2026年美加墨世界杯决赛中凭借费兰·托雷斯在加时赛的进球，以1-0击败10人阿根廷，从而实现队史第二次世界杯冠军，并实现欧锦赛-世界杯连冠。
+*   阿根廷整场比赛受压制，正规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**信息来源**
+*   央视网（CCTV.com）
+*   BBC News 中文
+*   新华网
+*   中央社 CNA
+
+**备注**
+*   2026年世界杯决赛的详细信息可能因具体场馆或时间调整而有所不同。
+*   阿根廷在常规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**总结**
+*   西班牙在2026年美加墨世界杯决赛中凭借费兰·托雷斯在加时赛的进球，以1-0击败10人阿根廷，从而实现队史第二次世界杯冠军，并实现欧锦赛-世界杯连冠。
+*   阿根廷整场比赛受压制，正规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**信息来源**
+*   央视网（CCTV.com）
+*   BBC News 中文
+*   新华网
+*   中央社 CNA
+
+**备注**
+*   2026年世界杯决赛的详细信息可能因具体场馆或时间调整而有所不同。
+*   阿根廷在常规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**总结**
+*   西班牙在2026年美加墨世界杯决赛中凭借费兰·托雷斯在加时赛的进球，以1-0击败10人阿根廷，从而实现队史第二次世界杯冠军，并实现欧锦赛-世界杯连冠。
+*   阿根廷整场比赛受压制，正规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**信息来源**
+*   央视网（CCTV.com）
+*   BBC News 中文
+*   新华网
+*   中央社 CNA
+
+**备注**
+*   2026年世界杯决赛的详细信息可能因具体场馆或时间调整而有所不同。
+*   阿根廷在常规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**总结**
+*   西班牙在2026年美加墨世界杯决赛中凭借费兰·托雷斯在加时赛的进球，以1-0击败10人阿根廷，从而实现队史第二次世界杯冠军，并实现欧锦赛-世界杯连冠。
+*   阿根廷整场比赛受压制，正规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**信息来源**
+*   央视网（CCTV.com）
+*   BBC News 中文
+*   新华网
+*   中央社 CNA
+
+**备注**
+*   2026年世界杯决赛的详细信息可能因具体场馆或时间调整而有所不同。
+*   阿根廷在常规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为西班牙 1 - 0 阿根廷。
+
+**总结**
+*   西班牙在2026年美加墨世界杯决赛中凭借费兰·托雷斯在加时赛的进球，以1-0击败10人阿根廷，从而实现队史第二次世界杯冠军，并实现欧锦赛-世界杯连冠。
+*   阿根廷整场比赛受压制，正规时间零射门，直到加时赛被红牌罚下后，西班牙队在加时赛处境更为不利。
+*   加时赛替补出场的托雷斯打入关键进球，帮助西班牙打破僵局。
+*   西班牙队球员尼科·威廉斯在加时赛头球后近距离劲射破门。
+*   最终比分定格为

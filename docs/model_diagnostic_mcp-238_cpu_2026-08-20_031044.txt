@@ -1,0 +1,60 @@
+=== MCP224 模型生命周期诊断 ===
+schema=mcp224.model_lifecycle.v1
+app_version=1.0.14-mcp.238
+app_version_code=338
+litert_lm=0.15.0
+litert=2.1.6
+device=Xiaomi 23117RK66C
+device_code=manet
+android_api=36
+memory_class_mb=256
+task_id=llm_agent_chat
+model_name=Qwen3.5-2B LiteRT-LM Q8 4096 Plaza
+model_display_name=
+model_imported=false
+model_file_name=Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm
+model_file_expected_bytes=4780966112
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_4096_Plaza/qwen35-2b-q8-4096-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm
+model_file_exists=true
+model_file_actual_bytes=4780966112
+configured_context_window=4096
+max_output_tokens=1536
+accelerator=CPU
+supports_image=false
+supports_audio=false
+memory_java_used_bytes=31046056 | memory_native_allocated_bytes=33133152
+privacy=no_user_prompt;no_tool_arguments;no_tool_result_content;no_workspace_content;no_secrets
+
+[2026-08-20 10:46:05.503 +0800] model_manager.initialize.attempt | Starting model initialization attempt 1
+memory_java_used_bytes=31161496 | memory_native_allocated_bytes=33240048
+
+[2026-08-20 10:46:05.536 +0800] litert.engine_config | Preparing LiteRT-LM EngineConfig
+memory_java_used_bytes=33962920 | memory_native_allocated_bytes=33615760
+detail:
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q8_4096_Plaza/qwen35-2b-q8-4096-v1/Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm | backend=CPU | vision_backend=GPU | support_image=false | support_audio=false | context=4096 | engine_max_tokens=4096 | max_output_tokens=1536
+
+[2026-08-20 10:46:05.549 +0800] litert.engine_initialize.start | Engine.initialize() started
+memory_java_used_bytes=34225816 | memory_native_allocated_bytes=35435408
+
+[2026-08-20 10:46:10.551 +0800] litert.engine_initialize.success | Engine.initialize() succeeded
+memory_java_used_bytes=41629384 | memory_native_allocated_bytes=319005760
+detail:
+elapsed_ms=5002.755831
+
+[2026-08-20 10:46:10.551 +0800] litert.conversation_create.start | Engine.createConversation() started
+memory_java_used_bytes=41646520 | memory_native_allocated_bytes=319030544
+detail:
+tools=0 | constrained_decoding=false
+
+[2026-08-20 10:46:10.557 +0800] litert.model_initialize.success | Model Engine and Conversation are ready
+memory_java_used_bytes=41713464 | memory_native_allocated_bytes=319014320
+detail:
+conversation_elapsed_ms=5.123906
+
+[2026-08-20 10:46:10.557 +0800] model_manager.initialize.success | Model initialized on attempt 1
+memory_java_used_bytes=41763368 | memory_native_allocated_bytes=319014320
+
+[2026-08-20 10:46:38.615 +0800] agent.compat.tool_call | Compatibility tool call accepted without a fixed step limit
+memory_java_used_bytes=35361096 | memory_native_allocated_bytes=392831440
+detail:
+tool=search_web

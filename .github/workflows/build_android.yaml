@@ -3,35 +3,193 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "experimental", "feature/**" ]
+    branches: ["experimental"]
     paths:
       - 'Android/**'
       - '.github/workflows/build_android.yaml'
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [ "main" ]
-    paths:
-      - 'Android/**'
 
 permissions:
+  actions: read
   contents: write
 
+concurrency:
+  group: mcp238-apk-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  ensure_qwen35_release:
+    name: Ensure verified Qwen3.5 release assets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      SOURCE_ARTIFACT_ID: '9367298862'
+      RELEASE_TAG: 'qwen35-2b-q8-4096-v1'
+      MODEL_NAME: 'Qwen3.5-2B-LiteRT-LM-Q8-4096.litertlm'
+      MODEL_SIZE: '4780966112'
+      MODEL_SHA256: 'a3a7cd9d05242200a4f819228e7cd3987e046f5fd81b030d71eb88e4a96fcd03'
+      CHUNK_SIZE: '1200000000'
+    steps:
+      - name: Check existing release assets
+        id: release_check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/release-check"
+          mkdir -p "$RUNNER_TEMP/release-check"
+          if gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern manifest.json --dir "$RUNNER_TEMP/release-check" >/dev/null 2>&1; then
+            if python - <<'PY'
+          import json, os, pathlib, sys
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'release-check' / 'manifest.json'
+          data = json.loads(p.read_text())
+          expected_names = [f"{os.environ['MODEL_NAME']}.part{i:02d}" for i in range(4)]
+          expected_sizes = [1200000000, 1200000000, 1200000000, 1180966112]
+          ok = (
+              data.get('fileName') == os.environ['MODEL_NAME']
+              and int(data.get('sizeInBytes', -1)) == int(os.environ['MODEL_SIZE'])
+              and data.get('sha256') == os.environ['MODEL_SHA256']
+              and [x.get('name') for x in data.get('parts', [])] == expected_names
+              and [int(x.get('size', -1)) for x in data.get('parts', [])] == expected_sizes
+          )
+          sys.exit(0 if ok else 1)
+          PY
+            then
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+              echo "Verified release manifest already exists."
+              exit 0
+            fi
+          fi
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+
+      - name: Reclaim runner disk space
+        if: steps.release_check.outputs.ready != 'true'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean || true
+          docker system prune -af || true
+          df -h
+
+      - name: Download verified conversion artifact
+        if: steps.release_check.outputs.ready != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/source"
+          curl --fail-with-body -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/$SOURCE_ARTIFACT_ID/zip" \
+            -o "$RUNNER_TEMP/source.zip"
+          unzip -q "$RUNNER_TEMP/source.zip" -d "$RUNNER_TEMP/source"
+          rm -f "$RUNNER_TEMP/source.zip"
+          MODEL_PATH="$(find "$RUNNER_TEMP/source" -type f -name "$MODEL_NAME" -print -quit)"
+          test -n "$MODEL_PATH"
+          test "$(stat -c %s "$MODEL_PATH")" = "$MODEL_SIZE"
+          echo "$MODEL_SHA256  $MODEL_PATH" | sha256sum -c -
+          echo "MODEL_PATH=$MODEL_PATH" >> "$GITHUB_ENV"
+          df -h
+
+      - name: Split and publish release assets
+        if: steps.release_check.outputs.ready != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Qwen3.5-2B LiteRT-LM Q8 4096 v1" \
+              --notes "Verified LiteRT-LM 0.15.0 test artifact for Local Agent Plaza. Full size: $MODEL_SIZE bytes. SHA-256: $MODEL_SHA256. Local Agent Plaza MCP238 reconstructs these multipart assets automatically."
+          rm -rf "$RUNNER_TEMP/parts"
+          mkdir -p "$RUNNER_TEMP/parts"
+          python - <<'PY'
+          import hashlib, json, os, pathlib
+          src = pathlib.Path(os.environ['MODEL_PATH'])
+          out_dir = pathlib.Path(os.environ['RUNNER_TEMP']) / 'parts'
+          chunk_size = int(os.environ['CHUNK_SIZE'])
+          expected_size = int(os.environ['MODEL_SIZE'])
+          expected_sha = os.environ['MODEL_SHA256']
+          full_hash = hashlib.sha256()
+          parts = []
+          total = 0
+          with src.open('rb') as source:
+              index = 0
+              while total < expected_size:
+                  target_size = min(chunk_size, expected_size - total)
+                  part_name = f"{os.environ['MODEL_NAME']}.part{index:02d}"
+                  part_path = out_dir / part_name
+                  part_hash = hashlib.sha256()
+                  written = 0
+                  with part_path.open('wb') as target:
+                      while written < target_size:
+                          block = source.read(min(8 * 1024 * 1024, target_size - written))
+                          if not block:
+                              raise RuntimeError('Unexpected EOF while splitting model')
+                          target.write(block)
+                          full_hash.update(block)
+                          part_hash.update(block)
+                          written += len(block)
+                          total += len(block)
+                  parts.append({'name': part_name, 'size': written, 'sha256': part_hash.hexdigest()})
+                  index += 1
+          if source.read(1):
+              raise RuntimeError('Unexpected trailing bytes in source model')
+          assert total == expected_size, (total, expected_size)
+          assert full_hash.hexdigest() == expected_sha, (full_hash.hexdigest(), expected_sha)
+          assert [p['size'] for p in parts] == [1200000000, 1200000000, 1200000000, 1180966112]
+          manifest = {
+              'schema': 'local-agent-plaza.multipart-model.v1',
+              'fileName': os.environ['MODEL_NAME'],
+              'sizeInBytes': expected_size,
+              'sha256': expected_sha,
+              'parts': parts,
+          }
+          (out_dir / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(manifest, indent=2))
+          PY
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/parts/"* --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets,url
+
+      - name: Final release manifest check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          rm -rf "$RUNNER_TEMP/final-check"
+          mkdir -p "$RUNNER_TEMP/final-check"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern manifest.json --dir "$RUNNER_TEMP/final-check"
+          cat "$RUNNER_TEMP/final-check/manifest.json"
+
   build_apk:
-    name: Build Android APK
+    name: Build MCP238 Android APK
+    needs: ensure_qwen35_release
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     env:
       ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
       ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
       ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
       ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.238'
+      LOCAL_VERSION_CODE: '338'
+      APPLICATION_ID_SUFFIX: '.mcp'
     defaults:
       run:
         working-directory: ./Android/src
     steps:
-      - name: Checkout the source code
+      - name: Checkout source
         uses: actions/checkout@v4
+
       - name: Checkout stable-diffusion.cpp
         uses: actions/checkout@v4
         with:
@@ -39,141 +197,95 @@ jobs:
           ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
           path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
           submodules: recursive
-      - uses: actions/setup-java@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '21'
-      - name: Derive branch-aware version channel
-        id: channel
-        run: |
-          REF_NAME="${GITHUB_REF_NAME}"
-          REF_TYPE="${GITHUB_REF_TYPE}"
-          echo "Triggered by ref_name=${REF_NAME} ref_type=${REF_TYPE}"
-          IS_PRERELEASE="false"
-          if [ "$REF_TYPE" = "tag" ]; then
-            RAW_VNAME="${REF_NAME#v}"
-            # tag 关键字 → 渠道与包名后缀（保证可与稳定版 com.localagent.plaza 并行安装）
-            # 注意：VNAME 的基底必须是已经发布到 google-ai-edge/gallery/model_allowlists 的版本，
-            # 因为应用会通过 BuildConfig.VERSION_NAME.substringBefore("-").replace(".", "_") 去拉
-            # https://raw.githubusercontent.com/google-ai-edge/gallery/refs/heads/main/model_allowlists/{base}.json
-            # 当前可用基底版本上限为 1.0.14（截至 2025-06 校验）。
-            ALLOWLIST_BASE="1.0.14"
-            case "$REF_NAME" in
-              *mcp*)
-                CHANNEL="mcp"
-                SUFFIX=".mcp"
-                VNAME="${ALLOWLIST_BASE}-mcp.${GITHUB_RUN_NUMBER}"
-                ;;
-              *experimental*)
-                CHANNEL="mcp"
-                SUFFIX=".mcp"
-                VNAME="${ALLOWLIST_BASE}-mcp.${GITHUB_RUN_NUMBER}"
-                ;;
-              *visual*)
-                CHANNEL="visual"
-                SUFFIX=""
-                VNAME="${RAW_VNAME}"
-                ;;
-              v1.0.[0-9]*-plaza.[0-9]*|v1.0.[0-9]*|v[0-9]*.[0-9]*.[0-9]*)
-                CHANNEL="release"
-                SUFFIX=""
-                VNAME="${RAW_VNAME}"
-                ;;
-              *)
-                CHANNEL="tag"
-                SUFFIX=".dev"
-                VNAME="${ALLOWLIST_BASE}-dev.${GITHUB_RUN_NUMBER}"
-                ;;
-            esac
-            # prerelease 判定：含 smoketest/alpha/beta/rc/dev 等关键字
-            case "$REF_NAME" in
-              *smoketest*|*alpha*|*beta*|*rc*|*dev*|*experimental*)
-                IS_PRERELEASE="true"
-                ;;
-            esac
-          else
-            BRANCH="${REF_NAME}"
-            case "$BRANCH" in
-              main)
-                VNAME="1.0.14-plaza.main.$GITHUB_RUN_NUMBER"
-                CHANNEL="main"
-                SUFFIX=""
-                ;;
-              experimental)
-                VNAME="1.0.14-mcp.$GITHUB_RUN_NUMBER"
-                CHANNEL="mcp"
-                SUFFIX=".mcp"
-                ;;
-              feature/*)
-                SAFE_VERSION="$(printf '%s' "$BRANCH" | sed 's|^feature/||; s|[^a-zA-Z0-9.-]|-|g; s|^-*||; s|-*$||')"
-                SAFE_PACKAGE="$(printf '%s' "$BRANCH" | sed 's|^feature/||; s|[^a-zA-Z0-9_]|_|g; s|^_*||; s|_*$||')"
-                [ -n "$SAFE_VERSION" ] || SAFE_VERSION="feature"
-                [ -n "$SAFE_PACKAGE" ] || SAFE_PACKAGE="feature"
-                VNAME="1.0.13-plaza.${SAFE_VERSION}.$GITHUB_RUN_NUMBER"
-                CHANNEL="$SAFE_VERSION"
-                SUFFIX=".${SAFE_PACKAGE}"
-                ;;
-              *)
-                VNAME="1.0.13-plaza.dev.$GITHUB_RUN_NUMBER"
-                CHANNEL="dev"
-                SUFFIX=".dev"
-                ;;
-            esac
-          fi
-          echo "LOCAL_VERSION_NAME=$VNAME" >> "$GITHUB_ENV"
-          echo "LOCAL_VERSION_CODE=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "APPLICATION_ID_SUFFIX=$SUFFIX" >> "$GITHUB_ENV"
-          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "vname=$VNAME" >> "$GITHUB_OUTPUT"
-          echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+
       - name: Prepare release signing
+        shell: bash
         run: |
+          set -euxo pipefail
           test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
           test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
           test -n "$ANDROID_RELEASE_KEY_ALIAS"
           test -n "$ANDROID_RELEASE_KEY_PASSWORD"
           printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
           echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
-      - name: Build
+
+      - name: Build MCP238 release APK
+        shell: bash
         run: ./gradlew assembleRelease
-      - name: Verify APK signing and version
+
+      - name: Verify APK signing and fixed MCP238 identity
+        shell: bash
         run: |
-          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk
-          BADGING="$("$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)/aapt" dump badging app/build/outputs/apk/release/app-release.apk | head -n 1)"
+          set -euxo pipefail
+          BUILD_TOOLS="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" dump badging "$APK" | head -n 1)"
           echo "$BADGING"
-          case "$LOCAL_VERSION_NAME" in
-            *mcp*)
-              echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
-              ;;
-          esac
-      - name: Rename APK to channel-aware filename
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='338'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.238'"
+
+      - name: Rename APK
         id: rename
+        shell: bash
         run: |
+          set -euxo pipefail
           OUT="app/build/outputs/apk/release/app-release.apk"
-          NEW="local-agent-plaza-${{ steps.channel.outputs.vname }}.apk"
+          NEW="local-agent-plaza-1.0.14-mcp.238.apk"
           cp "$OUT" "$NEW"
           sha256sum "$NEW" | awk '{print $1}' > "$NEW.sha256"
           echo "apk_name=$NEW" >> "$GITHUB_OUTPUT"
           echo "sha256_name=$NEW.sha256" >> "$GITHUB_OUTPUT"
-      - name: Upload APK artifact (短保留：3 天，节省云端存储)
+          echo "apk_sha256=$(cat "$NEW.sha256")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP238 APK artifact
+        id: upload
         uses: actions/upload-artifact@v4
         with:
-          name: local-agent-plaza-${{ steps.channel.outputs.channel }}-${{ github.run_number }}
+          name: local-agent-plaza-mcp-238
           path: |
             Android/src/${{ steps.rename.outputs.apk_name }}
             Android/src/${{ steps.rename.outputs.sha256_name }}
           if-no-files-found: error
           retention-days: 3
-      - name: Publish APK to GitHub Release (仅当 tag 触发)
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          prerelease: ${{ steps.channel.outputs.prerelease }}
-          files: |
-            Android/src/${{ steps.rename.outputs.apk_name }}
-            Android/src/${{ steps.rename.outputs.sha256_name }}
-          fail_on_unmatched_files: true
+
+      - name: Publish MCP238 build result marker
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA256: ${{ steps.rename.outputs.apk_sha256 }}
+        run: |
+          set -euxo pipefail
+          RESULT="$RUNNER_TEMP/mcp238-build-result.json"
+          python - <<'PY' > "$RESULT"
+          import json, os
+          print(json.dumps({
+              'schema': 'local-agent-plaza.mcp238-build-result.v1',
+              'run_id': int(os.environ['GITHUB_RUN_ID']),
+              'run_number': int(os.environ['GITHUB_RUN_NUMBER']),
+              'commit_sha': os.environ['GITHUB_SHA'],
+              'artifact_id': int(os.environ['ARTIFACT_ID']),
+              'artifact_url': os.environ['ARTIFACT_URL'],
+              'artifact_name': 'local-agent-plaza-mcp-238',
+              'apk_name': 'local-agent-plaza-1.0.14-mcp.238.apk',
+              'apk_sha256': os.environ['APK_SHA256'],
+              'version_name': '1.0.14-mcp.238',
+              'version_code': 338,
+              'package': 'com.localagent.plaza.mcp',
+          }, indent=2))
+          PY
+          RESULT_PATH="docs/mcp238_build_result_${GITHUB_RUN_ID}.json"
+          CONTENT="$(base64 -w0 "$RESULT")"
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$RESULT_PATH" \
+            -f message="MCP238 build result run ${GITHUB_RUN_ID}" \
+            -f branch="experimental" \
+            -f content="$CONTENT"

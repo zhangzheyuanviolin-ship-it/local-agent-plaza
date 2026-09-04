@@ -1,0 +1,23 @@
+{
+  "schema": "qwen35-litert-conversion.v2",
+  "source_model_id": "Qwen/Qwen3.5-2B",
+  "source_revision": "15852e8c16360a2fea060d615a32b45270f8a8fc",
+  "model_id": "Qwen/Qwen3.5-2B",
+  "model_family": "qwen3_5",
+  "task": "text_generation",
+  "quantization_label": "Q8",
+  "quantization_recipe": "dynamic_wi8_afp32",
+  "cache_length": 32768,
+  "prefill_lengths": [128],
+  "externalize_embedder": true,
+  "single_token_embedder": true,
+  "use_jinja_template": true,
+  "sampler_top_k": 1,
+  "sampler_top_p": 1.0,
+  "sampler_temperature": 0.0,
+  "output_filename": "Qwen3.5-2B-LiteRT-LM-Q8-32768.litertlm",
+  "target_app_litert_lm": "0.15.0",
+  "smoke_max_num_tokens": 32768,
+  "smoke_prompt": "你好。请只回复两个字：你好",
+  "smoke_min_output_chars": 1
+}

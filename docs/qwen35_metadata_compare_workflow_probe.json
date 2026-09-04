@@ -1,0 +1,15 @@
+{
+  "schema": "qwen35-metadata-compare-probe.v1",
+  "runs": [
+    {
+      "id": 32348948358,
+      "run_number": 1,
+      "status": "in_progress",
+      "conclusion": null,
+      "head_sha": "20b41a897e7b2a6aa60b39ddfcf4e8376acfff30",
+      "created_at": "2026-08-20T08:28:03Z",
+      "updated_at": "2026-08-20T08:28:06Z",
+      "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32348948358"
+    }
+  ]
+}

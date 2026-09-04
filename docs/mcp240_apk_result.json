@@ -1,0 +1,34 @@
+{
+  "schema": "local-agent-plaza.mcp240-natural-generation.v1",
+  "run_id": 32329787070,
+  "run_number": 3,
+  "head_sha": "8146b24bf51d1bd487a63c71c253f03c1b748df2",
+  "artifact_id": 9392861406,
+  "artifact_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32329787070/artifacts/9392861406",
+  "artifact_name": "local-agent-plaza-mcp-240",
+  "apk_name": "local-agent-plaza-1.0.14-mcp.240.apk",
+  "apk_sha256": "b44fa8d0a685f3a87673696061dc3e8e76b938821c44b7e276faaab60ea37147",
+  "version_name": "1.0.14-mcp.240",
+  "version_code": 340,
+  "package": "com.localagent.plaza.mcp",
+  "model_release_tag": "qwen35-2b-q8-4096-mcp240-natural-v2",
+  "model_file": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm",
+  "model_size": 4780966112,
+  "model_sha256": "119bdfb5464b9c3746b26d43211474fcfcbbe8a8c36693e3c0413b8d5b9d7d0f",
+  "model_parts": 10,
+  "backend": "CPU_FORCED",
+  "sampling": {
+    "top_k": 20,
+    "top_p": 1.0,
+    "temperature": 1.0,
+    "presence_penalty": 2.0,
+    "repetition_penalty": 1.0
+  },
+  "natural_stop_token_ids": [
+    248044,
+    248046
+  ],
+  "hard_output_truncation": false,
+  "repetition_watchdog_cancel": false,
+  "recurrent_state_boundary": "fresh_engine_on_qwen35_conversation_reset"
+}

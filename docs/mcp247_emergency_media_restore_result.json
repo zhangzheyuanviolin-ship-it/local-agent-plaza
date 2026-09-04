@@ -1,0 +1,59 @@
+{
+  "schema": "local-agent-plaza.mcp247-emergency-media-runtime-restore.v2",
+  "status": "FULLY_VERIFIED_PASS",
+  "run_id": 32471196974,
+  "head_sha": "1fd4ca14b4ea065f13d15be7b3f7087efc0c4217",
+  "version_name": "1.0.14-mcp.247",
+  "version_code": 347,
+  "package": "com.localagent.plaza.mcp",
+  "upgrade_target": "MCP246 versionCode 346",
+  "apk_name": "local-agent-plaza-1.0.14-mcp.247.apk",
+  "apk_sha256": "6558d14817e23cd239885caaecdb46803d8d1e16930ca36f154b116222184a65",
+  "apk_size": 239151201,
+  "certificate_sha256": "38a9a4f15ed53f47abee1a0343b2fe3d825687acb148ac8c522fa1d29f3e292d",
+  "release_tag": "mcp247-emergency-media-runtime-restore-v1",
+  "release_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp247-emergency-media-runtime-restore-v1/local-agent-plaza-1.0.14-mcp.247.apk",
+  "agent_runtime": {
+    "persistent_engine": true,
+    "fresh_top_level_conversation": true,
+    "fresh_tool_continuation_conversation": true,
+    "compat_hard_thinking_off": true,
+    "search_required_policy_preserved": true,
+    "mcp212_warm_prefill_excluded": true,
+    "mcp246_qwen_engine_reset_excluded": true
+  },
+  "unit_regression": {
+    "protected_baseline_compared": true,
+    "no_new_failures": true
+  },
+  "litert_lm": {
+    "version": "0.15.0",
+    "official_maven_runtime": true,
+    "custom_mcp242_aar_jni": false
+  },
+  "qwen35_2b": {
+    "release_tag": "qwen35-2b-q8-32768-mcp238lineage-v3",
+    "file": "Qwen3.5-2B-LiteRT-LM-Q8-32768.litertlm",
+    "size": 4780966112,
+    "sha256": "364f975167ba9bb083d9c01f0d600e9b1bb2955962d320c30cf4375b1fe42cb1",
+    "context": 32768,
+    "backend": "CPU_FORCED",
+    "multipart_release_reconstructed_and_verified": true
+  },
+  "media_native": {
+    "libLiteRt.so": "da27c0d6e59460248b1032610e924bc0f518a1229d2e3b081e0a229be51ab1c8",
+    "libLiteRtClGlAccelerator.so": "4b19f18f4ba9b1bde6060def4388b74d07f939db798c8c77c4f4e5125aeabcb1",
+    "liblitert_jni.so": "a98ea95cbb5ac4581bf483fa90df66454e15b965f4fa94a1b169a60319f4dc9a",
+    "LiteRtCreateModelFromFd_present": true,
+    "LiteRtGetBlockWiseQuantization_present": true,
+    "litertlm_jni_direct_core_link": false,
+    "canonical_box_apk_audit_passed": true
+  },
+  "modules": {
+    "box_music": true,
+    "bonsai_image": true,
+    "flux_image": true,
+    "z_image": true
+  },
+  "release_redownload_exact_sha_verified": true
+}

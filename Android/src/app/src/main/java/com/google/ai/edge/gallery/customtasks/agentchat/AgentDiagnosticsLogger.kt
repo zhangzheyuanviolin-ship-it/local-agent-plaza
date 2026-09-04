@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.Executors
 
 private const val TAG = "AGDiagnostics"
 private const val LOG_DIR_NAME = "agent_diagnostics"
@@ -33,17 +34,33 @@ object AgentDiagnosticsLogger {
     SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
       timeZone = TimeZone.getTimeZone("UTC")
     }
+  private val logWriter =
+    Executors.newSingleThreadExecutor { runnable ->
+      Thread(runnable, "AgentDiagnosticsIO").apply { isDaemon = true }
+    }
 
-  @Synchronized
   fun log(
     context: Context,
     category: String,
     message: String,
     detail: String = "",
   ) {
+    // Performance timing is recorded immediately. Only file persistence is moved off the caller's
+    // critical path in MCP204, preserving tool event ordering without blocking inference callbacks.
+    val performanceCategory =
+      if (category == "tool.run_configured_intent.flattened") {
+        "tool.run_configured_intent.done"
+      } else {
+        category
+      }
+    AgentPerformanceCoordinator.observeDiagnosticEvent(
+      category = performanceCategory,
+      detailChars = detail.length,
+    )
+
     val line =
       buildString {
-        append(timestampFormatter.format(Date()))
+        append(formatTimestamp(Date()))
         append(" [")
         append(category)
         append("] ")
@@ -57,9 +74,12 @@ object AgentDiagnosticsLogger {
       }
 
     Log.d(TAG, line.trimEnd())
-    appendLine(resolveInternalLogFile(context), line)
-    context.getExternalFilesDir(LOG_DIR_NAME)?.let { externalDir ->
-      appendLine(File(externalDir, LOG_FILE_NAME), line)
+    val appContext = context.applicationContext
+    logWriter.execute {
+      appendLine(resolveInternalLogFile(appContext), line)
+      appContext.getExternalFilesDir(LOG_DIR_NAME)?.let { externalDir ->
+        appendLine(File(externalDir, LOG_FILE_NAME), line)
+      }
     }
   }
 
@@ -68,7 +88,11 @@ object AgentDiagnosticsLogger {
   }
 
   fun getInternalLogPath(context: Context): String {
-    return resolveInternalLogFile(context).absolutePath
+    return resolveInternalLogFile(context.applicationContext).absolutePath
+  }
+
+  private fun formatTimestamp(date: Date): String {
+    return synchronized(timestampFormatter) { timestampFormatter.format(date) }
   }
 
   private fun resolveInternalLogFile(context: Context): File {

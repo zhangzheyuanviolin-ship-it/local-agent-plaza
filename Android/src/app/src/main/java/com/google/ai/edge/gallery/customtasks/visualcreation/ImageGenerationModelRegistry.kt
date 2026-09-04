@@ -22,6 +22,9 @@ import com.google.ai.edge.gallery.data.ModelDataFile
 enum class ImageGenerationBackend {
   LOCAL_DREAM_QNN_MNN,
   STABLE_DIFFUSION_CPP,
+  BONSAI_LITERT_CPU_XNNPACK,
+  FLUX_LITERT_GPU_COMPILED_MODEL,
+  Z_IMAGE_LITERT_GPU_COMPILED_MODEL,
 }
 
 enum class ImageGenerationModelFileRole {

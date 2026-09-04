@@ -1,0 +1,88 @@
+name: MCP242 Qwen3.5 logits shape probe
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp242_qwen35_logits_shape_probe.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MODEL_TAG: qwen35-2b-q8-4096-mcp240-natural-v2
+      MODEL_FILE: Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install inspection runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'litert-lm==0.15.0' ai-edge-litert
+      - name: Reconstruct and inspect model signatures
+        shell: bash
+        run: |
+          set -euxo pipefail
+          WORK="$RUNNER_TEMP/mcp242-shapes"
+          mkdir -p "$WORK"
+          MODEL="$WORK/$MODEL_FILE"
+          : > "$MODEL"
+          for n in $(seq 0 9); do
+            i="$(printf '%02d' "$n")"
+            asset="$MODEL_FILE.part$i"
+            gh release download "$MODEL_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$WORK"
+            cat "$WORK/$asset" >> "$MODEL"
+            rm "$WORK/$asset"
+          done
+          test "$(stat -c '%s' "$MODEL")" = '4780966112'
+          litert-lm unpack "$MODEL" --output-dir "$WORK/unpacked" --allow-overwrite
+          rm "$MODEL"
+          python - <<'PY' > "$RUNNER_TEMP/qwen35_shapes.json"
+          import json, os
+          from pathlib import Path
+          from ai_edge_litert.interpreter import Interpreter
+
+          root=Path(os.environ['RUNNER_TEMP'])/'mcp242-shapes'/'unpacked'
+          result={'schema':'mcp242.qwen35.signature-shapes.v1','tflites':[]}
+          for model_path in sorted(root.glob('*.tflite')):
+              it=Interpreter(model_path=str(model_path))
+              sigs=it.get_signature_list()
+              entry={'file':model_path.name,'signatures':{}}
+              for key, desc in sigs.items():
+                  runner=it.get_signature_runner(key)
+                  ins={name:{'shape':[int(x) for x in d['shape']], 'dtype':str(d['dtype'])}
+                       for name,d in runner.get_input_details().items()}
+                  outs={name:{'shape':[int(x) for x in d['shape']], 'dtype':str(d['dtype'])}
+                        for name,d in runner.get_output_details().items()}
+                  entry['signatures'][key]={'inputs':ins,'outputs':outs,'declared':desc}
+              result['tflites'].append(entry)
+          pb=root/'LlmMetadataProto.pbtext'
+          result['llm_metadata_stop_lines']=[line.strip() for line in pb.read_text().splitlines() if 'ids:' in line] if pb.exists() else []
+          print(json.dumps(result,indent=2))
+          PY
+          cat "$RUNNER_TEMP/qwen35_shapes.json"
+      - name: Publish probe result to experimental docs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/qwen35_shapes.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp242_qwen35_signature_shapes.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP242 Qwen3.5 signature shapes' -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP242 Qwen3.5 signature shapes' -f branch=experimental -f content="$CONTENT"
+          fi

@@ -1,0 +1,16 @@
+{
+  "schema": "mcp241-workflow-probe.v1",
+  "runs": [
+    {
+      "id": 32336065280,
+      "run_number": 1,
+      "event": "push",
+      "status": "in_progress",
+      "conclusion": null,
+      "head_sha": "4f096e5887537da0869d216f411c55aa245445a0",
+      "created_at": "2026-08-20T05:33:43Z",
+      "updated_at": "2026-08-20T05:33:46Z",
+      "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32336065280"
+    }
+  ]
+}

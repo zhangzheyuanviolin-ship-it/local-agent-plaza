@@ -1,0 +1,39 @@
+name: MCP240 fix source part indexing
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp240_fix_part_index.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+      - name: Fix two-digit source part names and push
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/mcp240_qwen35_natural_generation.yaml')
+          s=p.read_text()
+          old='''          for i in $(seq -w 0 9); do\n            ASSET="${SOURCE_FILE}.part${i}"\n'''
+          new='''          for n in $(seq 0 9); do\n            i="$(printf '%02d' "$n")"\n            ASSET="${SOURCE_FILE}.part${i}"\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one source-part loop anchor, found {s.count(old)}')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/mcp240_qwen35_natural_generation.yaml
+          git diff --cached --check
+          git commit -m 'Fix MCP240 two-digit model part indexing'
+          git push origin HEAD:experimental

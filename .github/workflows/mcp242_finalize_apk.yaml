@@ -1,0 +1,260 @@
+name: MCP242 finalize signed APK
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp242_finalize_apk.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp242-finalize-apk
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    name: Finalize MCP242 signed APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SOURCE_RUNTIME_RUN_ID: '32337379513'
+      PATCHED_AAR_SHA256: 'fb21293e5c32ecede58e87e317e262b2dedc47f52fe8875bbc4b1f08de6b09b7'
+      MCP240_MODEL_SIZE: '4780966112'
+      MCP240_MODEL_SHA256: '119bdfb5464b9c3746b26d43211474fcfcbbe8a8c36693e3c0413b8d5b9d7d0f'
+      MODEL_RELEASE_TAG: 'qwen35-2b-q8-4096-mcp240-natural-v2'
+      MODEL_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+      LOCAL_VERSION_NAME: '1.0.14-mcp.242'
+      LOCAL_VERSION_CODE: '342'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      APK_RELEASE_TAG: 'mcp242-qwen35-compatible-repetition'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+
+      - name: Download validated MCP242 patched runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: litertlm-android-0.15.0-mcp242
+          path: Android/src/app/libs
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 32337379513
+
+      - name: Verify patched runtime artifact and binary marker
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          AAR='app/libs/litertlm-android-0.15.0-mcp242.aar'
+          test -f "$AAR"
+          test "$(sha256sum "$AAR" | awk '{print $1}')" = "$PATCHED_AAR_SHA256"
+          unzip -l "$AAR" | grep 'MCP242_RUNTIME_PATCH.txt'
+          JNI_ENTRY="$(unzip -Z1 "$AAR" | grep -E '(^|/)arm64-v8a/liblitertlm_jni\.so$' | head -n 1)"
+          test -n "$JNI_ENTRY"
+          unzip -p "$AAR" "$JNI_ENTRY" > "$RUNNER_TEMP/mcp242_unstripped_jni.so"
+          strings "$RUNNER_TEMP/mcp242_unstripped_jni.so" | grep -F 'model_vocab_size >= tokenizer_vocab_size'
+
+      - name: Apply MCP238 MCP239 MCP240 and MCP242 app patches
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile \
+            scripts/patch_mcp238_qwen35_model_download_v3.py \
+            scripts/patch_mcp239_qwen35_cpu_only.py \
+            scripts/patch_mcp240_qwen35_natural_generation.py \
+            scripts/patch_mcp242_qwen35_compatible_repetition.py
+          python3 scripts/patch_mcp238_qwen35_model_download_v3.py
+          python3 scripts/patch_mcp239_qwen35_cpu_only.py
+          python3 scripts/patch_mcp240_qwen35_natural_generation.py
+          python3 scripts/patch_mcp242_qwen35_compatible_repetition.py --app
+
+      - name: Verify MCP242 product invariants
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          name='Qwen3.5-2B LiteRT-LM Q8 4096 Plaza MCP240'
+          helper=Path('app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt').read_text()
+          gradle=Path('app/build.gradle.kts').read_text()
+          assert 'RepetitionPenaltyConfig(' in helper
+          assert 'presencePenalty = 2.0f' in helper
+          assert 'repetitionPenalty = 1.0f' in helper
+          assert 'MCP240_QWEN35_RECURRENT_STATE_RESET' in helper
+          assert 'NoRepeatNgramConfig' not in helper
+          assert 'maxOutputToken =' not in helper
+          assert 'litertlm-android-0.15.0-mcp242.aar' in gradle
+          assert 'implementation(libs.litertlm)' not in gradle
+          for p in (Path('../../model_allowlists/1_0_14.json'), Path('app/src/main/assets/model_allowlists/1_0_14.json')):
+              matches=[m for m in json.loads(p.read_text())['models'] if m.get('name')==name]
+              assert len(matches)==1
+              m=matches[0]
+              assert m['modelFile']=='Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp240.litertlm'
+              assert m['commitHash']=='qwen35-2b-q8-4096-mcp240-natural-v2'
+              assert m['sizeInBytes']==4780966112
+              cfg=m['defaultConfig']
+              assert cfg['accelerators']=='cpu'
+              assert (cfg['topK'],cfg['topP'],cfg['temperature'])==(20,1.0,1.0)
+              assert cfg['maxTokens']==4096
+          print('MCP242 final product invariants verified.')
+          PY
+
+      - name: Checkout stable-diffusion.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare release signing
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -n "$ANDROID_RELEASE_KEYSTORE_BASE64"
+          test -n "$ANDROID_RELEASE_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_RELEASE_KEY_ALIAS"
+          test -n "$ANDROID_RELEASE_KEY_PASSWORD"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/local-agent-plaza-release.jks"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/local-agent-plaza-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build MCP242 release APK
+        working-directory: ./Android/src
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Verify APK identity and patched runtime survives stripping
+        id: verify
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK='app/build/outputs/apk/release/app-release.apk'
+          BT="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK"
+          BADGING="$("$ANDROID_HOME/build-tools/$BT/aapt" dump badging "$APK" | head -n 1)"
+          echo "$BADGING"
+          echo "$BADGING" | grep "name='com.localagent.plaza.mcp'"
+          echo "$BADGING" | grep "versionCode='342'"
+          echo "$BADGING" | grep "versionName='1.0.14-mcp.242'"
+          JNI_ENTRY="$(unzip -Z1 "$APK" | grep -E '^lib/arm64-v8a/liblitertlm_jni\.so$' | head -n 1)"
+          test -n "$JNI_ENTRY"
+          unzip -p "$APK" "$JNI_ENTRY" > "$RUNNER_TEMP/apk_litertlm_jni.so"
+          strings "$RUNNER_TEMP/apk_litertlm_jni.so" | grep -F 'model_vocab_size >= tokenizer_vocab_size'
+          APK_JNI_SHA="$(sha256sum "$RUNNER_TEMP/apk_litertlm_jni.so" | awk '{print $1}')"
+          echo "apk_jni_sha=$APK_JNI_SHA" >> "$GITHUB_OUTPUT"
+          echo "Patched runtime marker verified inside final stripped APK; packaged JNI SHA256=$APK_JNI_SHA"
+
+      - name: Rename and hash APK
+        id: apk
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC='app/build/outputs/apk/release/app-release.apk'
+          OUT='local-agent-plaza-1.0.14-mcp.242.apk'
+          cp "$SRC" "$OUT"
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" "$OUT" > "$OUT.sha256"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MCP242 APK artifact
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-agent-plaza-mcp-242-final
+          path: |
+            Android/src/local-agent-plaza-1.0.14-mcp.242.apk
+            Android/src/local-agent-plaza-1.0.14-mcp.242.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish permanent MCP242 APK release
+        working-directory: ./Android/src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$APK_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title 'Local Agent Plaza MCP242 Qwen3.5 compatible repetition' \
+              --notes 'Qwen3.5 CPU Agent product build. Reuses the repaired MCP240 model with ChatML and natural stop tokens 248044/248046. Keeps real repetition/presence control by backporting padded-model-vocabulary support into the LiteRT-LM 0.15 arm64 RepetitionPenaltyProcessor. No output hard truncation, repetition watchdog, or hard no-repeat ngram is used.' \
+              --prerelease
+          gh release upload "$APK_RELEASE_TAG" \
+            local-agent-plaza-1.0.14-mcp.242.apk \
+            local-agent-plaza-1.0.14-mcp.242.apk.sha256 \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish MCP242 final result metadata
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_SHA: ${{ steps.apk.outputs.sha }}
+          APK_JNI_SHA: ${{ steps.verify.outputs.apk_jni_sha }}
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/mcp242_result.json"
+          import json, os
+          repo=os.environ['GITHUB_REPOSITORY']
+          tag=os.environ['APK_RELEASE_TAG']
+          print(json.dumps({
+              'schema':'local-agent-plaza.mcp242-compatible-repetition.final.v1',
+              'run_id':int(os.environ['GITHUB_RUN_ID']),
+              'head_sha':os.environ['GITHUB_SHA'],
+              'source_runtime_run_id':int(os.environ['SOURCE_RUNTIME_RUN_ID']),
+              'artifact_id':int(os.environ['ARTIFACT_ID']),
+              'artifact_url':os.environ['ARTIFACT_URL'],
+              'release_tag':tag,
+              'release_apk_url':f'https://github.com/{repo}/releases/download/{tag}/local-agent-plaza-1.0.14-mcp.242.apk',
+              'apk_name':'local-agent-plaza-1.0.14-mcp.242.apk',
+              'apk_sha256':os.environ['APK_SHA'],
+              'apk_packaged_litertlm_jni_sha256':os.environ['APK_JNI_SHA'],
+              'patched_aar_sha256':os.environ['PATCHED_AAR_SHA256'],
+              'version_name':'1.0.14-mcp.242',
+              'version_code':342,
+              'package':'com.localagent.plaza.mcp',
+              'model_release_tag':os.environ['MODEL_RELEASE_TAG'],
+              'model_file':os.environ['MODEL_FILE'],
+              'model_sha256':os.environ['MCP240_MODEL_SHA256'],
+              'model_redownload_required':False,
+              'backend':'CPU_FORCED',
+              'sampler':{'top_k':20,'top_p':1.0,'temperature':1.0},
+              'repetition_penalty':{'enabled':True,'repetition_penalty':1.0,'presence_penalty':2.0,'frequency_penalty':0.0},
+              'model_natural_stop_token_ids':[248044,248046],
+              'hard_output_truncation':False,
+              'repetition_watchdog_cancel':False,
+              'hard_no_repeat_ngram':False,
+              'model_decode_logits_shape':[1,1,248320],
+              'runtime_fix':'LiteRT-LM 0.15 arm64 RepetitionPenaltyProcessor accepts padded model vocab; model-vocab stride with tokenizer-vocab penalty domain',
+              'runtime_provenance_marker_verified_in_final_apk':True
+          },indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/mcp242_result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp242_apk_result.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          EXISTING_SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$EXISTING_SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP242 final APK result' -f branch=experimental -f sha="$EXISTING_SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP242 final APK result' -f branch=experimental -f content="$CONTENT"
+          fi

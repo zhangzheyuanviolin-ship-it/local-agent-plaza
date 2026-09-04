@@ -1,0 +1,1979 @@
+{
+  "schema": "mcp242.qwen35.signature-shapes.v1",
+  "tflites": [
+    {
+      "file": "Section3_TFLiteModel_tf_lite_prefill_decode.tflite",
+      "signatures": {
+        "prefill_128": {
+          "inputs": {
+            "input_pos": {
+              "shape": [
+                128
+              ],
+              "dtype": "<class 'numpy.int32'>"
+            },
+            "kv_cache_c_0": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_1": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_10": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_12": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_13": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_14": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_16": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_17": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_18": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_2": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_20": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_21": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_22": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_4": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_5": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_6": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_8": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_9": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_11": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_15": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_19": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_23": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_3": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_7": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_0": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_1": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_10": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_12": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_13": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_14": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_16": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_17": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_18": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_2": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_20": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_21": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_22": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_4": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_5": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_6": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_8": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_9": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_11": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_15": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_19": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_23": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_3": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_7": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "mask": {
+              "shape": [
+                1,
+                1,
+                128,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "tokens": {
+              "shape": [
+                1,
+                128
+              ],
+              "dtype": "<class 'numpy.int32'>"
+            }
+          },
+          "outputs": {
+            "kv_cache_c_0": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_1": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_10": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_12": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_13": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_14": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_16": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_17": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_18": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_2": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_20": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_21": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_22": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_4": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_5": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_6": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_8": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_9": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_11": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_15": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_19": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_23": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_3": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_7": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_0": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_1": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_10": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_12": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_13": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_14": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_16": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_17": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_18": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_2": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_20": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_21": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_22": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_4": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_5": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_6": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_8": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_9": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_11": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_15": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_19": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_23": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_3": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_7": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            }
+          },
+          "declared": {
+            "inputs": [
+              "input_pos",
+              "kv_cache_c_0",
+              "kv_cache_c_1",
+              "kv_cache_c_10",
+              "kv_cache_c_12",
+              "kv_cache_c_13",
+              "kv_cache_c_14",
+              "kv_cache_c_16",
+              "kv_cache_c_17",
+              "kv_cache_c_18",
+              "kv_cache_c_2",
+              "kv_cache_c_20",
+              "kv_cache_c_21",
+              "kv_cache_c_22",
+              "kv_cache_c_4",
+              "kv_cache_c_5",
+              "kv_cache_c_6",
+              "kv_cache_c_8",
+              "kv_cache_c_9",
+              "kv_cache_k_11",
+              "kv_cache_k_15",
+              "kv_cache_k_19",
+              "kv_cache_k_23",
+              "kv_cache_k_3",
+              "kv_cache_k_7",
+              "kv_cache_r_0",
+              "kv_cache_r_1",
+              "kv_cache_r_10",
+              "kv_cache_r_12",
+              "kv_cache_r_13",
+              "kv_cache_r_14",
+              "kv_cache_r_16",
+              "kv_cache_r_17",
+              "kv_cache_r_18",
+              "kv_cache_r_2",
+              "kv_cache_r_20",
+              "kv_cache_r_21",
+              "kv_cache_r_22",
+              "kv_cache_r_4",
+              "kv_cache_r_5",
+              "kv_cache_r_6",
+              "kv_cache_r_8",
+              "kv_cache_r_9",
+              "kv_cache_v_11",
+              "kv_cache_v_15",
+              "kv_cache_v_19",
+              "kv_cache_v_23",
+              "kv_cache_v_3",
+              "kv_cache_v_7",
+              "mask",
+              "tokens"
+            ],
+            "outputs": [
+              "kv_cache_c_0",
+              "kv_cache_c_1",
+              "kv_cache_c_10",
+              "kv_cache_c_12",
+              "kv_cache_c_13",
+              "kv_cache_c_14",
+              "kv_cache_c_16",
+              "kv_cache_c_17",
+              "kv_cache_c_18",
+              "kv_cache_c_2",
+              "kv_cache_c_20",
+              "kv_cache_c_21",
+              "kv_cache_c_22",
+              "kv_cache_c_4",
+              "kv_cache_c_5",
+              "kv_cache_c_6",
+              "kv_cache_c_8",
+              "kv_cache_c_9",
+              "kv_cache_k_11",
+              "kv_cache_k_15",
+              "kv_cache_k_19",
+              "kv_cache_k_23",
+              "kv_cache_k_3",
+              "kv_cache_k_7",
+              "kv_cache_r_0",
+              "kv_cache_r_1",
+              "kv_cache_r_10",
+              "kv_cache_r_12",
+              "kv_cache_r_13",
+              "kv_cache_r_14",
+              "kv_cache_r_16",
+              "kv_cache_r_17",
+              "kv_cache_r_18",
+              "kv_cache_r_2",
+              "kv_cache_r_20",
+              "kv_cache_r_21",
+              "kv_cache_r_22",
+              "kv_cache_r_4",
+              "kv_cache_r_5",
+              "kv_cache_r_6",
+              "kv_cache_r_8",
+              "kv_cache_r_9",
+              "kv_cache_v_11",
+              "kv_cache_v_15",
+              "kv_cache_v_19",
+              "kv_cache_v_23",
+              "kv_cache_v_3",
+              "kv_cache_v_7"
+            ]
+          }
+        },
+        "decode": {
+          "inputs": {
+            "input_pos": {
+              "shape": [
+                1
+              ],
+              "dtype": "<class 'numpy.int32'>"
+            },
+            "kv_cache_c_0": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_1": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_10": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_12": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_13": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_14": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_16": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_17": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_18": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_2": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_20": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_21": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_22": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_4": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_5": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_6": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_8": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_9": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_11": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_15": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_19": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_23": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_3": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_7": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_0": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_1": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_10": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_12": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_13": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_14": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_16": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_17": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_18": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_2": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_20": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_21": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_22": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_4": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_5": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_6": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_8": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_9": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_11": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_15": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_19": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_23": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_3": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_7": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "mask": {
+              "shape": [
+                1,
+                1,
+                1,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "tokens": {
+              "shape": [
+                1,
+                1
+              ],
+              "dtype": "<class 'numpy.int32'>"
+            }
+          },
+          "outputs": {
+            "kv_cache_c_0": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_1": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_10": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_12": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_13": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_14": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_16": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_17": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_18": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_2": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_20": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_21": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_22": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_4": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_5": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_6": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_8": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_c_9": {
+              "shape": [
+                1,
+                6144,
+                3
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_11": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_15": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_19": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_23": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_3": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_k_7": {
+              "shape": [
+                1,
+                2,
+                4096,
+                256
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_0": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_1": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_10": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_12": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_13": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_14": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_16": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_17": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_18": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_2": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_20": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_21": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_22": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_4": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_5": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_6": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_8": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_r_9": {
+              "shape": [
+                1,
+                16,
+                128,
+                128
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_11": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_15": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_19": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_23": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_3": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "kv_cache_v_7": {
+              "shape": [
+                1,
+                2,
+                256,
+                4096
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            },
+            "logits": {
+              "shape": [
+                1,
+                1,
+                248320
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            }
+          },
+          "declared": {
+            "inputs": [
+              "input_pos",
+              "kv_cache_c_0",
+              "kv_cache_c_1",
+              "kv_cache_c_10",
+              "kv_cache_c_12",
+              "kv_cache_c_13",
+              "kv_cache_c_14",
+              "kv_cache_c_16",
+              "kv_cache_c_17",
+              "kv_cache_c_18",
+              "kv_cache_c_2",
+              "kv_cache_c_20",
+              "kv_cache_c_21",
+              "kv_cache_c_22",
+              "kv_cache_c_4",
+              "kv_cache_c_5",
+              "kv_cache_c_6",
+              "kv_cache_c_8",
+              "kv_cache_c_9",
+              "kv_cache_k_11",
+              "kv_cache_k_15",
+              "kv_cache_k_19",
+              "kv_cache_k_23",
+              "kv_cache_k_3",
+              "kv_cache_k_7",
+              "kv_cache_r_0",
+              "kv_cache_r_1",
+              "kv_cache_r_10",
+              "kv_cache_r_12",
+              "kv_cache_r_13",
+              "kv_cache_r_14",
+              "kv_cache_r_16",
+              "kv_cache_r_17",
+              "kv_cache_r_18",
+              "kv_cache_r_2",
+              "kv_cache_r_20",
+              "kv_cache_r_21",
+              "kv_cache_r_22",
+              "kv_cache_r_4",
+              "kv_cache_r_5",
+              "kv_cache_r_6",
+              "kv_cache_r_8",
+              "kv_cache_r_9",
+              "kv_cache_v_11",
+              "kv_cache_v_15",
+              "kv_cache_v_19",
+              "kv_cache_v_23",
+              "kv_cache_v_3",
+              "kv_cache_v_7",
+              "mask",
+              "tokens"
+            ],
+            "outputs": [
+              "kv_cache_c_0",
+              "kv_cache_c_1",
+              "kv_cache_c_10",
+              "kv_cache_c_12",
+              "kv_cache_c_13",
+              "kv_cache_c_14",
+              "kv_cache_c_16",
+              "kv_cache_c_17",
+              "kv_cache_c_18",
+              "kv_cache_c_2",
+              "kv_cache_c_20",
+              "kv_cache_c_21",
+              "kv_cache_c_22",
+              "kv_cache_c_4",
+              "kv_cache_c_5",
+              "kv_cache_c_6",
+              "kv_cache_c_8",
+              "kv_cache_c_9",
+              "kv_cache_k_11",
+              "kv_cache_k_15",
+              "kv_cache_k_19",
+              "kv_cache_k_23",
+              "kv_cache_k_3",
+              "kv_cache_k_7",
+              "kv_cache_r_0",
+              "kv_cache_r_1",
+              "kv_cache_r_10",
+              "kv_cache_r_12",
+              "kv_cache_r_13",
+              "kv_cache_r_14",
+              "kv_cache_r_16",
+              "kv_cache_r_17",
+              "kv_cache_r_18",
+              "kv_cache_r_2",
+              "kv_cache_r_20",
+              "kv_cache_r_21",
+              "kv_cache_r_22",
+              "kv_cache_r_4",
+              "kv_cache_r_5",
+              "kv_cache_r_6",
+              "kv_cache_r_8",
+              "kv_cache_r_9",
+              "kv_cache_v_11",
+              "kv_cache_v_15",
+              "kv_cache_v_19",
+              "kv_cache_v_23",
+              "kv_cache_v_3",
+              "kv_cache_v_7",
+              "logits"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "file": "Section4_TFLiteModel_tf_lite_embedder.tflite",
+      "signatures": {
+        "embedder": {
+          "inputs": {
+            "token_ids": {
+              "shape": [
+                1,
+                1
+              ],
+              "dtype": "<class 'numpy.int32'>"
+            }
+          },
+          "outputs": {
+            "embeddings": {
+              "shape": [
+                1,
+                1,
+                2048
+              ],
+              "dtype": "<class 'numpy.float32'>"
+            }
+          },
+          "declared": {
+            "inputs": [
+              "token_ids"
+            ],
+            "outputs": [
+              "embeddings"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "llm_metadata_stop_lines": [
+    "ids: 248044",
+    "ids: 248046"
+  ]
+}

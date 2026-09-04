@@ -1,0 +1,79 @@
+name: MCP252 Office truth audit
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp252_office_truth_audit.yaml'
+      - 'logs/mcp-251_测试日志与文档_20260903.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+      - name: Inspect uploaded MCP251 test bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP='logs/mcp-251_测试日志与文档_20260903.zip'
+          echo '===== OUTER ZIP LIST ====='
+          unzip -l "$ZIP"
+          rm -rf /tmp/mcp251-audit && mkdir -p /tmp/mcp251-audit
+          unzip -o "$ZIP" -d /tmp/mcp251-audit >/dev/null
+          echo '===== EXTRACTED FILE TREE ====='
+          find /tmp/mcp251-audit -type f -printf '%P\t%s bytes\n' | sort
+          echo '===== TEXTUAL LOG CONTENT ====='
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/tmp/mcp251-audit')
+          text_ext={'.txt','.log','.json','.md','.csv','.xml'}
+          for p in sorted(root.rglob('*')):
+              if p.is_file() and p.suffix.lower() in text_ext:
+                  print(f'\n===== FILE: {p.relative_to(root)} ({p.stat().st_size} bytes) =====')
+                  try:
+                      s=p.read_text(encoding='utf-8', errors='replace')
+                  except Exception as e:
+                      print('READ_ERROR',repr(e)); continue
+                  print(s[:200000])
+          PY
+          echo '===== OFFICE BINARY STRUCTURE / CONTENT ====='
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile, re, html
+          root=Path('/tmp/mcp251-audit')
+          for p in sorted(root.rglob('*')):
+              if not p.is_file(): continue
+              ext=p.suffix.lower()
+              if ext not in {'.docx','.xlsx','.pptx','.pdf'}: continue
+              print(f'\n===== OFFICE FILE: {p.relative_to(root)} ({p.stat().st_size} bytes) =====')
+              if ext in {'.docx','.xlsx','.pptx'}:
+                  try:
+                      with zipfile.ZipFile(p) as z:
+                          names=z.namelist()
+                          print('ZIP_ENTRIES', len(names))
+                          for n in names:
+                              print('ENTRY', n, z.getinfo(n).file_size)
+                          targets=[]
+                          if ext=='.docx': targets=[n for n in names if n=='word/document.xml']
+                          elif ext=='.xlsx': targets=[n for n in names if n.startswith('xl/worksheets/') and n.endswith('.xml')]
+                          else: targets=[n for n in names if n.startswith('ppt/slides/slide') and n.endswith('.xml')]
+                          for n in targets:
+                              raw=z.read(n).decode('utf-8','replace')
+                              texts=re.findall(r'<(?:w:t|a:t|t)(?:\s[^>]*)?>(.*?)</(?:w:t|a:t|t)>',raw,re.S)
+                              texts=[html.unescape(re.sub('<[^>]+>','',t)) for t in texts]
+                              print('TARGET',n,'XML_BYTES',len(raw.encode()),'TEXT_COUNT',len(texts))
+                              print('TEXTS',repr(texts))
+                              print('XML_PREFIX',raw[:10000])
+                  except Exception as e:
+                      print('ZIP_INSPECT_ERROR',repr(e))
+              elif ext=='.pdf':
+                  data=p.read_bytes()
+                  print('PDF_HEADER',repr(data[:16]),'EOF',data.rstrip().endswith(b'%%EOF'))
+          PY

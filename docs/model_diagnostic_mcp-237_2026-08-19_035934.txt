@@ -1,0 +1,114 @@
+Failed to create engine: INTERNAL: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ No KV cache inputs found.
+=== MCP224 模型生命周期诊断 ===
+schema=mcp224.model_lifecycle.v1
+app_version=1.0.14-mcp.237
+app_version_code=337
+litert_lm=0.15.0
+litert=2.1.6
+device=Xiaomi 23117RK66C
+device_code=manet
+android_api=36
+memory_class_mb=256
+task_id=llm_agent_chat
+model_name=Qwen3.5-2B LiteRT-LM Q4 experimental
+model_display_name=
+model_imported=false
+model_file_name=qwen35_2b_q4.litertlm
+model_file_expected_bytes=1069429648
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q4_experimental/f91f8c5e985350f10bd55e6aebdeb89b7c211fcc/qwen35_2b_q4.litertlm
+model_file_exists=true
+model_file_actual_bytes=1069429648
+configured_context_window=4096
+max_output_tokens=1536
+accelerator=GPU
+supports_image=false
+supports_audio=false
+memory_java_used_bytes=61156800 | memory_native_allocated_bytes=38448864
+privacy=no_user_prompt;no_tool_arguments;no_tool_result_content;no_workspace_content;no_secrets
+
+[2026-08-19 11:57:53.806 +0800] model_manager.initialize.attempt | Starting model initialization attempt 1
+memory_java_used_bytes=61206704 | memory_native_allocated_bytes=38448864
+
+[2026-08-19 11:57:53.837 +0800] litert.engine_config | Preparing LiteRT-LM EngineConfig
+memory_java_used_bytes=63755488 | memory_native_allocated_bytes=39043472
+detail:
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q4_experimental/f91f8c5e985350f10bd55e6aebdeb89b7c211fcc/qwen35_2b_q4.litertlm | backend=GPU | vision_backend=GPU | support_image=false | support_audio=false | context=4096 | engine_max_tokens=4096 | max_output_tokens=1536
+
+[2026-08-19 11:57:53.845 +0800] litert.engine_initialize.start | Engine.initialize() started
+memory_java_used_bytes=63838160 | memory_native_allocated_bytes=39045088
+
+[2026-08-19 11:57:57.141 +0800] litert.model_initialize.failure | FAILED
+memory_java_used_bytes=56301448 | memory_native_allocated_bytes=38946912
+detail:
+backend=GPU | vision_backend=GPU | support_image=false | support_audio=false | configured_context=4096 | engine_max_tokens=4096 | max_output_tokens=1536 | model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q4_experimental/f91f8c5e985350f10bd55e6aebdeb89b7c211fcc/qwen35_2b_q4.litertlm
+exception_class=com.google.ai.edge.litertlm.LiteRtLmJniException
+exception_message=Failed to create engine: INTERNAL: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ No KV cache inputs found.
+com.google.ai.edge.litertlm.LiteRtLmJniException: Failed to create engine: INTERNAL: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ No KV cache inputs found.
+	at com.google.ai.edge.litertlm.LiteRtLmJni.nativeCreateEngine(Native Method)
+	at com.google.ai.edge.litertlm.Engine.initialize(Engine.kt:75)
+	at com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper.initialize(LlmChatModelHelper.kt:190)
+	at com.google.ai.edge.gallery.runtime.LlmModelHelper.initialize$default(LlmModelHelper.kt:53)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.initializeModelFn$lambda$2(AgentChatTaskModule.kt:117)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.$r8$lambda$mnZ_uorPaDQedOpGf07SQpzMVP8(Unknown Source:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask$$ExternalSyntheticLambda1.invoke(D8$$SyntheticClass:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.SkillManagerViewModel$loadSkills$1$7.invokeSuspend(SkillManagerViewModel.kt:274)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:829)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+
+
+[2026-08-19 11:57:57.141 +0800] model_manager.initialize.failure | Model initialization attempt 1 failed
+memory_java_used_bytes=56367736 | memory_native_allocated_bytes=38947072
+detail:
+Failed to create engine: INTERNAL: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ No KV cache inputs found.
+
+[2026-08-19 11:57:59.020 +0800] model_manager.initialize.attempt | Starting model initialization attempt 2
+memory_java_used_bytes=18657816 | memory_native_allocated_bytes=37333280
+
+[2026-08-19 11:57:59.025 +0800] litert.engine_config | Preparing LiteRT-LM EngineConfig
+memory_java_used_bytes=18777352 | memory_native_allocated_bytes=37334448
+detail:
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q4_experimental/f91f8c5e985350f10bd55e6aebdeb89b7c211fcc/qwen35_2b_q4.litertlm | backend=GPU | vision_backend=GPU | support_image=false | support_audio=false | context=4096 | engine_max_tokens=4096 | max_output_tokens=1536
+
+[2026-08-19 11:57:59.026 +0800] litert.engine_initialize.start | Engine.initialize() started
+memory_java_used_bytes=18831352 | memory_native_allocated_bytes=37334448
+
+[2026-08-19 11:58:02.334 +0800] litert.model_initialize.failure | FAILED
+memory_java_used_bytes=39594728 | memory_native_allocated_bytes=37739184
+detail:
+backend=GPU | vision_backend=GPU | support_image=false | support_audio=false | configured_context=4096 | engine_max_tokens=4096 | max_output_tokens=1536 | model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/Qwen3_5_2B_LiteRT_LM_Q4_experimental/f91f8c5e985350f10bd55e6aebdeb89b7c211fcc/qwen35_2b_q4.litertlm
+exception_class=com.google.ai.edge.litertlm.LiteRtLmJniException
+exception_message=Failed to create engine: INTERNAL: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ No KV cache inputs found.
+com.google.ai.edge.litertlm.LiteRtLmJniException: Failed to create engine: INTERNAL: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ No KV cache inputs found.
+	at com.google.ai.edge.litertlm.LiteRtLmJni.nativeCreateEngine(Native Method)
+	at com.google.ai.edge.litertlm.Engine.initialize(Engine.kt:75)
+	at com.google.ai.edge.gallery.ui.llmchat.LlmChatModelHelper.initialize(LlmChatModelHelper.kt:190)
+	at com.google.ai.edge.gallery.runtime.LlmModelHelper.initialize$default(LlmModelHelper.kt:53)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.initializeModelFn$lambda$2(AgentChatTaskModule.kt:117)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.$r8$lambda$mnZ_uorPaDQedOpGf07SQpzMVP8(Unknown Source:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask$$ExternalSyntheticLambda1.invoke(D8$$SyntheticClass:0)
+	at com.google.ai.edge.gallery.customtasks.agentchat.SkillManagerViewModel.loadSkills(SkillManagerViewModel.kt:277)
+	at com.google.ai.edge.gallery.customtasks.agentchat.AgentChatTask.initializeModelFn(AgentChatTaskModule.kt:87)
+	at com.google.ai.edge.gallery.ui.modelmanager.ModelManagerViewModel$initializeModel$2$initializeTargetModel$1.invokeSuspend(ModelManagerViewModel.kt:602)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:829)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+
+
+[2026-08-19 11:58:02.335 +0800] model_manager.initialize.failure | Model initialization attempt 2 failed
+memory_java_used_bytes=39685592 | memory_native_allocated_bytes=37739120
+detail:
+Failed to create engine: INTERNAL: ERROR: [third_party/odml/litert_lm/runtime/executor/llm_litert_compiled_model_executor_factory.cc:222]
+└ No KV cache inputs found.

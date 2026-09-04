@@ -1,0 +1,35 @@
+name: MCP244 manifest and overwrite history probe
+on:
+  push:
+    branches: ["experimental"]
+    paths: ['.github/workflows/mcp244_manifest_and_runs_probe.yaml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: qwen35-2b-q8-4096-mcp244-official-tool-template-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+      - shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/m"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern manifest.json --dir "$RUNNER_TEMP/m"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mcp244_qwen35_restore_official_template.yaml/runs?branch=experimental&per_page=20" > "$RUNNER_TEMP/runs.json"
+          python3 - <<'PY' > "$RUNNER_TEMP/report.json"
+          import json,os
+          m=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'m','manifest.json')))
+          r=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'runs.json')))
+          print(json.dumps({'manifest':m,'runs':[{k:x.get(k) for k in ('id','run_number','status','conclusion','head_sha','created_at','updated_at','html_url')} for x in r.get('workflow_runs',[])]},indent=2))
+          PY
+          b64=$(base64 -w0 "$RUNNER_TEMP/report.json")
+          api="repos/$GITHUB_REPOSITORY/contents/docs/mcp244_manifest_and_runs_probe.json"
+          old=$(gh api "$api?ref=experimental" 2>/dev/null || true)
+          sha=$(printf '%s' "$old" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)
+          if [ -n "$sha" ]; then gh api --method PUT "$api" -f branch=experimental -f message='Update MCP244 manifest overwrite probe' -f sha="$sha" -f content="$b64"; else gh api --method PUT "$api" -f branch=experimental -f message='Add MCP244 manifest overwrite probe' -f content="$b64"; fi

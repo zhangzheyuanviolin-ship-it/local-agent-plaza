@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "pinned_litert_torch": "b66af07f1dcb9af2a990612bf6c9c0f654be3598",
+  "bf16_bit_preserving_ml_dtypes_view": true,
+  "mlir_dense_elements_bf16_accepts_array": true,
+  "torch_bfloat16_maps_to_mlir_bf16": true,
+  "direct_numpy_sites_total": 47,
+  "critical_direct_numpy_sites": [
+    {
+      "file": "backend/export.py",
+      "line": 315
+    },
+    {
+      "file": "backend/export.py",
+      "line": 316
+    },
+    {
+      "file": "backend/inline_consts.py",
+      "line": 77
+    }
+  ],
+  "note": "inline_consts BF16 site is covered by v5 bridge; backend/export qdq numpy sites are separately recorded for proactive review."
+}

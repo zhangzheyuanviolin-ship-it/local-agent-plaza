@@ -19,4 +19,10 @@
     <cache-path
         name="cache_pictures"
         path="images/" />
+    <cache-path
+        name="soundgen"
+        path="soundgen/" />
+    <cache-path
+        name="soundgenhd"
+        path="soundgenhd/" />
 </paths>

@@ -1,0 +1,19 @@
+{
+  "schema": "local-agent-plaza.mcp254-document-conversion-result.v1",
+  "run_id": 33882124992,
+  "run_number": 1,
+  "commit_sha": "79a4bd42d72b2faa7d5fbeb79fd70cd4840ce1d4",
+  "version_name": "1.0.14-mcp.254",
+  "version_code": 354,
+  "package": "com.localagent.plaza.mcp",
+  "release_tag": "mcp254-document-conversion-v1",
+  "apk_name": "local-agent-plaza-1.0.14-mcp.254.apk",
+  "apk_sha256": "41de7ec205b00e1b60df483e7463e9afc0eff080968eef721e2c0b9476b42e59",
+  "evidence_zip": "logs/mcp-253_测试日志与文档_20260904.zip",
+  "evidence_entries": 6,
+  "conversion_matrix_routes": 16,
+  "same_format_binary_copy_routes": 4,
+  "cross_format_text_routes": 12,
+  "release_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/tag/mcp254-document-conversion-v1",
+  "apk_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/releases/download/mcp254-document-conversion-v1/local-agent-plaza-1.0.14-mcp.254.apk"
+}

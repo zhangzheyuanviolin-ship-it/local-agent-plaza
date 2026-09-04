@@ -1,0 +1,89 @@
+name: Publish verified Qwen3.5 2B 32K manifest
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/qwen35_2b_32k_manifest_publish.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: 'qwen35-2b-q8-32768-mcp238lineage-v3'
+      FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-32768.litertlm'
+      SIZE: '4780966112'
+      SHA: '364f975167ba9bb083d9c01f0d600e9b1bb2955962d320c30cf4375b1fe42cb1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+      - name: Verify ten existing immutable model parts and publish manifest metadata
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets > "$RUNNER_TEMP/release.json"
+          python - <<'PY'
+          import json, os, pathlib
+          release=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'release.json'))
+          assets={a['name']:int(a['size']) for a in release['assets']}
+          f=os.environ['FILE']
+          sizes=[480_000_000]*9+[460_966_112]
+          for i,size in enumerate(sizes):
+              name=f'{f}.part{i:02d}'
+              assert assets.get(name)==size,(name,assets.get(name),size)
+          manifest={
+              'schema':'local-agent-plaza.qwen35-2b-q8-32768-mcp238lineage.v3',
+              'model_file':f,
+              'release_tag':os.environ['TAG'],
+              'full_size':int(os.environ['SIZE']),
+              'full_sha256':os.environ['SHA'],
+              'context_length':32768,
+              'quantization':'dynamic_wi8_afp32',
+              'source':'Qwen/Qwen3.5-2B@15852e8c16360a2fea060d615a32b45270f8a8fc',
+              'official_template_sha256':'273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80',
+              'natural_stop_token_ids':[248044,248046],
+              'multipart_verified_parts':[{'name':f'{f}.part{i:02d}','size':size} for i,size in enumerate(sizes)],
+          }
+          pathlib.Path(os.environ['RUNNER_TEMP'],'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          print('Existing ten-part inventory PASS')
+          PY
+          gh release upload "$TAG" "$RUNNER_TEMP/manifest.json" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets > "$RUNNER_TEMP/release_after.json"
+          python - <<'PY'
+          import json, os
+          d=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'release_after.json')))
+          names={a['name'] for a in d['assets']}
+          assert 'manifest.json' in names,names
+          print('manifest.json release asset PASS')
+          PY
+      - name: Persist manifest publication marker
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/marker.json"
+          import json, os
+          print(json.dumps({
+            'schema':'local-agent-plaza.qwen35-2b-32k-manifest-publish.v1',
+            'status':'PASS',
+            'run_id':int(os.environ['GITHUB_RUN_ID']),
+            'head_sha':os.environ['GITHUB_SHA'],
+            'release_tag':os.environ['TAG'],
+            'manifest_asset':'manifest.json',
+            'full_sha256':os.environ['SHA'],
+          },indent=2))
+          PY
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/marker.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/qwen35_2b_32k_manifest_publish.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          EXISTING="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$EXISTING" ]; then
+            gh api --method PUT "$API" -f message='Update Qwen3.5 2B 32K manifest publish marker' -f branch=experimental -f sha="$EXISTING" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add Qwen3.5 2B 32K manifest publish marker' -f branch=experimental -f content="$CONTENT"
+          fi

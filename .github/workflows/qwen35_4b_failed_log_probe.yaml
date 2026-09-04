@@ -1,0 +1,53 @@
+name: Qwen3.5 4B failed-run log probe
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/qwen35_4b_failed_log_probe.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+      - name: Capture failed 4B native-dtype logs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_RUN: '32410402111'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs
+          OUT=docs/qwen35_4b_native_dtype_failed_run_32410402111_tail.txt
+          {
+            echo "run=$TARGET_RUN"
+            echo "captured_at=$(date -u +%FT%TZ)"
+            gh run view "$TARGET_RUN" --repo "$GITHUB_REPOSITORY" --json status,conclusion,createdAt,updatedAt,url,headSha,displayTitle
+            echo '--- FAILED LOG TAIL ---'
+            gh run view "$TARGET_RUN" --repo "$GITHUB_REPOSITORY" --log-failed 2>&1 | tail -n 1600
+          } > "$OUT"
+          wc -l "$OUT"
+          tail -n 80 "$OUT"
+      - name: Commit captured log
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/qwen35_4b_native_dtype_failed_run_32410402111_tail.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Capture Qwen3.5 4B native-dtype failed-run log tail [skip ci]'
+          for n in 1 2 3 4 5; do
+            git pull --rebase origin experimental && git push origin HEAD:experimental && exit 0
+            sleep $((n*3))
+          done
+          exit 1

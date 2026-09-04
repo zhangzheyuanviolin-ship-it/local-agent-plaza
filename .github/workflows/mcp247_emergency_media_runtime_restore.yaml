@@ -1,0 +1,71 @@
+name: MCP247 emergency media runtime restore
+# retry 8: retain fail-closed baseline comparison; remove only a non-runtime source-comment DEX assertion.
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp247_emergency_media_runtime_restore.yaml'
+      - '.github/scripts/run_mcp247_emergency_build.sh'
+      - '.github/scripts/run_mcp247_emergency_build_v2.sh'
+      - '.github/scripts/run_mcp247_emergency_build_v3.sh'
+      - '.github/scripts/patch_mcp247_qwen35_verified_2b_32k.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: mcp247-emergency-media-runtime-restore
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build audit publish MCP247 emergency restore APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SOURCE_BASE_COMMIT: '1aa2f87a22a50d9133a1776556201672c1707c77'
+      MODEL_RELEASE_TAG: 'qwen35-2b-q8-32768-mcp238lineage-v3'
+      MODEL_FILE: 'Qwen3.5-2B-LiteRT-LM-Q8-32768.litertlm'
+      MODEL_NAME: 'Qwen3.5-2B LiteRT-LM Q8 32768 Plaza MCP247'
+      MODEL_SIZE: '4780966112'
+      MODEL_SHA256: '364f975167ba9bb083d9c01f0d600e9b1bb2955962d320c30cf4375b1fe42cb1'
+      LOCAL_VERSION_NAME: '1.0.14-mcp.247'
+      LOCAL_VERSION_CODE: '347'
+      APPLICATION_ID_SUFFIX: '.mcp'
+      APK_RELEASE_TAG: 'mcp247-emergency-media-runtime-restore-v1'
+      APK_NAME: 'local-agent-plaza-1.0.14-mcp.247.apk'
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout experimental source
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+
+      - name: Checkout stable-diffusion.cpp at the product-pinned revision
+        uses: actions/checkout@v4
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: 19bdfe22d255d5b4dff39d449318b9bc5ea2317f
+          path: Android/src/app/src/main/cpp/third_party/stable-diffusion.cpp
+          submodules: recursive
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Run the complete fail-closed MCP247 build and acceptance harness
+        shell: bash
+        run: |
+          set -euxo pipefail
+          bash .github/scripts/run_mcp247_emergency_build_v3.sh

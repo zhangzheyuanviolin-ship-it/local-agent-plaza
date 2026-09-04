@@ -1,0 +1,42 @@
+name: MCP242 actionlint probe
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp242_actionlint_probe.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - name: Lint MCP242 workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          set +e
+          go run github.com/rhysd/actionlint/cmd/actionlint@latest .github/workflows/mcp242_qwen35_compatible_repetition.yaml > "$RUNNER_TEMP/actionlint.txt" 2>&1
+          CODE=$?
+          set -e
+          printf 'exit_code=%s\n' "$CODE" > "$RUNNER_TEMP/result.txt"
+          cat "$RUNNER_TEMP/actionlint.txt" >> "$RUNNER_TEMP/result.txt"
+          cat "$RUNNER_TEMP/result.txt"
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/result.txt")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/mcp242_actionlint_result.txt"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message='Update MCP242 actionlint result' -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message='Add MCP242 actionlint result' -f branch=experimental -f content="$CONTENT"
+          fi

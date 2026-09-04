@@ -1,0 +1,25 @@
+name: MCP244 strict v2 probe
+on:
+  push:
+    branches: ["experimental"]
+    paths: ['.github/workflows/mcp244_strict_v2_probe.yaml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/mcp244_strict_isolation_final_v2.yaml/runs?branch=experimental&per_page=5" > "$RUNNER_TEMP/r.json"
+          python - <<'PY' > "$RUNNER_TEMP/p.json"
+          import json,os
+          d=json.load(open(os.environ['RUNNER_TEMP']+'/r.json'))
+          print(json.dumps({'schema':'mcp244-strict-v2-probe.v1','runs':[{k:r.get(k) for k in ('id','run_number','status','conclusion','head_sha','created_at','updated_at','html_url')} for r in d.get('workflow_runs',[])]},indent=2))
+          PY
+          c="$(base64 -w0 "$RUNNER_TEMP/p.json")"; api="repos/$GITHUB_REPOSITORY/contents/docs/mcp244_strict_v2_probe.json"; old="$(gh api "$api?ref=experimental" 2>/dev/null||true)"; sha="$(printf '%s' "$old"|python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null||true)"; if [ -n "$sha" ]; then gh api --method PUT "$api" -f message='Update MCP244 strict v2 probe' -f branch=experimental -f sha="$sha" -f content="$c"; else gh api --method PUT "$api" -f message='Add MCP244 strict v2 probe' -f branch=experimental -f content="$c"; fi

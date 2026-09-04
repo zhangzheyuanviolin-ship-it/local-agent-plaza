@@ -1,0 +1,64 @@
+name: Enumerate Qwen3.5 Artifacts
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/find_qwen35_artifact_v2.yaml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  enumerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enumerate recent Actions artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" > "$RUNNER_TEMP/pages.jsonl"
+          python - <<'PY' > "$RUNNER_TEMP/result.json"
+          import json, os, pathlib
+          text=(pathlib.Path(os.environ['RUNNER_TEMP'])/'pages.jsonl').read_text()
+          # gh --paginate may emit one compact JSON object per line.
+          artifacts=[]
+          decoder=json.JSONDecoder(); i=0
+          while i < len(text):
+              while i < len(text) and text[i].isspace(): i+=1
+              if i>=len(text): break
+              obj,end=decoder.raw_decode(text,i); i=end
+              artifacts.extend(obj.get('artifacts',[]))
+          q=[]
+          for a in artifacts:
+              hay=(a.get('name','')+' '+str(a.get('workflow_run',{}))).lower()
+              if 'qwen' in hay or 'litert' in hay or a.get('size_in_bytes',0) > 1_000_000_000:
+                  q.append({
+                      'id':a.get('id'),'name':a.get('name'),'size_in_bytes':a.get('size_in_bytes'),
+                      'expired':a.get('expired'),'created_at':a.get('created_at'),'expires_at':a.get('expires_at'),
+                      'workflow_run':a.get('workflow_run')
+                  })
+          q.sort(key=lambda x:x.get('created_at') or '', reverse=True)
+          print(json.dumps({'schema':'local-agent-plaza.artifact-enumeration.v1','matches':q[:100]}, indent=2))
+          PY
+          cat "$RUNNER_TEMP/result.json"
+
+      - name: Publish enumeration marker
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          CONTENT="$(base64 -w0 "$RUNNER_TEMP/result.json")"
+          API="repos/$GITHUB_REPOSITORY/contents/docs/qwen35_artifact_enumeration.json"
+          RESPONSE="$(gh api "$API?ref=experimental" 2>/dev/null || true)"
+          SHA="$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "$API" -f message="Update Qwen3.5 artifact enumeration" -f branch=experimental -f sha="$SHA" -f content="$CONTENT"
+          else
+            gh api --method PUT "$API" -f message="Add Qwen3.5 artifact enumeration" -f branch=experimental -f content="$CONTENT"
+          fi

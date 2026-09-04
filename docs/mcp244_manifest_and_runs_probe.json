@@ -1,0 +1,100 @@
+{
+  "manifest": {
+    "schema": "local-agent-plaza.qwen35.mcp244-official-tool-template.v1",
+    "source_release_tag": "qwen35-2b-q8-4096-v1",
+    "source_model_sha256": "d5e975f0eb5b081b2a3f5c55e65d00e5ce7e43aad10bc1d002d5df66d82e9f73",
+    "model_file": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm",
+    "release_tag": "qwen35-2b-q8-4096-mcp244-official-tool-template-v1",
+    "full_size": 4780966112,
+    "full_sha256": "535c32962d7d00be409abe9d7a4135733a362b6d1e5c81b9004f4a6e74a49db4",
+    "context_length": 4096,
+    "quantization": "Q8",
+    "backend": "CPU",
+    "chat_template": {
+      "provenance": "exact original converted Qwen3.5 official tool-aware template",
+      "sha256": "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80",
+      "preserved_byte_for_byte": true,
+      "tool_aware": true
+    },
+    "natural_stop_token_ids": [
+      248044,
+      248046
+    ],
+    "executor_metadata_preserved": true,
+    "runtime_repetition_penalty_processor_required": false,
+    "parts": [
+      {
+        "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part00",
+        "size": 480000000
+      },
+      {
+        "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part01",
+        "size": 480000000
+      },
+      {
+        "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part02",
+        "size": 480000000
+      },
+      {
+        "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part03",
+        "size": 480000000
+      },
+      {
+        "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part04",
+        "size": 480000000
+      },
+      {
+        "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part05",
+        "size": 480000000
+      },
+      {
+        "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part06",
+        "size": 480000000
+      },
+      {
+        "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part07",
+        "size": 480000000
+      },
+      {
+        "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part08",
+        "size": 480000000
+      },
+      {
+        "name": "Qwen3.5-2B-LiteRT-LM-Q8-4096-mcp244.litertlm.part09",
+        "size": 460966112
+      }
+    ]
+  },
+  "runs": [
+    {
+      "id": 32350232906,
+      "run_number": 3,
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "75e192c0706031adb9ec4ed2654b3ab065b66a14",
+      "created_at": "2026-08-20T08:43:33Z",
+      "updated_at": "2026-08-20T08:54:13Z",
+      "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32350232906"
+    },
+    {
+      "id": 32349972805,
+      "run_number": 2,
+      "status": "completed",
+      "conclusion": "cancelled",
+      "head_sha": "c3bf1e327f20141c8b5fbe19123c64b0ab1a58fd",
+      "created_at": "2026-08-20T08:40:21Z",
+      "updated_at": "2026-08-20T08:43:34Z",
+      "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32349972805"
+    },
+    {
+      "id": 32349526045,
+      "run_number": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "8e3f47042cc2a2087df875b92495beccae9a3582",
+      "created_at": "2026-08-20T08:34:54Z",
+      "updated_at": "2026-08-20T08:48:52Z",
+      "html_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32349526045"
+    }
+  ]
+}

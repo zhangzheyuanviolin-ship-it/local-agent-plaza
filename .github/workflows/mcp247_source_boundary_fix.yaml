@@ -1,0 +1,46 @@
+name: Repair MCP247 release inventory gate
+
+on:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/mcp247_source_boundary_fix.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experimental
+          fetch-depth: 0
+      - name: Keep exact ten-part and full-SHA gates without requiring an unrelated manifest filename
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/mcp247_emergency_media_runtime_restore.yaml')
+          s=p.read_text()
+          old="""          assert 'manifest.json' in assets
+          print('Qwen3.5 release inventory PASS')
+"""
+          new="""          part_names=sorted(name for name in assets if name.startswith(f+'.part'))
+          assert len(part_names)==10,part_names
+          print('Qwen3.5 release inventory PASS:', sorted(assets))
+"""
+          if s.count(old)!=1:
+              raise SystemExit(f'release inventory anchor count={s.count(old)}')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git diff --check
+          git diff -- .github/workflows/mcp247_emergency_media_runtime_restore.yaml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/mcp247_emergency_media_runtime_restore.yaml
+          git commit -m 'MCP247: verify exact model parts without manifest-name dependency'
+          git push origin HEAD:experimental

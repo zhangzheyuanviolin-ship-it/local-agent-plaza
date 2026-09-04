@@ -1,0 +1,10 @@
+{
+  "schema": "qwen35-4b-q8-32768-ci-status.v1",
+  "status": "FAILED",
+  "stage": "workflow_wrapper_v7",
+  "message": "driver did not create status file",
+  "repository_commit": "8fcb8d47ca63f40bed5514c487e1fe6ead1e4f63",
+  "workflow_run_id": "32445520921",
+  "workflow_run_url": "https://github.com/zhangzheyuanviolin-ship-it/local-agent-plaza/actions/runs/32445520921",
+  "updated_at_utc": "2026-08-21T04:02:55.325434+00:00"
+}

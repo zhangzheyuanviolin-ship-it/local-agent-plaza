@@ -1,0 +1,68 @@
+状态：图片生成失败：com.google.ai.edge.litert.Environment
+=== MCP224 模型生命周期诊断 ===
+schema=mcp224.model_lifecycle.v1
+app_version=1.0.14-mcp.246
+app_version_code=346
+litert_lm=0.15.0
+litert=2.1.6
+device=Xiaomi 23117RK66C
+device_code=manet
+android_api=36
+memory_class_mb=256
+task_id=llm_flux_klein_image
+model_name=flux-2-klein-4b-litert
+model_display_name=FLUX.2 Klein 4B LiteRT
+model_imported=false
+model_file_name=ke_enc0.tflite
+model_file_expected_bytes=7446025492
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/flux_2_klein_4b_litert/main/ke_enc0.tflite
+model_file_exists=true
+model_file_actual_bytes=912190032
+configured_context_window=0
+max_output_tokens=1024
+accelerator=GPU
+supports_image=false
+supports_audio=false
+memory_java_used_bytes=24040552 | memory_native_allocated_bytes=38590192
+privacy=no_user_prompt;no_tool_arguments;no_tool_result_content;no_workspace_content;no_secrets
+
+[2026-08-21 14:06:35.133 +0800] model_manager.initialize.attempt | Starting model initialization attempt 1
+memory_java_used_bytes=24106840 | memory_native_allocated_bytes=38591184
+
+[2026-08-21 14:06:35.135 +0800] model_manager.initialize.success | Model initialized on attempt 1
+memory_java_used_bytes=24238664 | memory_native_allocated_bytes=38589264
+
+=== MCP224 模型生命周期诊断 ===
+schema=mcp224.model_lifecycle.v1
+app_version=1.0.14-mcp.246
+app_version_code=346
+litert_lm=0.15.0
+litert=2.1.6
+device=Xiaomi 23117RK66C
+device_code=manet
+android_api=36
+memory_class_mb=256
+task_id=llm_local_music_generation
+model_name=soundgen_hd
+model_display_name=SoundGen HD
+model_imported=false
+model_file_name=sghd_core.litert
+model_file_expected_bytes=2193888795
+model_path=/storage/emulated/0/Android/data/com.localagent.plaza.mcp/files/soundgen_hd/box-0.4.9-golden-runtime-r1/sghd_core.litert
+model_file_exists=true
+model_file_actual_bytes=1468553968
+configured_context_window=0
+max_output_tokens=1024
+accelerator=GPU
+supports_image=false
+supports_audio=false
+memory_java_used_bytes=18282816 | memory_native_allocated_bytes=39878064
+privacy=no_user_prompt;no_tool_arguments;no_tool_result_content;no_workspace_content;no_secrets
+
+[2026-08-21 14:07:43.207 +0800] model_manager.initialize.attempt | Starting model initialization attempt 1
+memory_java_used_bytes=18316336 | memory_native_allocated_bytes=39886160
+
+[2026-08-21 14:07:43.224 +0800] model_manager.initialize.success | Model initialized on attempt 1
+memory_java_used_bytes=18743120 | memory_native_allocated_bytes=39884288
+
+生成失败：dlopen failed: cannot locate symbol "LiteRtCreateModelFromFd" referenced by "/data/app/~~EQUxtsYzPOhVzTawVRN5Kw==/com.localagent.plaza.mcp-tVxPz78Fh5JYctkTKPU8ZA==/lib/arm64/liblitert_jni.so"...

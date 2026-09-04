@@ -1,0 +1,424 @@
+name: Qwen3.5 2B Q8 32K MCP238 lineage
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["experimental"]
+    paths:
+      - '.github/workflows/qwen35_2b_q8_32k_convert.yaml'
+      - 'model-conversion/qwen35/configs/2b-q8-32768.json'
+      - 'model-conversion/qwen35/convert_qwen35.py'
+      - 'model-conversion/qwen35/verify_qwen35.py'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: qwen35-2b-q8-32k-mcp238-lineage
+  cancel-in-progress: false
+
+jobs:
+  convert_validate_publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      HF_MODEL_ID: Qwen/Qwen3.5-2B
+      HF_REVISION: 15852e8c16360a2fea060d615a32b45270f8a8fc
+      LITERT_TORCH_SHA: b66af07f1dcb9af2a990612bf6c9c0f654be3598
+      LITERT_LM_SHA: 2117fc4314670e00047bc8469783f02a68c33f0c
+      CONFIG_PATH: model-conversion/qwen35/configs/2b-q8-32768.json
+      MODEL_FILE: Qwen3.5-2B-LiteRT-LM-Q8-32768.litertlm
+      RELEASE_TAG: qwen35-2b-q8-32768-mcp238lineage-v1
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      PYTHONUNBUFFERED: '1'
+      MALLOC_ARENA_MAX: '2'
+
+    steps:
+      - name: Checkout exact experimental commit
+        uses: actions/checkout@v4
+
+      - name: Verify approved branch and config invariants
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$GITHUB_REF_NAME" = experimental
+          python - <<'PY'
+          import json, os
+          c=json.load(open(os.environ['CONFIG_PATH']))
+          assert c['source_model_id']=='Qwen/Qwen3.5-2B'
+          assert c['source_revision']=='15852e8c16360a2fea060d615a32b45270f8a8fc'
+          assert c['quantization_recipe']=='dynamic_wi8_afp32'
+          assert c['cache_length']==32768
+          assert c['prefill_lengths']==[128]
+          assert c['use_jinja_template'] is True
+          assert c['output_filename']==os.environ['MODEL_FILE']
+          print('CONFIG_INVARIANTS_PASS')
+          PY
+
+      - name: Free runner disk and add historical conversion swap
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          docker system prune -af || true
+          sudo apt-get clean || true
+          SWAP=/mnt/qwen35-32k.swap
+          sudo rm -f "$SWAP" || true
+          sudo fallocate -l 32G "$SWAP" || sudo dd if=/dev/zero of="$SWAP" bs=1M count=32768 status=progress
+          sudo chmod 600 "$SWAP"
+          sudo mkswap "$SWAP"
+          sudo swapon "$SWAP"
+          sudo sysctl -w vm.swappiness=80 || true
+          free -h
+          df -h
+          swapon --show
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Pin MCP238 external converter and runtime source revisions
+        shell: bash
+        run: |
+          set -euxo pipefail
+          LT="$RUNNER_TEMP/litert-torch"
+          LM="$RUNNER_TEMP/LiteRT-LM"
+          git clone https://github.com/google-ai-edge/litert-torch.git "$LT"
+          git -C "$LT" checkout --detach "$LITERT_TORCH_SHA"
+          test "$(git -C "$LT" rev-parse HEAD)" = "$LITERT_TORCH_SHA"
+          git clone https://github.com/google-ai-edge/LiteRT-LM.git "$LM"
+          git -C "$LM" checkout --detach "$LITERT_LM_SHA"
+          test "$(git -C "$LM" rev-parse HEAD)" = "$LITERT_LM_SHA"
+          grep -Fq 'TYPE_LINEAR_ATTENTION = 5' "$LM/runtime/proto/executor_metadata.proto"
+          grep -Fq 'case proto::StateBuffer::TYPE_LINEAR_ATTENTION:' "$LM/runtime/executor/litert/state.cc"
+          export LT
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          p=Path(os.environ['LT'])/'litert_torch/generative/export_hf/model_ext/metadata_builder.py'
+          s=p.read_text(encoding='utf-8')
+          needle="""            executor_metadata_pb2.StateBuffer.TYPE_LINEAR_ATTENTION,\n        )"""
+          repl="""            executor_metadata_pb2.StateBuffer.TYPE_LINEAR_ATTENTION,\n            sequence_axis=0,\n        )"""
+          count=s.count(needle)
+          if count==3:
+              s=s.replace(needle,repl)
+              p.write_text(s,encoding='utf-8')
+          elif count==0 and s.count('sequence_axis=0')>=3:
+              pass
+          else:
+              raise SystemExit(f'Expected exactly 3 MCP238 recurrent metadata sites; found raw={count}, patched={s.count("sequence_axis=0")}')
+          s=p.read_text(encoding='utf-8')
+          if s.count('sequence_axis=0') < 3:
+              raise SystemExit('sequence_axis=0 patch missing')
+          print('MCP238_SEQUENCE_AXIS_PATCH_PASS')
+          PY
+          sha256sum "$LT/litert_torch/generative/export_hf/model_ext/metadata_builder.py" > "$RUNNER_TEMP/patched_metadata_builder.sha256"
+          echo "PYTHONPATH=$LT" >> "$GITHUB_ENV"
+
+      - name: Verify Android LiteRT-LM 0.15 release boundary
+        shell: bash
+        run: |
+          set -euxo pipefail
+          POM="$RUNNER_TEMP/litertlm-android-0.15.0.pom"
+          curl --retry 5 --retry-all-errors -fsSL 'https://dl.google.com/dl/android/maven2/com/google/ai/edge/litertlm/litertlm-android/0.15.0/litertlm-android-0.15.0.pom' -o "$POM"
+          grep -Fq '<version>0.15.0</version>' "$POM"
+          sha256sum "$POM" > "$RUNNER_TEMP/android_0_15_pom.sha256"
+
+      - name: Install MCP238-compatible conversion dependencies plus official 0.15 CPU runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade 'torch==2.12.0+cpu' --extra-index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --upgrade absl-py numpy scipy safetensors multipledispatch transformers kagglehub tabulate 'ai-edge-litert-nightly[model-utils]' ai-edge-quantizer-nightly 'litert-converter>=0.0.0.dev0' 'jax[cpu]' jaxtyping fire sentencepiece rich pillow psutil huggingface_hub
+          python -m pip install --no-deps --upgrade 'torchao>=0.17.0'
+          python -m pip install --upgrade 'litert-lm==0.15.0' ai-edge-litert
+          python - <<'PY'
+          import importlib.metadata as m
+          import litert_torch, litert_lm, litert_lm_builder
+          for n in ['torch','torchao','transformers','litert-lm','litert-lm-builder','ai-edge-litert','huggingface-hub']:
+              try: print(n,m.version(n))
+              except Exception: print(n,'unknown')
+          print('litert_torch',litert_torch.__file__)
+          print('litert_lm',litert_lm.__file__)
+          print('litert_lm_builder',litert_lm_builder.__file__)
+          PY
+          python -m pip freeze > "$RUNNER_TEMP/pip-freeze.txt"
+
+      - name: Download exact official Qwen source revision and freeze source template
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SOURCE="$RUNNER_TEMP/qwen35-2b-source"
+          export SOURCE
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          import os
+          p=snapshot_download(repo_id=os.environ['HF_MODEL_ID'], revision=os.environ['HF_REVISION'], local_dir=os.environ['SOURCE'])
+          print('HF_SNAPSHOT='+p)
+          PY
+          python - <<'PY'
+          from transformers import AutoTokenizer, AutoConfig
+          from pathlib import Path
+          import hashlib, os
+          src=Path(os.environ['SOURCE'])
+          cfg=AutoConfig.from_pretrained(src)
+          assert getattr(cfg,'model_type','')=='qwen3_5'
+          tok=AutoTokenizer.from_pretrained(src)
+          t=tok.chat_template
+          if not isinstance(t,str) or len(t)<1000:
+              raise SystemExit('Official source chat_template missing/too short')
+          required=['<tools>','<tool_call>','<function=','<parameter=','<tool_response>','message.tool_calls','enable_thinking']
+          missing=[x for x in required if x not in t]
+          if missing: raise SystemExit(f'Official tool-aware template markers missing: {missing}')
+          out=Path(os.environ['RUNNER_TEMP'])/'source_chat_template.jinja'
+          out.write_text(t,encoding='utf-8')
+          sha=hashlib.sha256(t.encode()).hexdigest()
+          (Path(os.environ['RUNNER_TEMP'])/'source_chat_template.sha256').write_text(sha+'\n')
+          print('SOURCE_TEMPLATE_SHA256='+sha)
+          PY
+          python - <<'PY'
+          import json, os
+          c=json.load(open(os.environ['CONFIG_PATH']))
+          c['model_id']=os.environ['SOURCE']
+          open(os.environ['RUNNER_TEMP']+'/runtime_config.json','w').write(json.dumps(c,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Convert official 2B to Q8 32K using MCP238 lineage
+        shell: bash
+        run: |
+          set -euxo pipefail
+          OUT="$RUNNER_TEMP/qwen35-output"
+          rm -rf "$OUT"; mkdir -p "$OUT"
+          set +e
+          /usr/bin/time -v python model-conversion/qwen35/convert_qwen35.py --config "$RUNNER_TEMP/runtime_config.json" --output-dir "$OUT" --lightweight true 2>&1 | tee "$RUNNER_TEMP/conversion-lightweight.log"
+          RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$RC" -ne 0 ]; then
+            echo "Lightweight conversion failed rc=$RC; using historical standard fallback."
+            rm -rf "$OUT"; mkdir -p "$OUT"
+            /usr/bin/time -v python model-conversion/qwen35/convert_qwen35.py --config "$RUNNER_TEMP/runtime_config.json" --output-dir "$OUT" --lightweight false 2>&1 | tee "$RUNNER_TEMP/conversion-standard.log"
+          fi
+          BUNDLE="$OUT/$MODEL_FILE"
+          test -f "$BUNDLE"
+          test "$(head -c 8 "$BUNDLE")" = LITERTLM
+          sha256sum "$BUNDLE"
+          stat -c '%s %n' "$BUNDLE"
+
+      - name: Run official CPU Engine Conversation generation validation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          OUT="$RUNNER_TEMP/qwen35-output"
+          /usr/bin/time -v python model-conversion/qwen35/verify_qwen35.py --config "$RUNNER_TEMP/runtime_config.json" --bundle "$OUT/$MODEL_FILE" --manifest "$OUT/conversion_manifest.json" 2>&1 | tee "$RUNNER_TEMP/runtime-validation.log"
+          python - <<'PY'
+          import json,os
+          m=json.load(open(os.environ['RUNNER_TEMP']+'/qwen35-output/conversion_manifest.json'))
+          assert m['verification']['status']=='PASS'
+          assert m['verification']['runtime_smoke']['max_num_tokens']==32768
+          assert m['verification']['runtime_smoke']['output_chars']>=1
+          print('OFFICIAL_CPU_RUNTIME_SMOKE_PASS')
+          PY
+
+      - name: Prove packed official template exact round trip and 32K TFLite signatures
+        shell: bash
+        run: |
+          set -euxo pipefail
+          OUT="$RUNNER_TEMP/qwen35-output"
+          UNPACK="$RUNNER_TEMP/qwen35-unpack"
+          rm -rf "$UNPACK"
+          litert-lm unpack "$OUT/$MODEL_FILE" --output-dir "$UNPACK" --allow-overwrite
+          export UNPACK OUT
+          python - <<'PY'
+          from pathlib import Path
+          import ast, hashlib, json, os, re
+          root=Path(os.environ['UNPACK'])
+          pb=root/'LlmMetadataProto.pbtext'
+          if not pb.exists(): raise SystemExit('LlmMetadataProto.pbtext missing')
+          text=pb.read_text(encoding='utf-8')
+          m=re.search(r'jinja_prompt_template:\s*"((?:\\.|[^"\\])*)"',text)
+          if not m: raise SystemExit('Packed Jinja missing')
+          packed=ast.literal_eval('"'+m.group(1)+'"')
+          source=(Path(os.environ['RUNNER_TEMP'])/'source_chat_template.jinja').read_text(encoding='utf-8')
+          if packed!=source: raise SystemExit('Packed chat template differs from exact official source template')
+          sha=hashlib.sha256(packed.encode()).hexdigest()
+          expected=(Path(os.environ['RUNNER_TEMP'])/'source_chat_template.sha256').read_text().strip()
+          if sha!=expected: raise SystemExit(f'Template SHA mismatch {sha} != {expected}')
+          print('OFFICIAL_TEMPLATE_ROUNDTRIP_PASS '+sha)
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          try:
+              from ai_edge_litert.interpreter import Interpreter
+          except Exception:
+              from ai_edge_litert.interpreter import Interpreter
+          root=Path(os.environ['UNPACK'])
+          files=sorted(root.rglob('*.tflite'))
+          if not files: raise SystemExit('No unpacked TFLite model found')
+          reports=[]; all_sigs={}; cache_shapes=[]
+          for f in files:
+              it=Interpreter(model_path=str(f))
+              sig=it.get_signature_list() or {}
+              details=[]
+              for d in it.get_tensor_details():
+                  name=str(d.get('name',''))
+                  shape=[int(x) for x in d.get('shape',[])]
+                  if any(k in name.lower() for k in ['kv_cache','cache_k','cache_v','mask']):
+                      cache_shapes.append({'file':f.name,'name':name,'shape':shape})
+              reports.append({'file':f.name,'signatures':sig})
+              all_sigs.update(sig)
+          keys=[str(k) for k in all_sigs]
+          if not any('prefill_128' in k.lower() for k in keys):
+              raise SystemExit(f'prefill_128 signature missing: {keys}')
+          if not any('decode' in k.lower() for k in keys):
+              raise SystemExit(f'decode signature missing: {keys}')
+          hits=[x for x in cache_shapes if 32768 in x['shape']]
+          if not hits:
+              raise SystemExit('No cache/mask tensor proves actual 32768 exported capacity')
+          report={'tflite_files':reports,'signature_keys':keys,'cache_or_mask_tensors_with_32768':hits[:100],'status':'PASS'}
+          (Path(os.environ['RUNNER_TEMP'])/'signature_32k_report.json').write_text(json.dumps(report,indent=2)+'\n')
+          print('TFLITE_SIGNATURE_AND_32768_CAPACITY_PASS')
+          PY
+
+      - name: Prove recurrent sequence-axis metadata and assemble immutable validation manifest
+        shell: bash
+        run: |
+          set -euxo pipefail
+          OUT="$RUNNER_TEMP/qwen35-output"
+          export OUT
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,subprocess,importlib.metadata as md
+          from litert_lm_builder.runtime.proto import executor_metadata_pb2
+          root=Path(os.environ['UNPACK']) if os.environ.get('UNPACK') else Path(os.environ['RUNNER_TEMP'])/'qwen35-unpack'
+          metas=[p for p in root.rglob('*executor_metadata*') if p.is_file()]
+          parsed=None
+          for p in metas:
+              m=executor_metadata_pb2.ExecutorMetadata()
+              try:
+                  m.ParseFromString(p.read_bytes())
+                  if m.HasField('llm_executor_metadata'): parsed=m; break
+              except Exception: pass
+          if parsed is None: raise SystemExit('No parseable ExecutorMetadata')
+          bufs=list(parsed.llm_executor_metadata.state_buffers)
+          linear=[b for b in bufs if (b.prefill_input_name or b.decode_input_name).startswith(('kv_cache_c_','kv_cache_r_'))]
+          if not linear: raise SystemExit('No linear/recurrent state buffers')
+          if any(b.type != executor_metadata_pb2.StateBuffer.TYPE_LINEAR_ATTENTION for b in linear): raise SystemExit('Wrong recurrent state type')
+          if any(not b.HasField('sequence_axis') or b.sequence_axis!=0 for b in linear): raise SystemExit('sequence_axis=0 missing on recurrent states')
+          bundle=Path(os.environ['OUT'])/os.environ['MODEL_FILE']
+          full_sha=hashlib.sha256(bundle.read_bytes()).hexdigest()
+          template_sha=(Path(os.environ['RUNNER_TEMP'])/'source_chat_template.sha256').read_text().strip()
+          conv=json.loads((Path(os.environ['OUT'])/'conversion_manifest.json').read_text())
+          sig=json.loads((Path(os.environ['RUNNER_TEMP'])/'signature_32k_report.json').read_text())
+          versions={}
+          for n in ['torch','torchao','transformers','litert-lm','litert-lm-builder','ai-edge-litert','huggingface-hub']:
+              try: versions[n]=md.version(n)
+              except Exception: versions[n]='unknown'
+          result={
+            'schema':'local-agent-plaza.qwen35-2b-q8-32768.mcp238-lineage.v1',
+            'repository_commit':os.environ['GITHUB_SHA'],
+            'source_model':os.environ['HF_MODEL_ID'],'source_revision':os.environ['HF_REVISION'],
+            'litert_torch_revision':os.environ['LITERT_TORCH_SHA'],'litert_lm_source_revision':os.environ['LITERT_LM_SHA'],
+            'target_android_litert_lm':'0.15.0','quantization_recipe':'dynamic_wi8_afp32','prefill_lengths':[128],
+            'cache_length':32768,'model_file':os.environ['MODEL_FILE'],'full_size':bundle.stat().st_size,'full_sha256':full_sha,
+            'official_chat_template_sha256':template_sha,'official_chat_template_exact_roundtrip':True,
+            'linear_recurrent_state_buffer_count':len(linear),'sequence_axis_zero_all_linear_states':True,
+            'runtime_smoke':conv['verification']['runtime_smoke'],'runtime_validation_status':conv['verification']['status'],
+            'signature_validation':sig,'versions':versions,'release_tag':os.environ['RELEASE_TAG']
+          }
+          (Path(os.environ['RUNNER_TEMP'])/'validation_manifest.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps(result,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Publish once to unique immutable Release identity
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Refusing to overwrite existing immutable release $RELEASE_TAG" >&2
+            exit 1
+          fi
+          OUT="$RUNNER_TEMP/qwen35-output"
+          ASSETS="$RUNNER_TEMP/release-assets"
+          mkdir -p "$ASSETS"
+          BUNDLE="$OUT/$MODEL_FILE"
+          split -b 480000000 -d -a 2 "$BUNDLE" "$ASSETS/$MODEL_FILE.part"
+          cp "$RUNNER_TEMP/validation_manifest.json" "$ASSETS/validation_manifest.json"
+          cp "$RUNNER_TEMP/signature_32k_report.json" "$ASSETS/signature_32k_report.json"
+          cp "$RUNNER_TEMP/source_chat_template.sha256" "$ASSETS/source_chat_template.sha256"
+          export ASSETS BUNDLE
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os
+          a=Path(os.environ['ASSETS']); b=Path(os.environ['BUNDLE'])
+          parts=[]
+          for p in sorted(a.glob(os.environ['MODEL_FILE']+'.part*')):
+              parts.append({'name':p.name,'size':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+          m={'schema':'immutable-multipart.v1','model_file':os.environ['MODEL_FILE'],'full_size':b.stat().st_size,'full_sha256':hashlib.sha256(b.read_bytes()).hexdigest(),'parts':parts}
+          (a/'multipart_manifest.json').write_text(json.dumps(m,indent=2)+'\n')
+          PY
+          gh release create "$RELEASE_TAG" "$ASSETS"/* --repo "$GITHUB_REPOSITORY" --title 'Qwen3.5 2B Q8 32K MCP238-lineage verified' --notes 'Official Qwen/Qwen3.5-2B pinned source; MCP238-derived Q8 conversion; actual 32768 cache; exact official tool-aware template; recurrent-state and CPU runtime smoke validation passed. Immutable multipart release.' --prerelease
+
+      - name: Redownload public Release assets reconstruct and verify exact bytes
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DOWN="$RUNNER_TEMP/post-publish"
+          mkdir -p "$DOWN"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$DOWN"
+          export DOWN
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os
+          d=Path(os.environ['DOWN'])
+          m=json.loads((d/'multipart_manifest.json').read_text())
+          for part in m['parts']:
+              p=d/part['name']
+              if not p.exists(): raise SystemExit(f'Missing published part {p.name}')
+              sha=hashlib.sha256(p.read_bytes()).hexdigest()
+              if p.stat().st_size!=part['size'] or sha!=part['sha256']:
+                  raise SystemExit(f'Published part mismatch {p.name}')
+          rebuilt=d/('reconstructed-'+m['model_file'])
+          with rebuilt.open('wb') as w:
+              for part in m['parts']:
+                  with (d/part['name']).open('rb') as r:
+                      while True:
+                          x=r.read(16*1024*1024)
+                          if not x: break
+                          w.write(x)
+          sha=hashlib.sha256(rebuilt.read_bytes()).hexdigest()
+          if rebuilt.stat().st_size!=m['full_size'] or sha!=m['full_sha256']:
+              raise SystemExit('Post-publish full reconstruction size/SHA mismatch')
+          report={'schema':'post-publication-verification.v1','release_tag':os.environ['RELEASE_TAG'],'model_file':m['model_file'],'full_size':m['full_size'],'full_sha256':sha,'part_count':len(m['parts']),'all_part_hashes_verified':True,'reconstruction_verified':True,'status':'PASS'}
+          (d/'post_publication_verification.json').write_text(json.dumps(report,indent=2)+'\n')
+          print(json.dumps(report,indent=2))
+          rebuilt.unlink()
+          PY
+          gh release upload "$RELEASE_TAG" "$DOWN/post_publication_verification.json" --repo "$GITHUB_REPOSITORY"
+
+      - name: Final hard gate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python - <<'PY'
+          import json,os
+          v=json.load(open(os.environ['RUNNER_TEMP']+'/validation_manifest.json'))
+          p=json.load(open(os.environ['RUNNER_TEMP']+'/post-publish/post_publication_verification.json'))
+          assert v['cache_length']==32768
+          assert v['quantization_recipe']=='dynamic_wi8_afp32'
+          assert v['official_chat_template_exact_roundtrip'] is True
+          assert v['sequence_axis_zero_all_linear_states'] is True
+          assert v['runtime_validation_status']=='PASS'
+          assert v['runtime_smoke']['max_num_tokens']==32768
+          assert p['status']=='PASS' and p['reconstruction_verified'] is True
+          assert v['full_sha256']==p['full_sha256'] and v['full_size']==p['full_size']
+          print('QWEN35_2B_Q8_32K_FULLY_VERIFIED_PASS')
+          print('MODEL_SHA256='+v['full_sha256'])
+          print('MODEL_SIZE='+str(v['full_size']))
+          print('TEMPLATE_SHA256='+v['official_chat_template_sha256'])
+          PY
