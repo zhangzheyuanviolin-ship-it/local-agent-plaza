@@ -32,7 +32,7 @@ object AgentDocumentConversionMcp254 {
       }
     }
 
-    val format = canonicalFormat(request.optString("output_format").ifBlank { request.optString("format") })
+    val format = canonicalOutputFormat(request.optString("output_format").ifBlank { request.optString("format") })
     if (format.isNotBlank()) request.put("output_format", format)
   }
 
@@ -44,10 +44,21 @@ object AgentDocumentConversionMcp254 {
     return if ('/' in path) path else "file/$path"
   }
 
-  internal fun canonicalFormat(raw: String): String {
+  /** Canonicalize actual source-file extensions. Do not pretend legacy .doc is a DOCX file. */
+  internal fun canonicalInputFormat(raw: String): String {
     return raw.trim().lowercase(Locale.US).removePrefix(".").let {
       when (it) {
-        "word", "doc" -> "docx"
+        "htm" -> "html"
+        else -> it
+      }
+    }
+  }
+
+  /** Canonicalize requested output labels; these are format names, not source-file extensions. */
+  internal fun canonicalOutputFormat(raw: String): String {
+    return raw.trim().lowercase(Locale.US).removePrefix(".").let {
+      when (it) {
+        "word" -> "docx"
         "text", "plain", "plaintext" -> "txt"
         "htm" -> "html"
         else -> it
@@ -55,13 +66,13 @@ object AgentDocumentConversionMcp254 {
     }
   }
 
-  internal fun supportedInput(format: String): Boolean = canonicalFormat(format) in setOf("txt", "docx", "pdf", "html")
+  internal fun supportedInput(format: String): Boolean = canonicalInputFormat(format) in setOf("txt", "docx", "pdf", "html")
 
-  internal fun supportedOutput(format: String): Boolean = canonicalFormat(format) in setOf("txt", "docx", "pdf", "html")
+  internal fun supportedOutput(format: String): Boolean = canonicalOutputFormat(format) in setOf("txt", "docx", "pdf", "html")
 
   internal fun conversionPlan(inputFormat: String, outputFormat: String): ConversionPlan {
-    val input = canonicalFormat(inputFormat)
-    val output = canonicalFormat(outputFormat)
+    val input = canonicalInputFormat(inputFormat)
+    val output = canonicalOutputFormat(outputFormat)
     require(supportedInput(input)) { "Unsupported conversion input format: $inputFormat" }
     require(supportedOutput(output)) { "Unsupported conversion output format: $outputFormat" }
     return if (input == output) ConversionPlan.BINARY_COPY else ConversionPlan.TEXT_ROUND_TRIP
@@ -87,7 +98,7 @@ object AgentDocumentConversionMcp254 {
     if (expected.isBlank()) return true
     if (actual.isBlank()) return false
 
-    // Reject material truncation before fragment matching. Extra whitespace is already removed.
+    // Reject material truncation before fragment matching. Extra layout whitespace is removed.
     if (actual.length * 100 < expected.length * 92) return false
 
     if (expected.length <= 180) return actual.contains(expected)
