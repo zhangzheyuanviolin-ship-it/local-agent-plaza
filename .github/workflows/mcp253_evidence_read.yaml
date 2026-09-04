@@ -1,0 +1,42 @@
+name: MCP253 evidence reader
+
+on:
+  push:
+    branches:
+      - experimental
+    paths:
+      - '.github/workflows/mcp253_evidence_read.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout experimental
+        uses: actions/checkout@v4
+      - name: Read MCP252 evidence ZIP
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          archive = Path('logs/mcp-252_测试日志与文档_20260904.zip')
+          if not archive.exists():
+              raise SystemExit(f'MISSING_EVIDENCE_ZIP: {archive}')
+          with zipfile.ZipFile(archive, 'r') as z:
+              names = z.namelist()
+              print(f'EVIDENCE_ENTRY_COUNT={len(names)}')
+              for i, name in enumerate(names, 1):
+                  data = z.read(name)
+                  print(f'\n===== EVIDENCE_ENTRY {i}/{len(names)}: {name} size={len(data)} =====')
+                  try:
+                      text = data.decode('utf-8')
+                      print(text)
+                  except UnicodeDecodeError:
+                      print(f'[BINARY_ENTRY sha256 omitted here size={len(data)}]')
+                  print(f'===== END_EVIDENCE_ENTRY {i}: {name} =====\n')
+          PY
