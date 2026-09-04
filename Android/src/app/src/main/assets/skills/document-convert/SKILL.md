@@ -1,6 +1,6 @@
 ---
 name: document-convert
-description: 在 TXT、DOCX、PDF、HTML 之间进行文本导向的文档格式转换，并把转换结果写入工作区 file/。
+description: 在 TXT、DOCX、PDF、HTML 之间进行文档格式转换，并把转换结果安全写入工作区 file/。
 ---
 
 # Document Convert
@@ -12,8 +12,6 @@ Call `run_configured_intent` with:
 - `intent`: `file_workspace`
 - `parameters`: one compact JSON string
 
-Use workspace-relative input paths. Converted files are always written under `file/`.
-
 Supported operation:
 
 - Convert: `{"operation":"document_convert","input_path":"file/source.docx","output_format":"pdf","output_path":"file/source.pdf"}`
@@ -21,4 +19,17 @@ Supported operation:
 Supported inputs: `txt`, `docx`, `pdf`, `html`, `htm`.
 Supported outputs: `txt`, `docx`, `pdf`, `html`.
 
-This is a text-oriented conversion path. Complex layout, embedded media, formulas, and advanced Office styling can be simplified during conversion. Preserve the source file. If `output_path` is omitted, the app derives a file name under `file/`. After success, report the exact returned workspace path.
+Path tolerance:
+- A bare input filename such as `report.txt` or `report.docx` is treated as `file/report.txt` or `file/report.docx`.
+- Existing explicit workspace folders such as `file/` and `download/` are preserved.
+- If `output_path` is omitted, the app derives a collision-safe path under `file/`.
+- The source file is always preserved. A conversion may not write back onto the source path.
+
+Conversion behavior:
+- Cross-format conversion is text-oriented. Complex layout, embedded media, formulas, images, and advanced Office styling may be simplified.
+- Same-format conversion (`txt→txt`, `docx→docx`, `pdf→pdf`, `html→html`) uses an exact byte-preserving copy instead of a text round-trip.
+- Cross-format conversion refuses to silently truncate source text that exceeds the supported conversion text budget.
+- A scanned/image-only PDF with no extractable text cannot be converted to another text-oriented format by this skill because OCR is not part of this conversion path. Same-format PDF copying still works.
+- PDF output is reopened and verified with layout-whitespace-insensitive semantic checks so line wrapping does not cause a valid PDF to be rejected.
+
+After success, report the exact returned workspace path.
